@@ -255,6 +255,10 @@
       "types": "./src/state/peerPairingCode.ts",
       "default": "./src/state/peerPairingCode.ts"
     },
+    "./state/ozone": {
+      "types": "./src/state/ozone.ts",
+      "default": "./src/state/ozone.ts"
+    },
     "./state/preview": {
       "types": "./src/state/preview.ts",
       "default": "./src/state/preview.ts"

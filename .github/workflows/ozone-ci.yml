@@ -52,5 +52,19 @@ jobs:
       - name: Typecheck
         run: vp run -r --cache --concurrency-limit 4 typecheck
 
+      - name: Unused code
+        run: vp run knip:check
+
       - name: Ozone tests
-        run: vp test run apps/server/src/ozone
+        run: vp test run apps/server/src/ozone apps/web/src/ozone
+
+      # A seam can break the upstream test that sits beside the file it edits.
+      - name: Tests beside seams
+        run: |
+          tests=$(git grep -l ozone-seam -- 'apps/*.ts' 'apps/*.tsx' 'packages/*.ts' 'scripts/*.ts' \
+            | grep -v '/ozone/' \
+            | sed -E 's/\.test\.(ts|tsx)$/.\1/; s/\.(ts|tsx)$/.test.\1/' \
+            | sort -u \
+            | while read -r file; do if [ -f "$file" ]; then echo "$file"; fi; done)
+          echo "$tests"
+          vp test run $tests

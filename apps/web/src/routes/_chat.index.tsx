@@ -20,6 +20,10 @@ import {
   useVisibleThreadShells,
 } from "../state/entities";
 import { useEnvironments } from "../state/environments";
+import { OzoneHome } from "../ozone/OzoneHome";
+
+// ozone-seam: Ozone's home replaces upstream's automatic draft, which stays here for merges.
+const OPENS_DRAFT_ON_INDEX: boolean = false;
 
 function ChatIndexRouteView() {
   const { authGateState } = Route.useRouteContext();
@@ -30,7 +34,7 @@ function ChatIndexRouteView() {
     if (environments.length === 0) return <HostedEmptyState />;
   }
 
-  return <IndexDraftLanding />;
+  return OPENS_DRAFT_ON_INDEX ? <IndexDraftLanding /> : <OzoneHome />;
 }
 
 function IndexDraftLanding() {

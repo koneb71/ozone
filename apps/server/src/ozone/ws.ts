@@ -1,0 +1,50 @@
+import {
+  OZONE_WS_METHODS,
+  type OzoneAppCreateInput,
+  type OzoneRuntimeActInput,
+  type OzoneRuntimeLogsInput,
+  type OzoneRuntimeSubscribeInput,
+} from "@t3tools/contracts";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
+
+import * as OzoneApps from "./apps/OzoneApps.ts";
+import * as AppRuntime from "./runtime/AppRuntime.ts";
+
+const make = Effect.gen(function* () {
+  const apps = yield* OzoneApps.OzoneApps;
+  const runtime = yield* AppRuntime.AppRuntime;
+  return {
+    [OZONE_WS_METHODS.appsList]: () => apps.list,
+    [OZONE_WS_METHODS.appsCreate]: (input: OzoneAppCreateInput) => apps.create(input),
+    [OZONE_WS_METHODS.runtimeAct]: (input: OzoneRuntimeActInput) => runtime.act(input),
+    [OZONE_WS_METHODS.runtimeLogs]: (input: OzoneRuntimeLogsInput) => runtime.logs(input),
+    [OZONE_WS_METHODS.runtimeSubscribe]: (input: OzoneRuntimeSubscribeInput) =>
+      runtime.changes(input.projectId),
+  };
+});
+
+const notProvided = Effect.die(
+  new Error("Ozone's WebSocket handlers need Ozone.layer among the server's layers."),
+);
+
+/**
+ * Upstream builds its WebSocket handlers in many tests of its own. Reading Ozone's handlers through
+ * a reference with a default keeps those tests unchanged: only the real server provides the layer.
+ */
+export class OzoneWsHandlers extends Context.Reference<Effect.Success<typeof make>>(
+  "t3/ozone/ws/OzoneWsHandlers",
+  {
+    defaultValue: () => ({
+      [OZONE_WS_METHODS.appsList]: () => notProvided,
+      [OZONE_WS_METHODS.appsCreate]: () => notProvided,
+      [OZONE_WS_METHODS.runtimeAct]: () => notProvided,
+      [OZONE_WS_METHODS.runtimeLogs]: () => notProvided,
+      [OZONE_WS_METHODS.runtimeSubscribe]: () => Stream.fromEffect(notProvided),
+    }),
+  },
+) {}
+
+export const layer = Layer.effect(OzoneWsHandlers, make);

@@ -142,11 +142,8 @@ async function starRepository(environmentId: EnvironmentId) {
  * Counts a sent prompt. After more than five, asks once per session for a star until dismissed,
  * unless the environment's GitHub account already starred the repo. Waits until the user is idle.
  */
-// ozone-seam: the prompt asks for a star on upstream's repository.
-const STAR_PROMPT_ENABLED: boolean = false;
-
 export async function recordPromptSent(environmentId: EnvironmentId): Promise<void> {
-  if (!STAR_PROMPT_ENABLED || shownThisSession) return;
+  if (shownThisSession) return;
   try {
     if (getLocalStorageItem(DISMISSED_KEY, Schema.Boolean)) return;
     const sent = (getLocalStorageItem(SENT_KEY, Schema.Number) ?? 0) + 1;

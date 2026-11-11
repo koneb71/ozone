@@ -178,6 +178,7 @@ import * as ProviderInstallation from "./provider/providerInstallation.ts";
 import * as ServerSelfUpdate from "./cloud/selfUpdate.ts";
 import * as NpmRelease from "./cloud/npmRelease.ts";
 import * as OzoneUpstreamReleases from "./ozone/upstreamReleases.ts";
+import * as OzoneWs from "./ozone/ws.ts";
 import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretResolver";
@@ -1911,7 +1912,10 @@ export const layerWsRpc = (
         return yield* mutateProjectWithClone(projectService, projectCloneTracker, mutation);
       });
 
+      // ozone-seam: Ozone's handlers, declared in ozone/ws.ts.
+      const ozoneHandlers = yield* OzoneWs.OzoneWsHandlers;
       const handlers = ServerWsRpcGroup.of({
+        ...ozoneHandlers,
         [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: (command) =>
           Effect.annotateCurrentSpan({
             "orchestration_v2.command_id": command.commandId,

@@ -393,7 +393,8 @@ export const resolveServerConfig = Effect.fn("config.resolveServerConfig")(funct
       normalizedFlags.autoBootstrapProjectFromCwd,
       Option.fromUndefinedOr(env.autoBootstrapProjectFromCwd),
     ),
-    () => mode === "web",
+    // ozone-seam: Ozone opens on its home, not on a project made from the working directory.
+    () => false,
   );
   const logWebSocketEvents = Option.getOrElse(
     resolveOptionPrecedence(
