@@ -52,7 +52,8 @@ const setupBaseDir = Effect.fn("browserSetup.baseDir")(function* (explicit: Opti
     .pipe(Effect.orElseSucceed(() => ""));
   const home = entry.trim().split(":")[5];
   const path = yield* Path.Path;
-  return home ? path.join(home, ".t3") : yield* resolveBaseDir(undefined);
+  // ozone-seam: the invoking user's Ozone data directory.
+  return home ? path.join(home, ".ozone") : yield* resolveBaseDir(undefined);
 });
 
 const aptOffers = Effect.fn("browserSetup.aptOffers")(function* (name: string) {

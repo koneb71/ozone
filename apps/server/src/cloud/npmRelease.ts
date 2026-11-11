@@ -127,6 +127,8 @@ export const make = Effect.fn("NpmRelease.make")(function* () {
   });
 });
 
+// ozone-seam: Ozone provides its own lookup in ws.ts, so nothing here builds this layer.
+/** @public */
 export const layer = Layer.effect(NpmRelease, make()).pipe(
   Layer.provide([ProcessRunner.layer, FetchHttpClient.layer]),
 );

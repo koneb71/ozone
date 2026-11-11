@@ -177,6 +177,7 @@ import * as ProviderAuthService from "./provider/ProviderAuthService.ts";
 import * as ProviderInstallation from "./provider/providerInstallation.ts";
 import * as ServerSelfUpdate from "./cloud/selfUpdate.ts";
 import * as NpmRelease from "./cloud/npmRelease.ts";
+import * as OzoneUpstreamReleases from "./ozone/upstreamReleases.ts";
 import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretResolver";
@@ -3541,4 +3542,5 @@ export const layer = Layer.unwrap(
       ),
     );
   }),
-).pipe(Layer.provide(NpmRelease.layer));
+  // ozone-seam: never offer upstream's npm releases.
+).pipe(Layer.provide(OzoneUpstreamReleases.layerNoUpstreamReleases));

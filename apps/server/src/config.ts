@@ -26,7 +26,8 @@ declare const __T3CODE_TELEMETRY_CHANNEL__: ReleaseChannel | undefined;
 export const telemetryChannel: ReleaseChannel =
   typeof __T3CODE_TELEMETRY_CHANNEL__ === "undefined" ? "dev" : __T3CODE_TELEMETRY_CHANNEL__;
 
-export const DEFAULT_PORT = 3773;
+// ozone-seam: Ozone listens on its own port so it can run beside a T3 Code install.
+export const DEFAULT_PORT = 3737;
 
 export const RuntimeMode = Schema.Literals(["web", "desktop"]);
 export type RuntimeMode = typeof RuntimeMode.Type;
