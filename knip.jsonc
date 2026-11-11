@@ -15,6 +15,14 @@
       ],
       "vite": { "entry": [".github/**/*.test.cjs"] },
       "vitest": { "entry": [".github/**/*.test.cjs"] },
+      // ozone-seam: upstream's workflows are parked, and still name the scripts they run.
+      "github-actions": {
+        "config": [
+          ".github/workflows/*.{yml,yaml}",
+          ".github/workflows-upstream/*.{yml,yaml}",
+          ".github/**/action.{yml,yaml}",
+        ],
+      },
     },
     "scripts": {
       // Knip loads its preprocessor through a CLI option; native verification and

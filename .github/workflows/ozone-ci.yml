@@ -1,0 +1,56 @@
+name: Ozone CI
+
+# Upstream's workflows are parked in .github/workflows-upstream: they need upstream's runners and
+# secrets. This is the only workflow that runs in the fork.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "claude/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ozone-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      # An upstream merge can add a workflow here. It must be parked, not run.
+      - name: Only Ozone workflows may run
+        run: |
+          extra=$(ls .github/workflows | grep -v '^ozone-' || true)
+          if [ -n "$extra" ]; then
+            echo "Move these to .github/workflows-upstream/:"
+            echo "$extra"
+            exit 1
+          fi
+
+      - name: Setup dependencies
+        uses: ./.github/actions/setup-ci-deps
+
+      - name: Format
+        run: vp fmt --check
+
+      - name: Lint
+        run: vp lint --report-unused-disable-directives
+
+      - name: Typecheck
+        run: vp run -r --cache --concurrency-limit 4 typecheck
+
+      - name: Ozone tests
+        run: vp test run apps/server/src/ozone
