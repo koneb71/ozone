@@ -4,6 +4,7 @@
  */
 import {
   OrchestratorMcpFailure,
+  OzoneBuildAdvanceInput,
   OzoneBuildCheckResult,
   OzoneBuildPlanInput,
   OzoneBuildReport,
@@ -62,7 +63,8 @@ const BuildPlanTool = Tool.make("ozone_build_plan", {
 const BuildAdvanceTool = Tool.make("ozone_build_advance", {
   ...shared,
   description:
-    "Run the build. Gives each ready task to a worker, checks the result with the project's own checks, sends failures back for repair, and commits what passes. Can take minutes. Follow `next` in the result. Safe to call again at any time: it continues where it was.",
+    "Run the build. Gives each ready task to a worker, checks the result with the project's own checks, sends failures back for repair, and commits what passes. A call returns within about a minute, often before the work is done: follow `next` in the result. Safe to call again at any time: it continues where it was.",
+  parameters: OzoneBuildAdvanceInput,
   success: OzoneBuildReport,
   dependencies: leadDependencies,
 })

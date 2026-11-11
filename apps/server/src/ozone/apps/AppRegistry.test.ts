@@ -1,6 +1,11 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import { ProjectId, type OzoneApp, type OzoneAppManifest } from "@t3tools/contracts";
+import {
+  DEFAULT_OZONE_APP_SETTINGS,
+  ProjectId,
+  type OzoneApp,
+  type OzoneAppManifest,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -18,6 +23,7 @@ const app = (id: string, port: number, createdAt: string): OzoneApp => ({
   templateId: "web-app",
   port,
   createdAt,
+  settings: DEFAULT_OZONE_APP_SETTINGS,
 });
 
 const manifest: OzoneAppManifest = {

@@ -10,6 +10,7 @@ import {
   DatabaseIcon,
   EllipsisIcon,
   HammerIcon,
+  ListChecksIcon,
   RotateCwIcon,
   ScrollTextIcon,
   SquareIcon,
@@ -24,11 +25,12 @@ import { ensureLocalApi } from "~/localApi";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { useAtomCommand } from "~/state/use-atom-command";
 
+import { AppBuildSettingsDialog } from "./AppBuildSettingsDialog";
 import { AppDataDialog } from "./AppDataDialog";
 import { AppLogsDialog } from "./AppLogsDialog";
 import { ozoneEnvironment } from "./state";
 
-type AppDialog = "logs" | "data";
+type AppDialog = "logs" | "data" | "build";
 
 /** Everything a person can do to an app besides opening it: its containers, its data, its end. */
 export function AppMenu(props: {
@@ -115,6 +117,10 @@ export function AppMenu(props: {
             <DatabaseIcon />
             Data
           </MenuItem>
+          <MenuItem onClick={() => setDialog("build")}>
+            <ListChecksIcon />
+            Build settings
+          </MenuItem>
           <MenuSeparator />
           <MenuItem disabled={phase === "unavailable"} onClick={() => void remove()}>
             <Trash2Icon />
@@ -132,6 +138,12 @@ export function AppMenu(props: {
         app={app}
         environmentId={environmentId}
         open={dialog === "data"}
+        onOpenChange={closeDialog}
+      />
+      <AppBuildSettingsDialog
+        app={app}
+        environmentId={environmentId}
+        open={dialog === "build"}
         onOpenChange={closeDialog}
       />
     </>

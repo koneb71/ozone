@@ -1,6 +1,7 @@
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentId, OzoneApp, ThreadId } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
+import * as Schema from "effect/Schema";
 import {
   ArrowUpIcon,
   BoxIcon,
@@ -17,11 +18,13 @@ import { Button } from "~/components/ui/button";
 import { DiscoveryList, DiscoveryListRow } from "~/components/ui/discovery-list";
 import { SidebarInset } from "~/components/ui/sidebar";
 import { Spinner } from "~/components/ui/spinner";
+import { Switch } from "~/components/ui/switch";
 import { Textarea } from "~/components/ui/textarea";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { WorkspacePageHeader } from "~/components/WorkspacePageHeader";
 import { isElectron } from "~/env";
 import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
+import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { workspaceAreaProps } from "~/lib/workspaceFocus";
 import { useThreadShells } from "~/state/entities";
 import { usePrimaryEnvironmentId } from "~/state/environments";
@@ -52,6 +55,7 @@ const MODE_COPY = {
 } as const;
 
 const carriesFiles = (event: DragEvent) => event.dataTransfer.types.includes("Files");
+const REVIEW_PLANS_STORAGE_KEY = "ozone:review-plans:v1";
 
 export function OzoneHome() {
   const contentArea = workspaceAreaProps("home", 1, "Home");
@@ -64,6 +68,11 @@ export function OzoneHome() {
   // A build has nowhere to put files until its app exists, so they wait here until then.
   const [files, setFiles] = useState<ReadonlyArray<File>>([]);
   const [dragging, setDragging] = useState(false);
+  const [reviewPlans, setReviewPlans] = useLocalStorage(
+    REVIEW_PLANS_STORAGE_KEY,
+    false,
+    Schema.Boolean,
+  );
   const fileInput = useRef<HTMLInputElement>(null);
   const apps = useEnvironmentQuery(
     environmentId === null ? null : ozoneEnvironment.apps({ environmentId, input: {} }),
@@ -81,7 +90,7 @@ export function OzoneHome() {
     const text = prompt.trim();
     const outcome =
       mode === "build"
-        ? await launch.build(environmentId, text, files)
+        ? await launch.build(environmentId, text, { files, reviewPlans })
         : files.length > 0
           ? await launch.chatWithFiles(environmentId, text, files)
           : await launch.chat(environmentId, text);
@@ -219,6 +228,17 @@ export function OzoneHome() {
                 </Toggle>
               </ToggleGroup>
               <div className="flex items-center gap-1">
+                {mode === "build" ? (
+                  <label className="mr-2 flex cursor-pointer items-center gap-1.5 text-muted-foreground text-xs">
+                    <Switch
+                      size="sm"
+                      checked={reviewPlans}
+                      disabled={launching}
+                      onCheckedChange={setReviewPlans}
+                    />
+                    Show me the plan first
+                  </label>
+                ) : null}
                 <input
                   ref={fileInput}
                   type="file"

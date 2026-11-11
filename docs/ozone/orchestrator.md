@@ -18,6 +18,7 @@ until it runs out of work or of patience:
    question hands the step back to the lead.
 3. The next tasks are handed out: any number that only read, or exactly one that writes.
 4. When every task has passed, the manifest's `final` gates run once.
+5. When those pass and the plan has acceptance criteria, a tester uses the app in a browser.
 
 Every call may be the first after a crash, so nothing in it assumes the previous call finished.
 
@@ -49,10 +50,38 @@ A step that ran out of patience returns, and that wake is what brings the lead b
 **A step is short, and never outlives its lead's turn on purpose.** Claude Code moves a tool call
 to the background after two minutes, and the lead's turn can then end while the step still runs.
 Upstream starts a worker only for a lead whose turn is running, so a step that went on would fail
-at its next hand-off. A step therefore waits for a worker for at most 75 seconds (40 for harnesses
-that give up on a call within a minute), starts no more work once that time is spent, and returns.
-The wake that follows a finished worker brings the lead back. Correctness never depends on one
-long call.
+at its next hand-off. A step therefore waits for at most 75 seconds (40 for harnesses that give up
+on a call within a minute), starts no more workers once that time is spent, and returns. The wake
+that follows a finished worker brings the lead back. Correctness never depends on one long call.
+
+**Checks are jobs of the server, not of the call that asked for them.** A type check, a test suite
+or a production build can take longer than a step waits.
+[`BuildChecks`](../../apps/server/src/ozone/builds/BuildChecks.ts) runs each one as a job that
+outlives the step: the step waits for it as long as its patience lasts, then tells the lead to end
+its turn. The job saves its result and, only if no step is waiting for it any more, wakes the lead
+with a message in its thread. Whether a step is waiting and whether the job is done are read and
+written in one synchronous block each, so exactly one of the two tells the lead. A check a restart
+cut short is found in the store when the server starts, run again, and its lead woken.
+
+**Every write is a read-modify-write.** A job and a tool call can save the same build at the same
+moment. The store changes a build in one step under a lock, and a job saves its result only if the
+task is still where it left it: a plan revised in the meantime wins.
+
+**A tester uses the finished app.** Every gate can pass on an app that does not do what was asked.
+When the final check passes, a read-only worker opens the app in the preview browser, tries each
+acceptance criterion as a person would, and ends with one verdict line per criterion. A failure
+stops the build for the lead, which adds a fix task, has the app tried again, or keeps the build and
+says why. A tester that could try nothing, for want of a browser, does not hold the build; the
+report says so. Its brief and the parser of its verdicts are in
+[`verification.ts`](../../apps/server/src/ozone/builds/verification.ts).
+
+**A plan can wait for the person.** With the app's "Show me the plan" setting, a first plan runs
+nothing until the person starts it from the build card, which wakes the lead, or the lead passes
+`approved` after the person said so in the chat. A revision of a plan that has started is not
+reviewed again: it adds to what the person already approved.
+
+**Workers can run on another model.** The lead keeps the model of its thread. Each app can name a
+model for its workers and tester, which is passed to upstream's `delegate_task` as its target.
 
 **A failed check reaches the next reader with both ends of its output.** A bundler prints its error
 first and a stack after it; a test runner ends with its summary. Evidence keeps the head and the
@@ -75,7 +104,8 @@ workers, and a worker's brief starts with `Ozone task`, which that file keys on.
 - Ozone's tools are registered beside upstream's `layerTools`, not in it: a test upstream pins that
   set's size against the agent's context budget.
 - The conductor is built inside the MCP server's layers, not in `Ozone.layer`. The delegation
-  service it drives only exists there.
+  service it drives only exists there. The checks are in `Ozone.layer`, because their jobs must
+  outlive any one call and resume when the server starts.
 - An MCP tool without parameters must omit `parameters`. An empty struct is rejected when the server
   starts, which no type check sees; `mcp/tools.test.ts` registers every tool for that reason.
 - The text of briefs and `next` lines is in [`briefs.ts`](../../apps/server/src/ozone/builds/briefs.ts).
@@ -83,12 +113,6 @@ workers, and a worker's brief starts with `Ozone task`, which that file keys on.
 
 ## Not built yet
 
-- An independent verifier that checks the acceptance criteria in the preview browser, writers in
-  parallel worktrees with a merge queue, and cost budgets.
-- Checks run inside the lead's call. A check that takes more than about a minute keeps that call
-  open past the point where Claude Code moves it to the background. The result still arrives, as a
-  notification. Running checks as server jobs that wake the lead would remove the limit.
-- The preview is not refreshed when a build completes. A page that showed an error while a worker
-  was editing stays on screen until it is reloaded.
+- Writers in parallel worktrees with a merge queue, and cost budgets.
 - Ozone's instructions, briefs and tool descriptions have no eval cases. They were tried on real
   builds with Claude Haiku as lead and worker.

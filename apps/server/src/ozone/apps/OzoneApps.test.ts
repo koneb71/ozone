@@ -2,6 +2,7 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import {
+  DEFAULT_OZONE_APP_SETTINGS,
   OzoneAppError,
   OzoneAppManifest,
   ProjectId,
@@ -128,6 +129,7 @@ it.effect("OzoneApps creates an app from the template, registers it and starts i
         templateId: "web-app",
         port: 41_000,
         createdAt: "",
+        settings: DEFAULT_OZONE_APP_SETTINGS,
       },
     );
     assert.deepStrictEqual(yield* Ref.get(registered), [first.app]);

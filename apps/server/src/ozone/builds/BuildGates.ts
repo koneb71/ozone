@@ -4,7 +4,9 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Stream from "effect/Stream";
 
 import type { ResolvedApp } from "../apps/AppRegistry.ts";
 import { findDestructiveStatements } from "../data/migrationGuard.ts";
@@ -37,6 +39,7 @@ export class BuildGates extends Context.Service<
 >()("t3/ozone/builds/BuildGates") {}
 
 const GATE_TIMEOUT = Duration.minutes(10);
+const START_TIMEOUT = Duration.minutes(3);
 const DETAIL_CHARS = 2_000;
 
 /** A bundler prints its error first and a stack after it; a test runner ends with its summary. */
@@ -103,17 +106,21 @@ const make = Effect.gen(function* () {
 
   return BuildGates.of({
     task: Effect.fn("BuildGates.task")(function* (app, input) {
-      const status = yield* runtime.status(app.app.projectId);
-      if (status.phase !== "running") {
+      // An app that is still starting, after a restart of its own or of the server, is waited for.
+      const settled = yield* runtime.changes(app.app.projectId).pipe(
+        Stream.filter((status) => status.phase !== "starting"),
+        Stream.runHead,
+        Effect.timeoutOption(START_TIMEOUT),
+        Effect.map(Option.flatten),
+      );
+      const status = Option.getOrNull(settled);
+      if (status?.phase !== "running") {
+        const why =
+          status === null
+            ? "The app did not finish starting in three minutes, so nothing could be checked."
+            : `The app is ${status.phase}, so nothing could be checked. ${status.message ?? ""}`;
         return {
-          results: [
-            {
-              id: "running",
-              ok: false,
-              detail:
-                `The app is ${status.phase}, so nothing could be checked. ${status.message ?? ""}`.trim(),
-            },
-          ],
+          results: [{ id: "running", ok: false, detail: why.trim() }],
           needsDecision: null,
         };
       }

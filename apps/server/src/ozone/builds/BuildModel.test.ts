@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import {
+  NO_OZONE_VERIFICATION,
   NodeId,
   ProjectId,
   ThreadId,
@@ -12,6 +13,7 @@ import * as BuildModel from "./BuildModel.ts";
 
 const NOW = "2026-01-01T00:00:00.000Z";
 const LATER = "2026-01-01T01:00:00.000Z";
+const NO_VERIFY = { verify: false };
 
 type TaskPlan = OzoneBuildPlanInput["tasks"][number];
 const task = (id: string, extra: Partial<TaskPlan> = {}): TaskPlan => ({
@@ -256,7 +258,7 @@ describe("BuildModel", () => {
 
   it("reopens tasks whose commits left the history, and the build with them", () => {
     let build = pass(pass(planned(task("schema"), task("page")), "schema"), "page");
-    build = BuildModel.finished(build, [{ id: "build", ok: true, detail: "" }], NOW);
+    build = BuildModel.finalChecked(build, [{ id: "build", ok: true, detail: "" }], NO_VERIFY, NOW);
     assert.strictEqual(BuildModel.statusOf(build), "complete");
 
     build = BuildModel.reopened(build, ["page"], LATER);
@@ -269,13 +271,86 @@ describe("BuildModel", () => {
   it("is complete only when the final checks pass", () => {
     const allDone = pass(planned(task("schema")), "schema");
     assert.strictEqual(BuildModel.statusOf(allDone), "building");
-    const broken = BuildModel.finished(allDone, [{ id: "build", ok: false, detail: "error" }], NOW);
+    const broken = BuildModel.finalChecked(
+      allDone,
+      [{ id: "build", ok: false, detail: "error" }],
+      NO_VERIFY,
+      NOW,
+    );
     assert.strictEqual(BuildModel.statusOf(broken), "blocked");
     assert.strictEqual(broken.completedAt, null);
     // A new task for the fix puts the build back to work and clears the stale verdict.
     const fixing = BuildModel.applyPlan(broken, plan(task("schema"), task("fix-build")), LATER);
     assert.isTrue(fixing.ok && BuildModel.statusOf(fixing.build) === "building");
     assert.isTrue(fixing.ok && fixing.build.finalEvidence.length === 0);
-    assert.strictEqual(BuildModel.statusOf(BuildModel.finished(allDone, [], NOW)), "complete");
+    assert.strictEqual(
+      BuildModel.statusOf(BuildModel.finalChecked(allDone, [], NO_VERIFY, NOW)),
+      "complete",
+    );
+  });
+
+  it("holds a reviewed plan until the person approves it, and only the first plan", () => {
+    const empty = BuildModel.emptyBuild(ThreadId.make("lead"), ProjectId.make("project"), NOW);
+    const decision = BuildModel.applyPlan(empty, plan(task("schema")), NOW, { reviewPlans: true });
+    if (!decision.ok) return assert.fail(decision.problems.join(" "));
+    assert.strictEqual(BuildModel.statusOf(decision.build), "review");
+    assert.deepStrictEqual(BuildModel.nextTasks(decision.build), []);
+
+    const approved = BuildModel.approved(decision.build, LATER);
+    assert.strictEqual(BuildModel.statusOf(approved), "building");
+    assert.deepStrictEqual(
+      BuildModel.nextTasks(approved).map((ready) => ready.id),
+      ["schema"],
+    );
+    // Revising a plan that has started adds to what the person already approved.
+    const revised = BuildModel.applyPlan(
+      BuildModel.started(approved, "schema", worker("schema"), LATER),
+      plan(task("schema"), task("page")),
+      LATER,
+      { reviewPlans: true },
+    );
+    assert.isTrue(revised.ok && revised.build.approval === "approved");
+  });
+
+  it("has a tester try the app after the final check, and the lead rule on what it finds", () => {
+    const allDone = pass(planned(task("page")), "page");
+    const checked = BuildModel.finalChecked(allDone, [], { verify: true }, NOW);
+    assert.strictEqual(checked.verification.status, "pending");
+    assert.strictEqual(checked.completedAt, null);
+    assert.strictEqual(BuildModel.statusOf(checked), "building");
+    assert.isFalse(BuildModel.awaitsFinalCheck(checked));
+
+    const tester = { workerTaskId: NodeId.make("tester"), workerThreadId: null };
+    const trying = BuildModel.verificationStarted(checked, tester, NOW);
+    const fails = [
+      { criterion: "A habit can be added.", verdict: "fail" as const, note: "No form." },
+    ];
+    const failed = BuildModel.verified(trying, fails, null, NOW);
+    assert.strictEqual(BuildModel.statusOf(failed), "blocked");
+
+    const unexplained = BuildModel.verificationRuled(failed, "accept", undefined, LATER);
+    assert.isFalse(unexplained.ok);
+    const kept = BuildModel.verificationRuled(failed, "accept", "The form is on /new.", LATER);
+    assert.isTrue(kept.ok && BuildModel.statusOf(kept.build) === "complete");
+    const again = BuildModel.verificationRuled(failed, "retry", undefined, LATER);
+    assert.isTrue(again.ok && again.build.verification.status === "pending");
+
+    // A tester that could try nothing does not hold the build, and says so.
+    const unchecked = [
+      { criterion: "A habit can be added.", verdict: "unchecked" as const, note: "" },
+    ];
+    const blind = BuildModel.verified(trying, unchecked, "no browser", NOW);
+    assert.strictEqual(blind.verification.status, "unavailable");
+    assert.strictEqual(BuildModel.statusOf(blind), "complete");
+
+    // A fix task puts the end of the build back to be earned, tester included.
+    const fixing = BuildModel.applyPlan(failed, plan(task("page"), task("form")), LATER);
+    if (!fixing.ok) return assert.fail(fixing.problems.join(" "));
+    assert.deepStrictEqual(fixing.build.verification, {
+      ...NO_OZONE_VERIFICATION,
+      dispatches: 1,
+    });
+    // A tester still out when the plan changed reports into nothing.
+    assert.strictEqual(BuildModel.verified(fixing.build, fails, null, LATER), fixing.build);
   });
 });

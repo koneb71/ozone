@@ -25,6 +25,10 @@ export function createOzoneEnvironmentAtoms<R, E>(
       label: "environment-data:ozone:delete-app",
       tag: OZONE_WS_METHODS.appsDelete,
     }),
+    configureApp: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:configure-app",
+      tag: OZONE_WS_METHODS.appsConfigure,
+    }),
     runtimeStatus: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
       label: "environment-data:ozone:runtime-status",
       tag: OZONE_WS_METHODS.runtimeSubscribe,
@@ -46,6 +50,10 @@ export function createOzoneEnvironmentAtoms<R, E>(
     buildStatus: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
       label: "environment-data:ozone:build-status",
       tag: OZONE_WS_METHODS.buildSubscribe,
+    }),
+    approveBuild: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:approve-build",
+      tag: OZONE_WS_METHODS.buildApprove,
     }),
     snapshots: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:ozone:snapshots",

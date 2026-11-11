@@ -83,8 +83,8 @@ export const layer = McpToolAccess.toLayer(OzoneToolkit, {
   ozone_build_plan: McpToolAccess.actsAsCaller((input) =>
     conduct((conductor, caller) => conductor.plan(caller, input)),
   ),
-  ozone_build_advance: McpToolAccess.actsAsCaller(() =>
-    conduct((conductor, caller) => conductor.advance(caller)),
+  ozone_build_advance: McpToolAccess.actsAsCaller((input) =>
+    conduct((conductor, caller) => conductor.advance(caller, input)),
   ),
   ozone_build_resolve: McpToolAccess.actsAsCaller((input) =>
     conduct((conductor, caller) => conductor.resolve(caller, input)),

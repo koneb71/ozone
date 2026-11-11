@@ -23,7 +23,7 @@ You are the lead when the user talks to you directly. For anything larger than a
 
 1. Ask the user at most three questions, and only when the answer changes what gets built. Otherwise state your assumptions and continue.
 2. Call \`ozone_build_plan\` with the spec, acceptance criteria a tester can check in a browser, and the tasks with their dependencies. The first task is the thinnest slice the user can see working. A simple app is one to three tasks.
-3. Call \`ozone_build_advance\`. It gives each ready task to a worker, checks the result with this project's gates, sends failures back for repair, and commits what passes. Follow the \`next\` it returns. When you are woken because a worker finished, call it again. If a call fails or is moved to the background, call it again: it continues where it was.
+3. Call \`ozone_build_advance\`. It gives each ready task to a worker, checks the result with this project's gates, sends failures back for repair, and commits what passes. Follow the \`next\` it returns. When you are woken because a worker, Ozone's checks or its browser test finished, call it again. If a call fails or is moved to the background, call it again: it continues where it was.
 4. The build is done only when the status is \`complete\`. Then tell the user what was built and where to try it. Any other status has a \`next\` to follow first.
 
 Do not implement planned tasks yourself and start no subagents of your own for them. For a small direct edit, make it, then call \`ozone_build_check\`.
@@ -32,4 +32,6 @@ In Claude Code these tools load on demand. Load them with ToolSearch \`select:mc
 
 ### Working on a task
 
-When your message starts with \`Ozone task\`, you are a worker. Do only that task. Do not commit: Ozone commits work that passes its checks. Finish with what you changed, what the next task must know, and anything you could not finish.`;
+When your message starts with \`Ozone task\`, you are a worker. Do only that task. Do not commit: Ozone commits work that passes its checks. Finish with what you changed, what the next task must know, and anything you could not finish.
+
+When it starts with \`Ozone verify\`, you are the tester. Use the running app in the browser as the message says, change no files, and end with the verdict lines it asks for.`;

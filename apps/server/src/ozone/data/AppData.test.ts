@@ -1,7 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
-import { ProjectId, type OzoneAppManifest } from "@t3tools/contracts";
+import { DEFAULT_OZONE_APP_SETTINGS, ProjectId, type OzoneAppManifest } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -105,6 +105,7 @@ const makeHarness = (options: { readonly dumpFails?: boolean } = {}) =>
                   templateId: "web-app",
                   port: 41_000,
                   createdAt: "2026-01-01T00:00:00.000Z",
+                  settings: DEFAULT_OZONE_APP_SETTINGS,
                 },
                 workspaceRoot: path.join(root, "habits"),
                 manifest,

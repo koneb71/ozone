@@ -1,7 +1,9 @@
 import {
+  OZONE_VERIFICATION_ID,
   ozoneAppUrl,
   OzoneAppError,
   type OzoneBuild,
+  type OzoneBuildAdvanceInput,
   type OzoneBuildCheckResult,
   type OzoneBuildPlanInput,
   type OzoneBuildReport,
@@ -17,19 +19,19 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Semaphore from "effect/Semaphore";
 
 import type { McpInvocationScope } from "../../mcp/McpInvocationContext.ts";
 import type { ResolvedApp } from "../apps/AppRegistry.ts";
-import * as AppData from "../data/AppData.ts";
 import { NEXT, planFile, specFile, workerBrief } from "./briefs.ts";
+import * as BuildChecks from "./BuildChecks.ts";
 import * as BuildGates from "./BuildGates.ts";
 import * as BuildModel from "./BuildModel.ts";
 import * as BuildRepo from "./BuildRepo.ts";
 import * as BuildStore from "./BuildStore.ts";
 import * as BuildWorkers from "./BuildWorkers.ts";
+import { readVerdicts, verifierBrief } from "./verification.ts";
 
 /** The agent thread that owns a build, resolved by whoever received the call. */
 export interface BuildLead {
@@ -41,8 +43,8 @@ export interface BuildLead {
 }
 
 /**
- * Runs a build: hands each ready task to a worker, checks the result itself, sends failures back
- * for repair, and commits and snapshots what passes. See docs/ozone/orchestrator.md.
+ * Runs a build: hands each ready task to a worker, has the result checked, sends failures back
+ * for repair, and has a tester use the finished app. See docs/ozone/orchestrator.md.
  */
 export class BuildConductor extends Context.Service<
   BuildConductor,
@@ -53,7 +55,10 @@ export class BuildConductor extends Context.Service<
       input: OzoneBuildPlanInput,
     ) => Effect.Effect<OzoneBuildReport, OzoneAppError>;
     /** Safe to call again at any time: it first settles what happened, then takes the next step. */
-    readonly advance: (lead: BuildLead) => Effect.Effect<OzoneBuildReport, OzoneAppError>;
+    readonly advance: (
+      lead: BuildLead,
+      input?: OzoneBuildAdvanceInput,
+    ) => Effect.Effect<OzoneBuildReport, OzoneAppError>;
     readonly resolve: (
       lead: BuildLead,
       input: OzoneBuildResolveInput,
@@ -91,48 +96,53 @@ const noteFor = (task: OzoneBuildTask): string | undefined => {
   return task.summary === null ? committed : `${committed} ${task.summary.slice(0, SUMMARY_CHARS)}`;
 };
 
-/** What the lead is told, with a `next` it can follow without re-deriving the build's state. */
-const report = (lead: BuildLead, build: OzoneBuild, next?: string): OzoneBuildReport => {
+/** The step a build is waiting for, when the lead did not just take one. */
+const nextFor = (lead: BuildLead, build: OzoneBuild): string => {
   const status = BuildModel.statusOf(build);
+  if (status === "planning") return NEXT.plan;
+  if (status === "review") return NEXT.review;
+  if (status === "complete") return NEXT.complete(ozoneAppUrl(lead.app.app), build.verification);
   const blockedTask = build.tasks.find((task) => task.status === "blocked");
-  const workingTask = build.tasks.find(isActive);
-  const defaultNext =
-    status === "planning"
-      ? NEXT.plan
-      : status === "complete"
-        ? NEXT.complete(ozoneAppUrl(lead.app.app))
-        : blockedTask !== undefined
-          ? NEXT.blocked(blockedTask)
-          : status === "blocked"
-            ? NEXT.finalFailed(failures(build.finalEvidence))
-            : workingTask !== undefined
-              ? NEXT.working(workingTask)
-              : NEXT.advance;
-  return {
-    status,
-    tasks: build.tasks.map((task) => {
-      const note = noteFor(task);
-      return {
-        id: task.id,
-        title: task.title,
-        status: task.status,
-        attempts: task.attempts,
-        ...(note === undefined ? {} : { note }),
-        ...(isActive(task) && task.workerThreadId !== null
-          ? { workerThreadId: task.workerThreadId }
-          : {}),
-      };
-    }),
-    next: next ?? defaultNext,
-  };
+  if (blockedTask !== undefined) return NEXT.blocked(blockedTask);
+  if (status === "blocked") {
+    const failed = failures(build.finalEvidence);
+    return failed.length > 0
+      ? NEXT.finalFailed(failed)
+      : NEXT.verifyFailed(build.verification.results);
+  }
+  const checkingTask = build.tasks.find((task) => task.status === "checking");
+  if (checkingTask !== undefined) return NEXT.checking(checkingTask);
+  const workingTask = build.tasks.find((task) => task.status === "running");
+  if (workingTask !== undefined) return NEXT.working(workingTask);
+  if (build.finalStartedAt !== null) return NEXT.finalChecking;
+  return build.verification.status === "running" ? NEXT.verifying : NEXT.advance;
 };
+
+/** What the lead is told, with a `next` it can follow without re-deriving the build's state. */
+const report = (lead: BuildLead, build: OzoneBuild, next?: string): OzoneBuildReport => ({
+  status: BuildModel.statusOf(build),
+  tasks: build.tasks.map((task) => {
+    const note = noteFor(task);
+    return {
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      attempts: task.attempts,
+      ...(note === undefined ? {} : { note }),
+      ...(isActive(task) && task.workerThreadId !== null
+        ? { workerThreadId: task.workerThreadId }
+        : {}),
+    };
+  }),
+  next: next ?? nextFor(lead, build),
+});
 
 const make = Effect.gen(function* () {
   const store = yield* BuildStore.BuildStore;
   const workers = yield* BuildWorkers.BuildWorkers;
+  const checks = yield* BuildChecks.BuildChecks;
   const gates = yield* BuildGates.BuildGates;
   const repo = yield* BuildRepo.BuildRepo;
-  const data = yield* AppData.AppData;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   // One step at a time per build: two calls must never hand the same task to two workers.
@@ -144,144 +154,75 @@ const make = Effect.gen(function* () {
   };
 
   const now = Effect.map(DateTime.now, DateTime.formatIso);
-  const save = (build: OzoneBuild) => Effect.as(store.put(build), build);
+  const started = (lead: BuildLead, current: OzoneBuild | null, at: string) =>
+    current ?? BuildModel.emptyBuild(lead.threadId, lead.app.app.projectId, at);
   const load = Effect.fn("BuildConductor.load")(function* (lead: BuildLead) {
-    const stored = yield* store.get(lead.threadId);
-    return stored ?? BuildModel.emptyBuild(lead.threadId, lead.app.app.projectId, yield* now);
+    return started(lead, yield* store.get(lead.threadId), yield* now);
+  });
+  /** Changes the build as it is stored now: a check job may have saved since this step read it. */
+  const change = Effect.fn("BuildConductor.change")(function* (
+    lead: BuildLead,
+    step: (build: OzoneBuild, at: string) => OzoneBuild,
+  ) {
+    const at = yield* now;
+    return yield* store.modify(lead.threadId, (current) => {
+      const next = step(started(lead, current, at), at);
+      return [next, next];
+    });
+  });
+  /** The same for a change the rules may refuse. A refused change saves nothing. */
+  const decide = Effect.fn("BuildConductor.decide")(function* (
+    lead: BuildLead,
+    step: (build: OzoneBuild, at: string) => BuildModel.Decision,
+  ) {
+    const at = yield* now;
+    const decision = yield* store.modify(lead.threadId, (current) => {
+      const decided = step(started(lead, current, at), at);
+      return [decided, decided.ok ? decided.build : null];
+    });
+    return decision.ok ? decision.build : yield* refuse(decision.problems.join(" "));
   });
   const taskChecks = (app: ResolvedApp) =>
     app.manifest.gates.filter((gate) => gate.when === "task").map((gate) => gate.id);
 
-  /** Commits the tree for a task and snapshots the data beside it. */
-  const keep = Effect.fn("BuildConductor.keep")(function* (
+  /** Brings one task up to date with its worker, and says what it now waits for. */
+  const settle = Effect.fn("BuildConductor.settle")(function* (
     lead: BuildLead,
-    build: OzoneBuild,
     task: OzoneBuildTask,
-    evidence: ReadonlyArray<OzoneGateResult>,
-    summary: string | null,
   ) {
-    const commitSha = yield* repo.commitAll(
-      lead.app.workspaceRoot,
-      `${task.title}\n\nOzone build task ${task.id}.`,
-    );
-    // A missing snapshot must not undo work that passed; the next task takes another.
-    const snapshot = yield* data
-      .snapshot({ projectId: lead.app.app.projectId, reason: "task", label: task.title })
-      .pipe(Effect.option);
-    return yield* save(
-      BuildModel.passed(
-        build,
-        task.id,
-        { commitSha, snapshotId: Option.getOrNull(snapshot)?.id ?? null, evidence, summary },
-        yield* now,
-      ),
-    );
-  });
-
-  /** Judges a finished task with the server's own checks. */
-  const judge = Effect.fn("BuildConductor.judge")(function* (
-    lead: BuildLead,
-    current: OzoneBuild,
-    task: OzoneBuildTask,
-    summary: string | null,
-  ) {
-    const root = lead.app.workspaceRoot;
-    const build = yield* save(BuildModel.checking(current, task.id, summary, yield* now));
-    if (task.access === "read") {
-      if (!(yield* repo.hasChanges(root))) {
-        return yield* save(
-          BuildModel.passed(
-            build,
-            task.id,
-            { commitSha: yield* repo.head(root), snapshotId: null, evidence: [], summary },
-            yield* now,
-          ),
-        );
-      }
-      // Kept, but out of the tree the next writer starts from.
-      yield* repo.setAside(root, `ozone: changes made by read-only task ${task.id}`);
-      return yield* save(
+    if (task.status === "checking") return "checking" as const;
+    if (task.workerTaskId === null) {
+      yield* change(lead, (build, at) =>
         BuildModel.failed(
           build,
           task.id,
-          {
-            evidence: [
-              {
-                id: "read-only",
-                ok: false,
-                detail: "The task changed files. They were set aside with git stash.",
-              },
-            ],
-            summary,
-            reason: "It changed files though it was read-only.",
-          },
-          yield* now,
+          { evidence: [], summary: null, reason: "Its worker was never started." },
+          at,
         ),
       );
+      return "settled" as const;
     }
-    const outcome = yield* gates.task(lead.app, { baseSha: task.baseSha });
-    if (outcome.needsDecision !== null) {
-      return yield* save(
-        BuildModel.blocked(
-          build,
-          task.id,
-          { evidence: outcome.results, summary, reason: outcome.needsDecision },
-          yield* now,
-        ),
-      );
+    const status = yield* workers.status(lead.scope, task.workerTaskId);
+    if (status.state === "working") return "working" as const;
+    if (status.state === "waiting_for_answer") return "needs_answer" as const;
+    if (status.state === "completed") {
+      // Saved before the checks start, so a restart knows the worker had finished.
+      yield* change(lead, (build, at) => BuildModel.checking(build, task.id, status.summary, at));
+      return "checking" as const;
     }
-    const failed = failures(outcome.results);
-    if (failed.length === 0) return yield* keep(lead, build, task, outcome.results, summary);
-    return yield* save(
+    yield* change(lead, (build, at) =>
       BuildModel.failed(
         build,
         task.id,
         {
-          evidence: outcome.results,
-          summary,
-          reason: `It did not pass ${failed.map((gate) => gate.id).join(", ")}.`,
+          evidence: [],
+          summary: status.summary,
+          reason: `Its worker ended as ${status.ending ?? "failed"}.`,
         },
-        yield* now,
+        at,
       ),
     );
-  });
-
-  /** Brings one running task up to date with what its worker has done. */
-  const settle = Effect.fn("BuildConductor.settle")(function* (
-    lead: BuildLead,
-    build: OzoneBuild,
-    task: OzoneBuildTask,
-  ) {
-    // A step that stopped during the checks runs them again: the worker had finished.
-    if (task.status === "checking") {
-      return { build: yield* judge(lead, build, task, task.summary), state: "settled" as const };
-    }
-    if (task.workerTaskId === null) {
-      const lost = BuildModel.failed(
-        build,
-        task.id,
-        { evidence: [], summary: null, reason: "Its worker was never started." },
-        yield* now,
-      );
-      return { build: yield* save(lost), state: "settled" as const };
-    }
-    const status = yield* workers.status(lead.scope, task.workerTaskId);
-    if (status.state === "working") return { build, state: "working" as const };
-    if (status.state === "waiting_for_answer") return { build, state: "needs_answer" as const };
-    if (status.state === "completed") {
-      return { build: yield* judge(lead, build, task, status.summary), state: "settled" as const };
-    }
-    const ended = BuildModel.failed(
-      build,
-      task.id,
-      {
-        evidence: [],
-        summary: status.summary,
-        reason: `Its worker ended as ${status.ending ?? "failed"}.`,
-      },
-      yield* now,
-    );
-    return { build: yield* save(ended), state: "settled" as const };
+    return "settled" as const;
   });
 
   const dispatch = Effect.fn("BuildConductor.dispatch")(function* (
@@ -295,8 +236,47 @@ const make = Effect.gen(function* () {
       title: task.title,
       brief: workerBrief(build, task, taskChecks(lead.app)),
       access: task.access,
+      model: lead.app.app.settings.workerModel,
     });
-    return yield* save(BuildModel.started(build, task.id, { ...handle, baseSha }, yield* now));
+    yield* change(lead, (current, at) =>
+      BuildModel.started(current, task.id, { ...handle, baseSha }, at),
+    );
+  });
+
+  const dispatchTester = Effect.fn("BuildConductor.dispatchTester")(function* (
+    lead: BuildLead,
+    build: OzoneBuild,
+  ) {
+    const handle = yield* workers.dispatch(lead.scope, {
+      key: `ozone:${lead.threadId}:${OZONE_VERIFICATION_ID}:${build.verification.dispatches + 1}`,
+      title: "Try the app",
+      brief: verifierBrief(build.acceptance, lead.app.app.port),
+      access: "read",
+      model: lead.app.app.settings.workerModel,
+    });
+    yield* change(lead, (current, at) => BuildModel.verificationStarted(current, handle, at));
+  });
+
+  /** Brings the build up to date with its tester, and says what it now waits for. */
+  const settleTester = Effect.fn("BuildConductor.settleTester")(function* (
+    lead: BuildLead,
+    build: OzoneBuild,
+  ) {
+    const { workerTaskId } = build.verification;
+    const status =
+      workerTaskId === null
+        ? { state: "failed" as const, summary: null, ending: "never started" }
+        : yield* workers.status(lead.scope, workerTaskId);
+    if (status.state === "working") return "working" as const;
+    if (status.state === "waiting_for_answer") return "needs_answer" as const;
+    const results = readVerdicts(
+      build.acceptance,
+      status.state === "completed" ? (status.summary ?? "") : "",
+    );
+    const note =
+      status.state === "completed" ? null : `the tester ended as ${status.ending ?? "failed"}`;
+    yield* change(lead, (current, at) => BuildModel.verified(current, results, note, at));
+    return "settled" as const;
   });
 
   /** Done tasks whose commits a rollback or reset removed go back into the plan. */
@@ -305,50 +285,107 @@ const make = Effect.gen(function* () {
     build: OzoneBuild,
   ) {
     const root = lead.app.workspaceRoot;
-    if ((yield* repo.head(root)) === null) return build;
+    if ((yield* repo.head(root)) === null) return;
     const lost: Array<string> = [];
     for (const task of build.tasks) {
       if (task.status !== "done" || task.commitSha === null) continue;
       if (!(yield* repo.isInHistory(root, task.commitSha))) lost.push(task.id);
     }
-    return lost.length === 0 ? build : yield* save(BuildModel.reopened(build, lost, yield* now));
+    if (lost.length > 0)
+      yield* change(lead, (current, at) => BuildModel.reopened(current, lost, at));
   });
 
-  const advance = Effect.fn("BuildConductor.advance")(function* (lead: BuildLead) {
+  const advance = Effect.fn("BuildConductor.advance")(function* (
+    lead: BuildLead,
+    input: OzoneBuildAdvanceInput,
+  ) {
     const deadline = (yield* Clock.currentTimeMillis) + Duration.toMillis(lead.patience);
-    let build = yield* load(lead);
-    if (build.tasks.length === 0) return report(lead, build);
-    build = yield* reopenLost(lead, build);
+    const patienceLeft = Effect.map(Clock.currentTimeMillis, (at) =>
+      Duration.millis(Math.max(0, deadline - at)),
+    );
+    const target = { threadId: lead.threadId, app: lead.app };
+    const told = Effect.fn("BuildConductor.told")(function* (next?: string) {
+      return report(lead, yield* load(lead), next);
+    });
 
+    const planned = yield* load(lead);
+    if (planned.tasks.length === 0) return report(lead, planned);
+    if (planned.approval === "pending") {
+      if (input.approved !== true) return report(lead, planned);
+      yield* change(lead, BuildModel.approved);
+    }
+    yield* reopenLost(lead, planned);
+
+    let finalRan = false;
     for (;;) {
+      const build = yield* load(lead);
+
+      const inFlight = build.tasks.filter(isActive);
+      let asking: OzoneBuildTask | undefined;
+      let checking: OzoneBuildTask | undefined;
       let working: OzoneBuildTask | undefined;
-      for (const task of build.tasks.filter(isActive)) {
-        const settled = yield* settle(lead, build, task);
-        build = settled.build;
-        if (settled.state === "needs_answer") return report(lead, build, NEXT.needsAnswer(task));
-        if (settled.state === "working") working ??= task;
+      for (const task of inFlight) {
+        const state = yield* settle(lead, task);
+        if (state === "needs_answer") asking ??= task;
+        else if (state === "checking") checking ??= task;
+        else if (state === "working") working ??= task;
+      }
+      if (asking !== undefined) {
+        return yield* told(
+          NEXT.needsAnswer(`The worker on task ${asking.id}`, asking.workerThreadId),
+        );
+      }
+      if (checking !== undefined) {
+        if (yield* checks.run(target, { task: checking.id }, yield* patienceLeft)) continue;
+        return yield* told(NEXT.checking(checking));
       }
       if (working !== undefined) {
-        const remaining = deadline - (yield* Clock.currentTimeMillis);
-        if (remaining <= 0 || working.workerThreadId === null) return report(lead, build);
-        yield* workers.wait(lead.scope, working.workerThreadId, Duration.millis(remaining));
+        const left = yield* patienceLeft;
+        if (Duration.isZero(left) || working.workerThreadId === null) return yield* told();
+        yield* workers.wait(lead.scope, working.workerThreadId, left);
         continue;
       }
+      // What was in flight has settled. Look again at what that leaves to do.
+      if (inFlight.length > 0) continue;
+
+      if (build.verification.status === "running") {
+        const tester = yield* settleTester(lead, build);
+        if (tester === "settled") continue;
+        const { workerThreadId } = build.verification;
+        if (tester === "needs_answer") {
+          return yield* told(NEXT.needsAnswer("The tester", workerThreadId));
+        }
+        const left = yield* patienceLeft;
+        if (Duration.isZero(left) || workerThreadId === null) return report(lead, build);
+        yield* workers.wait(lead.scope, workerThreadId, left);
+        continue;
+      }
+
       // The lead's harness may have put a long call in the background and ended the lead's
       // turn, and upstream starts a worker only for a lead whose turn is running.
-      if ((yield* Clock.currentTimeMillis) >= deadline) return report(lead, build);
+      const mayStartWorkers = !Duration.isZero(yield* patienceLeft);
 
-      const ready = BuildModel.nextTasks(build);
-      if (ready.length > 0) {
-        for (const task of ready) build = yield* dispatch(lead, build, task);
-        continue;
-      }
       if (!build.tasks.every(isSettled)) {
-        const stuck = build.tasks.some((task) => task.status === "blocked");
-        return report(lead, build, stuck ? undefined : NEXT.waitingOnPlan);
+        const ready = mayStartWorkers ? BuildModel.nextTasks(build) : [];
+        if (ready.length > 0) {
+          for (const task of ready) yield* dispatch(lead, build, task);
+          continue;
+        }
+        const waitsOnPlan =
+          mayStartWorkers && !build.tasks.some((task) => task.status === "blocked");
+        return report(lead, build, waitsOnPlan ? NEXT.waitingOnPlan : undefined);
       }
-      if (build.completedAt === null) {
-        build = yield* save(BuildModel.finished(build, yield* gates.final(lead.app), yield* now));
+      if (BuildModel.awaitsFinalCheck(build)) {
+        // A final check that failed in this step is the lead's to fix, not to run again.
+        if (finalRan) return report(lead, build);
+        finalRan = true;
+        // No worker is needed for it, so it starts even in a step that has used its patience.
+        if (yield* checks.run(target, "final", yield* patienceLeft)) continue;
+        return yield* told(NEXT.finalChecking);
+      }
+      if (build.verification.status === "pending" && mayStartWorkers) {
+        yield* dispatchTester(lead, build);
+        continue;
       }
       return report(lead, build);
     }
@@ -364,6 +401,30 @@ const make = Effect.gen(function* () {
     yield* fs.writeFileString(path.join(directory, "plan.md"), planFile(build));
   });
 
+  const resolve = Effect.fn("BuildConductor.resolve")(function* (
+    lead: BuildLead,
+    input: OzoneBuildResolveInput,
+  ) {
+    if (input.taskId === OZONE_VERIFICATION_ID) {
+      const ruled = yield* decide(lead, (build, at) =>
+        BuildModel.verificationRuled(build, input.ruling, input.note, at),
+      );
+      return report(lead, ruled);
+    }
+    if (input.ruling === "accept") {
+      yield* checks.accept({ threadId: lead.threadId, app: lead.app }, input.taskId);
+      return report(lead, yield* load(lead), NEXT.advance);
+    }
+    const { ruling, note } = input;
+    const ruled = yield* decide(lead, (build, at) => {
+      const decision = BuildModel.resolved(build, input.taskId, ruling, at);
+      if (!decision.ok || ruling !== "retry" || note === undefined) return decision;
+      // The lead's guidance travels with the evidence into the next worker's brief.
+      return { ...decision, build: BuildModel.guided(decision.build, input.taskId, note) };
+    });
+    return report(lead, ruled, NEXT.advance);
+  });
+
   return BuildConductor.of({
     get: Effect.fn("BuildConductor.get")(function* (lead) {
       return report(lead, yield* load(lead));
@@ -372,56 +433,21 @@ const make = Effect.gen(function* () {
       exclusively(
         lead.threadId,
         Effect.gen(function* () {
-          const decision = BuildModel.applyPlan(yield* load(lead), input, yield* now);
-          if (!decision.ok) return yield* refuse(decision.problems.join(" "));
+          const { reviewPlans } = lead.app.app.settings;
+          const build = yield* decide(lead, (current, at) =>
+            BuildModel.applyPlan(current, input, at, { reviewPlans }),
+          );
           // Briefs point at these files; a build still works without them.
-          yield* writeMirror(lead, decision.build).pipe(Effect.ignore);
-          return report(lead, yield* save(decision.build), NEXT.planned);
+          yield* writeMirror(lead, build).pipe(Effect.ignore);
+          return report(lead, build, build.approval === "pending" ? NEXT.review : NEXT.planned);
         }),
       ),
     ),
-    advance: Effect.fn("BuildConductor.advance")((lead) =>
-      exclusively(lead.threadId, advance(lead)),
+    advance: Effect.fn("BuildConductor.advance")((lead, input) =>
+      exclusively(lead.threadId, advance(lead, input ?? {})),
     ),
     resolve: Effect.fn("BuildConductor.resolve")((lead, input) =>
-      exclusively(
-        lead.threadId,
-        Effect.gen(function* () {
-          const build = yield* load(lead);
-          if (input.ruling !== "accept") {
-            const decision = BuildModel.resolved(build, input.taskId, input.ruling, yield* now);
-            if (!decision.ok) return yield* refuse(decision.problems.join(" "));
-            // The lead's guidance travels with the evidence into the next worker's brief.
-            const guided =
-              input.ruling === "retry" && input.note !== undefined
-                ? {
-                    ...decision.build,
-                    tasks: decision.build.tasks.map((task) =>
-                      task.id === input.taskId
-                        ? {
-                            ...task,
-                            evidence: [
-                              ...task.evidence,
-                              { id: "lead", ok: false, detail: input.note ?? "" },
-                            ],
-                          }
-                        : task,
-                    ),
-                  }
-                : decision.build;
-            return report(lead, yield* save(guided), NEXT.advance);
-          }
-          const task = build.tasks.find((candidate) => candidate.id === input.taskId);
-          if (task === undefined) return yield* refuse(`There is no task called ${input.taskId}.`);
-          if (task.status !== "blocked") {
-            return yield* refuse(
-              `Task ${task.id} is ${task.status}, not blocked. Only a blocked task needs a ruling.`,
-            );
-          }
-          const kept = yield* keep(lead, build, task, task.evidence, task.summary);
-          return report(lead, kept, NEXT.advance);
-        }),
-      ),
+      exclusively(lead.threadId, resolve(lead, input)),
     ),
     check: Effect.fn("BuildConductor.check")(function* (lead) {
       const outcome = yield* gates.task(lead.app, {

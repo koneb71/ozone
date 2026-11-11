@@ -1,8 +1,10 @@
 import {
   OZONE_WS_METHODS,
+  type OzoneAppConfigureInput,
   type OzoneAppCreateInput,
   type OzoneAppDeleteInput,
   type OzoneBuild,
+  type OzoneBuildApproveInput,
   type OzoneDataRestoreInput,
   type OzoneDataSnapshotInput,
   type OzoneRuntimeActInput,
@@ -18,6 +20,7 @@ import * as Stream from "effect/Stream";
 
 import * as OzoneApps from "./apps/OzoneApps.ts";
 import * as BuildModel from "./builds/BuildModel.ts";
+import * as BuildReview from "./builds/BuildReview.ts";
 import * as BuildStore from "./builds/BuildStore.ts";
 import * as AppData from "./data/AppData.ts";
 import * as AppRuntime from "./runtime/AppRuntime.ts";
@@ -27,6 +30,7 @@ const make = Effect.gen(function* () {
   const runtime = yield* AppRuntime.AppRuntime;
   const data = yield* AppData.AppData;
   const builds = yield* BuildStore.BuildStore;
+  const review = yield* BuildReview.BuildReview;
   const buildSnapshot = (build: OzoneBuild | null) => ({
     build,
     status: build === null ? ("planning" as const) : BuildModel.statusOf(build),
@@ -35,6 +39,7 @@ const make = Effect.gen(function* () {
     [OZONE_WS_METHODS.appsList]: () => apps.list,
     [OZONE_WS_METHODS.appsCreate]: (input: OzoneAppCreateInput) => apps.create(input),
     [OZONE_WS_METHODS.appsDelete]: (input: OzoneAppDeleteInput) => apps.remove(input),
+    [OZONE_WS_METHODS.appsConfigure]: (input: OzoneAppConfigureInput) => apps.configure(input),
     [OZONE_WS_METHODS.runtimeAct]: (input: OzoneRuntimeActInput) => runtime.act(input),
     [OZONE_WS_METHODS.runtimeLogs]: (input: OzoneRuntimeLogsInput) => runtime.logs(input),
     [OZONE_WS_METHODS.runtimeSubscribe]: (input: OzoneRuntimeSubscribeInput) =>
@@ -46,6 +51,8 @@ const make = Effect.gen(function* () {
     [OZONE_WS_METHODS.dataRestore]: (input: OzoneDataRestoreInput) => data.restore(input),
     [OZONE_WS_METHODS.buildSubscribe]: (input: { readonly threadId: ThreadId }) =>
       Stream.map(builds.changes(input.threadId), buildSnapshot),
+    [OZONE_WS_METHODS.buildApprove]: (input: OzoneBuildApproveInput) =>
+      Effect.map(review.approve(input.threadId), buildSnapshot),
   };
 });
 
@@ -64,6 +71,7 @@ export class OzoneWsHandlers extends Context.Reference<Effect.Success<typeof mak
       [OZONE_WS_METHODS.appsList]: () => notProvided,
       [OZONE_WS_METHODS.appsCreate]: () => notProvided,
       [OZONE_WS_METHODS.appsDelete]: () => notProvided,
+      [OZONE_WS_METHODS.appsConfigure]: () => notProvided,
       [OZONE_WS_METHODS.runtimeAct]: () => notProvided,
       [OZONE_WS_METHODS.runtimeLogs]: () => notProvided,
       [OZONE_WS_METHODS.runtimeSubscribe]: () => Stream.fromEffect(notProvided),
@@ -71,6 +79,7 @@ export class OzoneWsHandlers extends Context.Reference<Effect.Success<typeof mak
       [OZONE_WS_METHODS.dataSnapshot]: () => notProvided,
       [OZONE_WS_METHODS.dataRestore]: () => notProvided,
       [OZONE_WS_METHODS.buildSubscribe]: () => Stream.fromEffect(notProvided),
+      [OZONE_WS_METHODS.buildApprove]: () => notProvided,
     }),
   },
 ) {}

@@ -23,7 +23,11 @@ it as read, and see how many are left to read." This is the app it built:
 - **Orchestrates the work.** The Build Conductor turns a request into a task graph. A worker does
   each task. The server, not the agent, runs the type check, the linter and the tests inside the
   app's container. A failed check goes to a fresh worker with the evidence. Every task that passes
-  is a commit.
+  is a commit. When every check passes, a tester uses the app in a browser against what you asked
+  for.
+- **Lets you steer.** Turn on "Show me the plan first" and the build starts only when you say so.
+  Each app's Build settings choose the model its workers use, so a large lead can direct cheaper
+  workers.
 - **Keeps your data.** An app's database lives in a volume that no Ozone code path can remove.
   Every finished task also takes a snapshot, and a snapshot can be restored from the app's menu.
   A migration that can lose data stops the build and asks.

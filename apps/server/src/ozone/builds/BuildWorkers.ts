@@ -2,6 +2,7 @@ import {
   OzoneAppError,
   type NodeId,
   type OzoneBuildTaskAccess,
+  type OzoneWorkerModel,
   type ThreadId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -40,6 +41,8 @@ export class BuildWorkers extends Context.Service<
         readonly title: string;
         readonly brief: string;
         readonly access: OzoneBuildTaskAccess;
+        /** The model the app's workers use. Null means the lead's own. */
+        readonly model: OzoneWorkerModel | null;
       },
     ) => Effect.Effect<WorkerHandle, OzoneAppError>;
     readonly status: (
@@ -62,6 +65,7 @@ const make = Effect.gen(function* () {
 
   return BuildWorkers.of({
     dispatch: Effect.fn("BuildWorkers.dispatch")(function* (scope, input) {
+      const { model } = input;
       const task = yield* orchestrator
         .delegateTask(scope, {
           task: input.brief,
@@ -70,8 +74,19 @@ const make = Effect.gen(function* () {
           // The conductor does its own waiting, so a restart can pick the worker up by its id.
           mode: "async",
           clientRequestId: input.key,
+          ...(model === null
+            ? {}
+            : { target: { providerInstanceId: model.providerInstanceId, model: model.model } }),
         })
-        .pipe(Effect.mapError((error) => failed(`Could not start a worker: ${error.message}`)));
+        .pipe(
+          Effect.mapError((error) =>
+            failed(
+              model === null
+                ? `Could not start a worker: ${error.message}`
+                : `Could not start a worker on ${model.model}: ${error.message} The model workers use is set in the app's menu, under Build settings.`,
+            ),
+          ),
+        );
       return { workerTaskId: task.taskId, workerThreadId: task.childThreadId };
     }),
     status: Effect.fn("BuildWorkers.status")(function* (scope, workerTaskId) {

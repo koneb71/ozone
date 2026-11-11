@@ -3,6 +3,7 @@ import {
   OzoneApp,
   OzoneAppError,
   OzoneAppManifest,
+  OzoneAppSettings,
   type ProjectId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -31,6 +32,11 @@ export class AppRegistry extends Context.Service<
     readonly resolve: (projectId: ProjectId) => Effect.Effect<ResolvedApp, OzoneAppError>;
     readonly register: (app: OzoneApp) => Effect.Effect<void, OzoneAppError>;
     readonly unregister: (projectId: ProjectId) => Effect.Effect<void, OzoneAppError>;
+    /** Changes how the app's builds run, and returns the app as it is afterwards. */
+    readonly configure: (
+      projectId: ProjectId,
+      change: Partial<OzoneAppSettings>,
+    ) => Effect.Effect<OzoneApp, OzoneAppError>;
   }
 >()("t3/ozone/apps/AppRegistry") {}
 
@@ -46,6 +52,14 @@ const CREATE_APPS_TABLE = `CREATE TABLE IF NOT EXISTS ozone_apps (
   port INTEGER NOT NULL UNIQUE,
   created_at TEXT NOT NULL
 )`;
+
+// Added after the first apps existed. SQLite has no "add column if missing", so a second run fails
+// and is ignored.
+const ADD_SETTINGS_COLUMN = `ALTER TABLE ozone_apps ADD COLUMN settings_json TEXT NOT NULL DEFAULT '{}'`;
+
+const SettingsJson = Schema.fromJsonString(OzoneAppSettings);
+const encodeSettings = Schema.encodeEffect(SettingsJson);
+const AppRow = Schema.Struct({ ...OzoneApp.fields, settings: SettingsJson });
 
 const decodeManifest = Schema.decodeUnknownEffect(Schema.fromJsonString(OzoneAppManifest));
 
@@ -63,6 +77,7 @@ export const make = Effect.gen(function* () {
   const path = yield* Path.Path;
 
   yield* sql.unsafe(CREATE_APPS_TABLE).pipe(Effect.orDie);
+  yield* sql.unsafe(ADD_SETTINGS_COLUMN).pipe(Effect.ignore);
 
   const columns = sql`
     project_id AS "projectId",
@@ -70,16 +85,17 @@ export const make = Effect.gen(function* () {
     name AS "name",
     template_id AS "templateId",
     port AS "port",
-    created_at AS "createdAt"
+    created_at AS "createdAt",
+    settings_json AS "settings"
   `;
   const selectApps = SqlSchema.findAll({
     Request: Schema.Void,
-    Result: OzoneApp,
+    Result: AppRow,
     execute: () => sql`SELECT ${columns} FROM ozone_apps ORDER BY created_at DESC`,
   });
   const selectApp = SqlSchema.findOneOption({
     Request: Schema.String,
-    Result: OzoneApp,
+    Result: AppRow,
     execute: (projectId) => sql`SELECT ${columns} FROM ozone_apps WHERE project_id = ${projectId}`,
   });
 
@@ -104,11 +120,28 @@ export const make = Effect.gen(function* () {
       const workspaceRoot = project.value.workspaceRoot;
       return { app: app.value, workspaceRoot, manifest: yield* readManifest(workspaceRoot) };
     }),
-    register: Effect.fn("AppRegistry.register")(function* (app) {
-      yield* sql`
-        INSERT INTO ozone_apps (project_id, slug, name, template_id, port, created_at)
-        VALUES (${app.projectId}, ${app.slug}, ${app.name}, ${app.templateId}, ${app.port}, ${app.createdAt})
-      `.pipe(Effect.mapError(storageFailed("record the app")));
+    register: Effect.fn("AppRegistry.register")(
+      function* (app) {
+        const settings = yield* encodeSettings(app.settings);
+        yield* sql`
+        INSERT INTO ozone_apps (project_id, slug, name, template_id, port, created_at, settings_json)
+        VALUES (${app.projectId}, ${app.slug}, ${app.name}, ${app.templateId}, ${app.port}, ${app.createdAt}, ${settings})
+      `;
+      },
+      Effect.mapError(storageFailed("record the app")),
+    ),
+    configure: Effect.fn("AppRegistry.configure")(function* (projectId, change) {
+      const app = yield* selectApp(projectId).pipe(Effect.mapError(storageFailed("read the app")));
+      if (Option.isNone(app)) return yield* notAnApp;
+      const settings = { ...app.value.settings, ...change };
+      yield* encodeSettings(settings).pipe(
+        Effect.flatMap(
+          (json) =>
+            sql`UPDATE ozone_apps SET settings_json = ${json} WHERE project_id = ${projectId}`,
+        ),
+        Effect.mapError(storageFailed("save the app's settings")),
+      );
+      return { ...app.value, settings };
     }),
     unregister: Effect.fn("AppRegistry.unregister")(function* (projectId) {
       yield* sql`DELETE FROM ozone_apps WHERE project_id = ${projectId}`.pipe(

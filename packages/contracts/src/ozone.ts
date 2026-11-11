@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/rpc/Rpc";
 
@@ -7,7 +8,12 @@ import {
   EnvironmentAuthorizationError,
 } from "./auth.ts";
 import { IsoDateTime, ProjectId, TrimmedNonEmptyString } from "./baseSchemas.ts";
-import { OzoneBuildSnapshot, OzoneBuildSubscribeInput } from "./ozoneBuild.ts";
+import {
+  OzoneBuildApproveInput,
+  OzoneBuildSnapshot,
+  OzoneBuildSubscribeInput,
+} from "./ozoneBuild.ts";
+import { ProviderInstanceId } from "./providerInstance.ts";
 
 const ShortText = TrimmedNonEmptyString.check(Schema.isMaxLength(128));
 const CommandText = TrimmedNonEmptyString.check(Schema.isMaxLength(2_048));
@@ -61,6 +67,32 @@ export const OzoneTemplateSummary = Schema.Struct({
 });
 export type OzoneTemplateSummary = typeof OzoneTemplateSummary.Type;
 
+/** The model an app's workers and verifier run on. The lead keeps the model of its own thread. */
+export const OzoneWorkerModel = Schema.Struct({
+  providerInstanceId: ProviderInstanceId,
+  model: ShortText,
+});
+export type OzoneWorkerModel = typeof OzoneWorkerModel.Type;
+
+/** How one app's builds run. Every field has a default, so an older record still reads. */
+export const OzoneAppSettings = Schema.Struct({
+  /** The lead's plan waits for the person's approval before any work starts. */
+  reviewPlans: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  /** A finished build is tried in the browser against its acceptance criteria. */
+  verifyBuilds: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(true))),
+  /** Null: workers use the lead's model. */
+  workerModel: Schema.NullOr(OzoneWorkerModel).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+  ),
+});
+export type OzoneAppSettings = typeof OzoneAppSettings.Type;
+
+export const DEFAULT_OZONE_APP_SETTINGS: OzoneAppSettings = {
+  reviewPlans: false,
+  verifyBuilds: true,
+  workerModel: null,
+};
+
 export const OzoneApp = Schema.Struct({
   projectId: ProjectId,
   /** Also the Compose project name, so it never changes after creation. */
@@ -69,6 +101,9 @@ export const OzoneApp = Schema.Struct({
   templateId: ShortText,
   port: Port,
   createdAt: IsoDateTime,
+  settings: OzoneAppSettings.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(DEFAULT_OZONE_APP_SETTINGS)),
+  ),
 });
 export type OzoneApp = typeof OzoneApp.Type;
 
@@ -90,11 +125,24 @@ export const OzoneAppsListResult = Schema.Struct({
 });
 export type OzoneAppsListResult = typeof OzoneAppsListResult.Type;
 
+const OzoneAppSettingsPatch = Schema.Struct({
+  reviewPlans: Schema.optionalKey(Schema.Boolean),
+  verifyBuilds: Schema.optionalKey(Schema.Boolean),
+  workerModel: Schema.optionalKey(Schema.NullOr(OzoneWorkerModel)),
+});
+
 export const OzoneAppCreateInput = Schema.Struct({
   name: TrimmedNonEmptyString.check(Schema.isMaxLength(80)),
   templateId: Schema.optionalKey(ShortText),
+  settings: Schema.optionalKey(OzoneAppSettingsPatch),
 });
 export type OzoneAppCreateInput = typeof OzoneAppCreateInput.Type;
+
+export const OzoneAppConfigureInput = Schema.Struct({
+  projectId: ProjectId,
+  settings: OzoneAppSettingsPatch,
+});
+export type OzoneAppConfigureInput = typeof OzoneAppConfigureInput.Type;
 
 export const OzoneAppCreateResult = Schema.Struct({
   app: OzoneApp,
@@ -221,6 +269,7 @@ export const OZONE_WS_METHODS = {
   appsList: "ozone.apps.list",
   appsCreate: "ozone.apps.create",
   appsDelete: "ozone.apps.delete",
+  appsConfigure: "ozone.apps.configure",
   runtimeAct: "ozone.runtime.act",
   runtimeLogs: "ozone.runtime.logs",
   runtimeSubscribe: "ozone.runtime.subscribe",
@@ -228,6 +277,7 @@ export const OZONE_WS_METHODS = {
   dataSnapshot: "ozone.data.snapshot",
   dataRestore: "ozone.data.restore",
   buildSubscribe: "ozone.build.subscribe",
+  buildApprove: "ozone.build.approve",
 } as const;
 
 type OzoneWsMethod = (typeof OZONE_WS_METHODS)[keyof typeof OZONE_WS_METHODS];
@@ -251,6 +301,9 @@ export const OZONE_RPC_SCOPES = {
   // Replaces the app's data: only a client that can already change the project may.
   [OZONE_WS_METHODS.dataRestore]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.buildSubscribe]: AuthOrchestrationReadScope,
+  [OZONE_WS_METHODS.appsConfigure]: AuthOrchestrationOperateScope,
+  // Starts the work of a plan: the same right as sending the lead a message.
+  [OZONE_WS_METHODS.buildApprove]: AuthOrchestrationOperateScope,
 } as const;
 
 /** Every Ozone method reports under one aggregate in traces. */
@@ -313,6 +366,16 @@ export const OzoneWsRpcs = [
     success: OzoneBuildSnapshot,
     error: OzoneRpcError,
     stream: true,
+  }),
+  Rpc.make(OZONE_WS_METHODS.appsConfigure, {
+    payload: OzoneAppConfigureInput,
+    success: OzoneApp,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.buildApprove, {
+    payload: OzoneBuildApproveInput,
+    success: OzoneBuildSnapshot,
+    error: OzoneRpcError,
   }),
 ] as const;
 

@@ -1,7 +1,9 @@
 import {
   CommandId,
+  DEFAULT_OZONE_APP_SETTINGS,
   OzoneAppError,
   type OzoneApp,
+  type OzoneAppConfigureInput,
   type OzoneAppCreateInput,
   type OzoneAppCreateResult,
   type OzoneAppDeleteInput,
@@ -45,6 +47,7 @@ export class OzoneApps extends Context.Service<
     readonly remove: (
       input: OzoneAppDeleteInput,
     ) => Effect.Effect<OzoneAppDeleteResult, OzoneAppError>;
+    readonly configure: (input: OzoneAppConfigureInput) => Effect.Effect<OzoneApp, OzoneAppError>;
   }
 >()("t3/ozone/apps/OzoneApps") {}
 
@@ -153,6 +156,7 @@ export const make = Effect.gen(function* () {
       templateId,
       port,
       createdAt: DateTime.formatIso(yield* DateTime.now),
+      settings: { ...DEFAULT_OZONE_APP_SETTINGS, ...input.settings },
     };
     yield* registry.register(app);
     // Starting takes minutes on a first run (image pulls, npm install); the caller watches it.
@@ -169,6 +173,9 @@ export const make = Effect.gen(function* () {
       };
     }),
     create: Effect.fn("OzoneApps.create")((input) => creating.withPermits(1)(createOne(input))),
+    configure: Effect.fn("OzoneApps.configure")((input) =>
+      registry.configure(input.projectId, input.settings),
+    ),
     remove: Effect.fn("OzoneApps.remove")(function* (input) {
       const { workspaceRoot } = yield* registry.resolve(input.projectId);
       const { snapshot } = yield* data.remove(input.projectId);

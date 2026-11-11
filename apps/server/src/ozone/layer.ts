@@ -6,10 +6,13 @@ import * as OrchestratorMcpService from "../mcp/OrchestratorMcpService.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as AppRegistry from "./apps/AppRegistry.ts";
 import * as OzoneApps from "./apps/OzoneApps.ts";
+import * as BuildChecks from "./builds/BuildChecks.ts";
 import * as BuildConductor from "./builds/BuildConductor.ts";
 import * as BuildGates from "./builds/BuildGates.ts";
 import * as BuildRepo from "./builds/BuildRepo.ts";
+import * as BuildReview from "./builds/BuildReview.ts";
 import * as BuildStore from "./builds/BuildStore.ts";
+import * as BuildWake from "./builds/BuildWake.ts";
 import * as BuildWorkers from "./builds/BuildWorkers.ts";
 import * as AppData from "./data/AppData.ts";
 import * as OzoneMcpHandlers from "./mcp/handlers.ts";
@@ -19,13 +22,26 @@ import * as AppRuntime from "./runtime/AppRuntime.ts";
 import * as DockerCli from "./runtime/DockerCli.ts";
 import * as OzoneWs from "./ws.ts";
 
-/** Ozone's services, shared by its WebSocket handlers and its MCP tools. */
+/**
+ * Ozone's services, shared by its WebSocket handlers and its MCP tools. The checks are here and
+ * not with the conductor: they run as jobs of the server, whoever asked for them.
+ */
 export const layer = OzoneWs.layer.pipe(
   Layer.provideMerge(OzoneApps.layer),
+  Layer.provideMerge(Layer.mergeAll(BuildChecks.layer, BuildReview.layer)),
+  Layer.provideMerge(BuildGates.layer),
   Layer.provideMerge(AppRuntime.layer),
   Layer.provideMerge(AppData.layer),
   Layer.provideMerge(AppCompose.layer),
-  Layer.provideMerge(Layer.mergeAll(AppRegistry.layer, DockerCli.layer, BuildStore.layer)),
+  Layer.provideMerge(
+    Layer.mergeAll(
+      AppRegistry.layer,
+      DockerCli.layer,
+      BuildStore.layer,
+      BuildRepo.layer,
+      BuildWake.layer,
+    ),
+  ),
   Layer.provide(Layer.mergeAll(GitVcsDriver.layer, NetService.layer)),
 );
 
@@ -38,7 +54,6 @@ export const layerMcpTools = McpHttpServer.toolkitRegistration(
   OzoneMcpHandlers.layer,
 ).pipe(
   Layer.provide(BuildConductor.layer),
-  Layer.provide(Layer.mergeAll(BuildWorkers.layer, BuildGates.layer)),
-  Layer.provide(Layer.mergeAll(BuildRepo.layer, OrchestratorMcpService.layer)),
-  Layer.provide(GitVcsDriver.layer),
+  Layer.provide(BuildWorkers.layer),
+  Layer.provide(OrchestratorMcpService.layer),
 );

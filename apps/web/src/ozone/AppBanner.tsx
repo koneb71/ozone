@@ -116,6 +116,7 @@ export function useAppBanners(
       : ozoneEnvironment.runtimeStatus({ environmentId, input: { projectId: app.projectId } }),
   );
   const runAction = useAtomCommand(ozoneEnvironment.runtimeAct, { reportFailure: false });
+  const approveBuild = useAtomCommand(ozoneEnvironment.approveBuild, { reportFailure: false });
   const sentThread = useQuietThreadShell(threadRef);
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
   const adjustPreview = useAtomCommand(previewEnvironment.adjust, { reportFailure: false });
@@ -219,10 +220,20 @@ export function useAppBanners(
     }
   };
 
+  const approve = async () => {
+    const result = await approveBuild({
+      environmentId: threadRef.environmentId,
+      input: { threadId: threadRef.threadId },
+    });
+    if (result._tag === "Failure") {
+      reportFailure("Could not start the build", squashAtomCommandFailure(result));
+    }
+  };
+
   const copy = bannerCopy(app, status);
   const phase = status?.phase;
   const busy = phase === "starting";
-  const buildItem = buildBannerItem(build.data);
+  const buildItem = buildBannerItem(build.data, () => void approve());
   return [
     ...(awaitsSend
       ? [

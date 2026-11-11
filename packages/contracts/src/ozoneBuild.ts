@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import { IsoDateTime, NodeId, ProjectId, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
@@ -85,8 +86,56 @@ export const OzoneBuildTask = Schema.Struct({
 });
 export type OzoneBuildTask = typeof OzoneBuildTask.Type;
 
-export const OzoneBuildStatus = Schema.Literals(["planning", "building", "blocked", "complete"]);
+export const OzoneBuildStatus = Schema.Literals([
+  "planning",
+  /** The plan waits for the person's approval. */
+  "review",
+  "building",
+  "blocked",
+  "complete",
+]);
 export type OzoneBuildStatus = typeof OzoneBuildStatus.Type;
+
+/** What a verifier found for one acceptance criterion when it tried the app. */
+export const OzoneCriterionResult = Schema.Struct({
+  criterion: Schema.String,
+  verdict: Schema.Literals(["pass", "fail", "unchecked"]),
+  note: Schema.String,
+});
+export type OzoneCriterionResult = typeof OzoneCriterionResult.Type;
+
+/** A tester that uses the finished app in a browser, once the final check has passed. */
+export const OzoneBuildVerification = Schema.Struct({
+  /**
+   * `pending`: the final check passed and no tester has started. `unavailable`: nothing could be
+   * tried, for example no browser. `accepted`: the lead kept the build despite what failed.
+   */
+  status: Schema.Literals([
+    "none",
+    "pending",
+    "running",
+    "passed",
+    "failed",
+    "accepted",
+    "unavailable",
+  ]),
+  /** Every tester ever started. Names each hand-off, like a task's `dispatches`. */
+  dispatches: Schema.Int,
+  workerTaskId: Schema.NullOr(NodeId),
+  workerThreadId: Schema.NullOr(ThreadId),
+  results: Schema.Array(OzoneCriterionResult),
+  note: Schema.NullOr(Schema.String),
+});
+export type OzoneBuildVerification = typeof OzoneBuildVerification.Type;
+
+export const NO_OZONE_VERIFICATION: OzoneBuildVerification = {
+  status: "none",
+  dispatches: 0,
+  workerTaskId: null,
+  workerThreadId: null,
+  results: [],
+  note: null,
+};
 
 /** The persisted plan and evidence of one lead thread's build. */
 export const OzoneBuild = Schema.Struct({
@@ -100,17 +149,43 @@ export const OzoneBuild = Schema.Struct({
   finalEvidence: Schema.Array(OzoneGateResult),
   completedAt: Schema.NullOr(IsoDateTime),
   updatedAt: IsoDateTime,
+  // The fields below came later. Each has a default so a build stored before them still reads.
+  approval: Schema.Literals(["not_needed", "pending", "approved"]).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed("not_needed" as const)),
+  ),
+  /** Set while the final check runs, so a restart knows to run it again. */
+  finalStartedAt: Schema.NullOr(IsoDateTime).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+  ),
+  verification: OzoneBuildVerification.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(NO_OZONE_VERIFICATION)),
+  ),
 });
 export type OzoneBuild = typeof OzoneBuild.Type;
 
 export const OzoneBuildRuling = Schema.Literals(["retry", "skip", "accept"]);
 export type OzoneBuildRuling = typeof OzoneBuildRuling.Type;
 
+/** The id that names the verification instead of a task when the lead rules on it. */
+export const OZONE_VERIFICATION_ID = "verification";
+
+export const OzoneBuildAdvanceInput = Schema.Struct({
+  approved: Schema.optionalKey(
+    Schema.Boolean.annotate({
+      description:
+        "Only for a plan that waits for approval: true when the user has just told you, in their own words, to build it as it is.",
+    }),
+  ),
+});
+export type OzoneBuildAdvanceInput = typeof OzoneBuildAdvanceInput.Type;
+
 export const OzoneBuildResolveInput = Schema.Struct({
-  taskId: TaskId,
+  taskId: TaskId.annotate({
+    description: `A blocked task's id, or \`${OZONE_VERIFICATION_ID}\` to rule on what the tester found.`,
+  }),
   ruling: OzoneBuildRuling.annotate({
     description:
-      "'retry': give it to a new worker, with your `note` as guidance. 'skip': leave it out. 'accept': keep the work as it is despite the failed check.",
+      "'retry': give it to a new worker, with your `note` as guidance. 'skip': leave it out. 'accept': keep the work as it is despite what failed. For the tester's findings: 'retry' tries the app again, 'accept' keeps the build and needs a `note` saying why.",
   }),
   note: Schema.optionalKey(TrimmedNonEmptyString.check(Schema.isMaxLength(2_000))),
 });
@@ -140,6 +215,8 @@ export const OzoneBuildCheckResult = Schema.Struct({
 export type OzoneBuildCheckResult = typeof OzoneBuildCheckResult.Type;
 
 export const OzoneBuildSubscribeInput = Schema.Struct({ threadId: ThreadId });
+export const OzoneBuildApproveInput = Schema.Struct({ threadId: ThreadId });
+export type OzoneBuildApproveInput = typeof OzoneBuildApproveInput.Type;
 export const OzoneBuildSnapshot = Schema.Struct({
   build: Schema.NullOr(OzoneBuild),
   status: OzoneBuildStatus,

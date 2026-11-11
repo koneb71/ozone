@@ -1,6 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import {
+  DEFAULT_OZONE_APP_SETTINGS,
   ProjectId,
   type OzoneAppManifest,
   type OzoneRuntimeService,
@@ -90,6 +91,7 @@ const makeHarness = (options: { readonly hostCa?: boolean; readonly docker?: "mi
             templateId: "web-app",
             port: 41_000,
             createdAt: "2026-01-01T00:00:00.000Z",
+            settings: DEFAULT_OZONE_APP_SETTINGS,
           },
           workspaceRoot,
           manifest,

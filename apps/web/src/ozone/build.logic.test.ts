@@ -1,4 +1,10 @@
-import { ProjectId, ThreadId, type OzoneBuild, type OzoneBuildTask } from "@t3tools/contracts";
+import {
+  NO_OZONE_VERIFICATION,
+  ProjectId,
+  ThreadId,
+  type OzoneBuild,
+  type OzoneBuildTask,
+} from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import { buildHeadline, taskStateLabel } from "./build.logic";
@@ -36,6 +42,9 @@ const build = (
   finalEvidence: [],
   completedAt: null,
   updatedAt: "2026-01-01T00:00:00.000Z",
+  approval: "not_needed",
+  finalStartedAt: null,
+  verification: NO_OZONE_VERIFICATION,
   ...extra,
 });
 
@@ -83,6 +92,30 @@ describe("buildHeadline", () => {
       title: "Build complete",
       detail: "2 of 2 tasks done",
     });
+  });
+
+  it("says when the plan waits for the person, and what the browser test is doing", () => {
+    const planned = build([task("schema"), task("page")], { approval: "pending" });
+    expect(buildHeadline({ build: planned, status: "review" })).toMatchObject({
+      title: "The plan is ready for you",
+      detail: "2 tasks. Start it here, or ask for changes below.",
+      busy: false,
+    });
+
+    const allDone = [task("page", { status: "done" })];
+    const testing = { ...NO_OZONE_VERIFICATION, status: "running" as const };
+    expect(
+      buildHeadline({ build: build(allDone, { verification: testing }), status: "building" }),
+    ).toMatchObject({ title: "Trying the app in a browser", busy: true });
+    const fail = { criterion: "A habit can be added.", verdict: "fail" as const, note: "" };
+    const found = { ...NO_OZONE_VERIFICATION, status: "failed" as const, results: [fail] };
+    expect(
+      buildHeadline({ build: build(allDone, { verification: found }), status: "blocked" }),
+    ).toMatchObject({ title: "The app does not do everything asked", tone: "warning" });
+    const passed = { ...NO_OZONE_VERIFICATION, status: "passed" as const };
+    expect(
+      buildHeadline({ build: build(allDone, { verification: passed }), status: "complete" }),
+    ).toMatchObject({ detail: "1 of 1 tasks done · Tried in a browser" });
   });
 });
 
