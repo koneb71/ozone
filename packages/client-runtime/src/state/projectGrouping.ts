@@ -364,7 +364,7 @@ export function buildProjectGroups<TProject extends EnvironmentProject>(input: {
       key,
       label:
         input.groupScratchProjects && representative.isScratch
-          ? "No project"
+          ? "Chats" // ozone-seam: threads without a project are Ozone's chats.
           : members.length > 1
             ? deriveProjectGroupLabel({
                 representative,

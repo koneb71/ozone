@@ -285,7 +285,7 @@ describe("BuildConductor", () => {
         "final check",
       ]);
       assert.strictEqual(report.status, "complete");
-      assert.strictEqual(report.next, NEXT.complete);
+      assert.strictEqual(report.next, NEXT.complete("http://localhost:41000"));
       assert.deepStrictEqual(
         report.tasks.map((entry) => entry.note),
         ["Committed sha-1. schema#1 finished", "Committed sha-2. page#1 finished"],

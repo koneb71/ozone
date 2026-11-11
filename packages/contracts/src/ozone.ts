@@ -72,6 +72,9 @@ export const OzoneApp = Schema.Struct({
 });
 export type OzoneApp = typeof OzoneApp.Type;
 
+/** Where a running app answers on the machine that runs its containers. */
+export const ozoneAppUrl = (app: Pick<OzoneApp, "port">): string => `http://localhost:${app.port}`;
+
 export const OzoneDockerStatus = Schema.Struct({
   available: Schema.Boolean,
   version: Schema.NullOr(Schema.String),

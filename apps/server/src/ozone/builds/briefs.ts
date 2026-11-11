@@ -1,6 +1,6 @@
 /**
  * The text a build sends to agents: each worker's brief, and the `next` line of every report.
- * Model-facing: change it together with the cases in `evals/mcp-tool-use`.
+ * Model-facing, with no eval cases yet: after a change, run a real build and read what agents do.
  */
 import type { OzoneBuild, OzoneBuildTask } from "@t3tools/contracts";
 
@@ -57,8 +57,8 @@ export const NEXT = {
   plan: "There is no plan yet. Call ozone_build_plan with the spec, the acceptance criteria and the tasks.",
   planned: "The plan is saved. Call ozone_build_advance to start the first task.",
   advance: "Call ozone_build_advance.",
-  complete:
-    "The build is complete. Tell the user what was built and how to try it. Do not call ozone_build_advance again.",
+  complete: (url: string) =>
+    `The build is complete and the app is running at ${url}. Tell the user what was built and where to try it, with the full address of each new page. Do not call ozone_build_advance again.`,
   working: (task: OzoneBuildTask) =>
     `A worker is still on task ${task.id}. End your turn now. You are woken when it finishes; then call ozone_build_advance again.`,
   needsAnswer: (task: OzoneBuildTask) =>

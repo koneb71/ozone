@@ -3,7 +3,7 @@
  * itself, so this reaches the lead and its workers without Ozone editing any provider adapter, and
  * it survives compaction.
  *
- * Model-facing text: change it together with the cases in `evals/mcp-tool-use`.
+ * Model-facing text, with no eval cases yet: after a change, run a real build and read the result.
  */
 export const OZONE_APP_INSTRUCTIONS = `This app was created by Ozone, which runs it and protects its data.
 

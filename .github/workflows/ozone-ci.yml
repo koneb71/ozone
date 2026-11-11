@@ -70,11 +70,16 @@ jobs:
           vp test run $tests
 
   # Ozone's seams in the web client change what upstream's React tests render, so the whole web
-  # suite runs, in headless Chromium, the way upstream runs it.
+  # suite runs in headless Chromium. Upstream runs it in one job on a larger runner; on a standard
+  # runner the browser stops answering about 100 files in, so the files are split across jobs.
   web:
-    name: Web tests
+    name: Web tests (${{ matrix.shard }}/4)
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -110,5 +115,7 @@ jobs:
             node apps/web/node_modules/playwright/cli.js install-deps chromium
           fi
 
+      # The package's own test script, plus the shard.
       - name: Test
-        run: vp run --filter @t3tools/web test
+        working-directory: apps/web
+        run: vp test run --passWithNoTests --project unit --project browser --shard=${{ matrix.shard }}/4

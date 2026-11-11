@@ -23,6 +23,7 @@ import * as Schema from "effect/Schema";
 
 import * as ServerConfig from "../config.ts";
 import * as GitWorkflow from "../git/GitWorkflowService.ts";
+import * as ChatPersona from "../ozone/chat/chatPersona.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as ProjectService from "./ProjectService.ts";
 
@@ -280,7 +281,7 @@ const make = Effect.gen(function* () {
         .bootstrap({
           commandId: CommandId.make(`scratch-project:${id}`),
           projectId: ProjectId.make(id),
-          title: "No project",
+          title: "Chats", // ozone-seam: threads without a project are Ozone's chats.
           workspaceRoot,
         })
         .pipe(
@@ -350,7 +351,8 @@ const make = Effect.gen(function* () {
                 Effect.mapError((cause) => new ScratchFolderError({ folder: fullFolder, cause })),
               ),
       (folder, cause) => new ScratchFolderError({ folder, cause }),
-    );
+      // ozone-seam: a chat's folder starts with Ozone's instructions for its agent.
+    ).pipe(Effect.tap(ChatPersona.writeInto(fileSystem, path)));
   });
 
   const namedProjectsRoot = path.resolve(config.baseDir, "projects");

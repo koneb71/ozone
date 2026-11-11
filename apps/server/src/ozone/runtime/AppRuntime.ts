@@ -1,5 +1,6 @@
 import {
   OzoneAppError,
+  ozoneAppUrl,
   type OzoneDockerStatus,
   type OzoneRuntimeActInput,
   type OzoneRuntimeLogsInput,
@@ -230,7 +231,7 @@ export const make = Effect.gen(function* () {
     return {
       projectId,
       phase: derived.phase,
-      url: derived.phase === "running" ? `http://localhost:${resolved.app.port}` : null,
+      url: derived.phase === "running" ? ozoneAppUrl(resolved.app) : null,
       services,
       message: derived.message,
       updatedAt,

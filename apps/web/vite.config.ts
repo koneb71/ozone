@@ -133,7 +133,12 @@ const browserTestProject = {
     browser: {
       enabled: true,
       headless: true,
-      provider: playwright(),
+      // ozone-seam: a machine with another Chromium build than Playwright expects names it here.
+      provider: playwright(
+        process.env.OZONE_TEST_CHROMIUM
+          ? { launchOptions: { executablePath: process.env.OZONE_TEST_CHROMIUM } }
+          : undefined,
+      ),
       instances: [{ browser: "chromium" }],
       screenshotFailures: false,
       commands: {

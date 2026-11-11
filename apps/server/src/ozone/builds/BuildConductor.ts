@@ -1,4 +1,5 @@
 import {
+  ozoneAppUrl,
   OzoneAppError,
   type OzoneBuild,
   type OzoneBuildCheckResult,
@@ -91,7 +92,7 @@ const noteFor = (task: OzoneBuildTask): string | undefined => {
 };
 
 /** What the lead is told, with a `next` it can follow without re-deriving the build's state. */
-const report = (build: OzoneBuild, next?: string): OzoneBuildReport => {
+const report = (lead: BuildLead, build: OzoneBuild, next?: string): OzoneBuildReport => {
   const status = BuildModel.statusOf(build);
   const blockedTask = build.tasks.find((task) => task.status === "blocked");
   const workingTask = build.tasks.find(isActive);
@@ -99,7 +100,7 @@ const report = (build: OzoneBuild, next?: string): OzoneBuildReport => {
     status === "planning"
       ? NEXT.plan
       : status === "complete"
-        ? NEXT.complete
+        ? NEXT.complete(ozoneAppUrl(lead.app.app))
         : blockedTask !== undefined
           ? NEXT.blocked(blockedTask)
           : status === "blocked"
@@ -316,7 +317,7 @@ const make = Effect.gen(function* () {
   const advance = Effect.fn("BuildConductor.advance")(function* (lead: BuildLead) {
     const deadline = (yield* Clock.currentTimeMillis) + Duration.toMillis(lead.patience);
     let build = yield* load(lead);
-    if (build.tasks.length === 0) return report(build);
+    if (build.tasks.length === 0) return report(lead, build);
     build = yield* reopenLost(lead, build);
 
     for (;;) {
@@ -324,12 +325,12 @@ const make = Effect.gen(function* () {
       for (const task of build.tasks.filter(isActive)) {
         const settled = yield* settle(lead, build, task);
         build = settled.build;
-        if (settled.state === "needs_answer") return report(build, NEXT.needsAnswer(task));
+        if (settled.state === "needs_answer") return report(lead, build, NEXT.needsAnswer(task));
         if (settled.state === "working") working ??= task;
       }
       if (working !== undefined) {
         const remaining = deadline - (yield* Clock.currentTimeMillis);
-        if (remaining <= 0 || working.workerThreadId === null) return report(build);
+        if (remaining <= 0 || working.workerThreadId === null) return report(lead, build);
         yield* workers.wait(lead.scope, working.workerThreadId, Duration.millis(remaining));
         continue;
       }
@@ -341,12 +342,12 @@ const make = Effect.gen(function* () {
       }
       if (!build.tasks.every(isSettled)) {
         const stuck = build.tasks.some((task) => task.status === "blocked");
-        return report(build, stuck ? undefined : NEXT.waitingOnPlan);
+        return report(lead, build, stuck ? undefined : NEXT.waitingOnPlan);
       }
       if (build.completedAt === null) {
         build = yield* save(BuildModel.finished(build, yield* gates.final(lead.app), yield* now));
       }
-      return report(build);
+      return report(lead, build);
     }
   });
 
@@ -362,7 +363,7 @@ const make = Effect.gen(function* () {
 
   return BuildConductor.of({
     get: Effect.fn("BuildConductor.get")(function* (lead) {
-      return report(yield* load(lead));
+      return report(lead, yield* load(lead));
     }),
     plan: Effect.fn("BuildConductor.plan")((lead, input) =>
       exclusively(
@@ -372,7 +373,7 @@ const make = Effect.gen(function* () {
           if (!decision.ok) return yield* refuse(decision.problems.join(" "));
           // Briefs point at these files; a build still works without them.
           yield* writeMirror(lead, decision.build).pipe(Effect.ignore);
-          return report(yield* save(decision.build), NEXT.planned);
+          return report(lead, yield* save(decision.build), NEXT.planned);
         }),
       ),
     ),
@@ -405,7 +406,7 @@ const make = Effect.gen(function* () {
                     ),
                   }
                 : decision.build;
-            return report(yield* save(guided), NEXT.advance);
+            return report(lead, yield* save(guided), NEXT.advance);
           }
           const task = build.tasks.find((candidate) => candidate.id === input.taskId);
           if (task === undefined) return yield* refuse(`There is no task called ${input.taskId}.`);
@@ -415,7 +416,7 @@ const make = Effect.gen(function* () {
             );
           }
           const kept = yield* keep(lead, build, task, task.evidence, task.summary);
-          return report(kept, NEXT.advance);
+          return report(lead, kept, NEXT.advance);
         }),
       ),
     ),

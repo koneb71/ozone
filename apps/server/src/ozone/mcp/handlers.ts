@@ -1,4 +1,4 @@
-import { OrchestratorMcpFailure, type OzoneAppError } from "@t3tools/contracts";
+import { OrchestratorMcpFailure, type OzoneAppError, ozoneAppUrl } from "@t3tools/contracts";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 
@@ -120,7 +120,7 @@ export const layer = McpToolAccess.toLayer(OzoneToolkit, {
       return {
         projectId: created.app.projectId,
         workspaceRoot: created.workspaceRoot,
-        url: `http://localhost:${created.app.port}`,
+        url: ozoneAppUrl(created.app),
         next: "The app is starting. Start its build thread with t3_thread_launch in this project, with the user's request as the message, then tell the user where it is.",
       };
     }),

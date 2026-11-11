@@ -7,6 +7,7 @@ import {
 import type { EnvironmentId, ModelSelection, ProjectId } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 
+import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
 import { useScratchProject } from "~/hooks/useScratchProject";
 import { newMessageId, newThreadId } from "~/lib/utils";
 import {
@@ -24,6 +25,7 @@ import { buildThreadRouteParams } from "~/threadRoutes";
 import { DEFAULT_INTERACTION_MODE } from "~/types";
 
 import { appNameFromPrompt } from "./home.logic";
+import { queueHomeFiles } from "./homeFiles";
 import { ozoneEnvironment } from "./state";
 
 /** Null when the launch worked and the thread is open; otherwise what to tell the user. */
@@ -53,7 +55,7 @@ function newThreadDefaults(environmentId: EnvironmentId, projectId: ProjectId) {
     : { modelSelection, runtimeMode: settings.defaultRuntimeMode };
 }
 
-/** Starts the two things Home offers: a new app with its lead thread, or a chat. */
+/** Starts what Home offers: a new app with its lead thread, a chat, or a chat about files. */
 export function useOzoneLaunch() {
   const navigate = useNavigate();
   const createApp = useAtomCommand(ozoneEnvironment.createApp, { reportFailure: false });
@@ -61,6 +63,7 @@ export function useOzoneLaunch() {
     reportFailure: false,
   });
   const { openScratchProject } = useScratchProject();
+  const handleNewThread = useNewThreadHandler();
 
   const startThread = async (
     environmentId: EnvironmentId,
@@ -129,5 +132,19 @@ export function useOzoneLaunch() {
     return project === null ? null : startThread(environmentId, project.id, prompt);
   };
 
-  return { build, chat };
+  /** Opens a new chat with the files and the text typed so far in its composer, unsent. */
+  const chatWithFiles = async (
+    environmentId: EnvironmentId,
+    prompt: string,
+    files: ReadonlyArray<File>,
+  ): Promise<LaunchOutcome> => {
+    const project = await openScratchProject(environmentId, "Could not start a chat");
+    if (project === null) return null;
+    const draft = await handleNewThread(scopeProjectRef(environmentId, project.id), { prompt });
+    if (draft === null) return "The chat did not open. Try again.";
+    queueHomeFiles(scopeThreadRef(environmentId, draft.threadId), files);
+    return null;
+  };
+
+  return { build, chat, chatWithFiles };
 }

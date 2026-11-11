@@ -1,6 +1,6 @@
 /**
- * The tools Ozone adds to the `t3-code` MCP server. Descriptions and schemas are model-facing:
- * change them together with the cases in `evals/mcp-tool-use`.
+ * The tools Ozone adds to the `t3-code` MCP server. Descriptions and schemas are model-facing,
+ * with no eval cases yet: after a change, run a real build and read what agents do.
  */
 import {
   OrchestratorMcpFailure,

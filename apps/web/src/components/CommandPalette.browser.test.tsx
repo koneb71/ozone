@@ -5,6 +5,7 @@ import { page, userEvent } from "vite-plus/test/browser";
 import { act, render } from "../../test/render";
 import { openCommandPalette } from "../commandPaletteBus";
 import { useCommandPaletteStore } from "../commandPaletteStore";
+import { LAST_USED_PROJECT_STORAGE_KEY } from "../hooks/useHandleNewThread";
 import { makeThreadFixture } from "../test-fixtures";
 import type { Project, Thread } from "../types";
 import { CommandPalette } from "./CommandPalette";
@@ -21,6 +22,9 @@ vi.mock("../state/entities", async (original) => ({
 
 function setup(state: { projects?: ReadonlyArray<Project>; threads?: ReadonlyArray<Thread> } = {}) {
   useCommandPaletteStore.setState(useCommandPaletteStore.getInitialState(), true);
+  // ozone-seam: a test in another file can leave a last-used project behind, which changes the
+  // palette's first row. Which files share a browser depends on the machine's core count.
+  localStorage.removeItem(LAST_USED_PROJECT_STORAGE_KEY);
   entities.projects = state.projects ?? [];
   entities.threads = state.threads ?? [];
 }

@@ -362,7 +362,7 @@ import {
   type EnvironmentUnavailableState,
   useSystemComposerBanners,
 } from "./chat/useSystemComposerBanners";
-import { useOzoneComposerBanners } from "../ozone/AppBanner";
+import { useOzoneComposer } from "../ozone/useOzoneComposer";
 import { useDraftHeroLayoutTransition } from "./chat/useDraftHeroLayoutTransition";
 import { useLocalDispatchState } from "./chat/useLocalDispatchState";
 import { draftFanoutSelectionsAtom, draftSendState } from "./chat/chatViewSend";
@@ -1274,11 +1274,8 @@ export default function ChatView(props: ChatViewProps) {
     automaticEnvironment,
     autoUpdateEnvironments,
   });
-  // ozone-seam: an Ozone app's status and controls join the composer notices.
-  const ozoneComposerBannerItems = useOzoneComposerBanners(
-    activeThreadRef,
-    activeProject?.id ?? null,
-  );
+  // ozone-seam: an app's notices join the composer's, and files picked on Home reach it.
+  const ozoneComposerBannerItems = useOzoneComposer(activeThreadRef, activeProject?.id ?? null);
   const providerInstanceEntries = providerInstanceEntriesFor(
     providerStatuses,
     settings,

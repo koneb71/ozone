@@ -98,7 +98,7 @@ function bannerCopy(app: OzoneApp, status: OzoneRuntimeStatus | null): BannerCop
  * The status of the Ozone app a thread belongs to, with its controls, as one composer notice.
  * Returns nothing for projects Ozone did not create.
  */
-export function useOzoneComposerBanners(
+export function useAppBanners(
   threadRef: ScopedThreadRef | null,
   projectId: ProjectId | null,
 ): ReadonlyArray<ComposerBannerStackItem> {

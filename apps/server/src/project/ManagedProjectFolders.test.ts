@@ -192,7 +192,8 @@ it.effect("creates one Scratch project, even for concurrent first requests", () 
       const root = yield* requireRoot;
       const scratchProjects = snapshot.projects.filter((project) => project.workspaceRoot === root);
       assert.lengthOf(scratchProjects, 1);
-      assert.equal(scratchProjects[0]?.title, "No project");
+      // ozone-seam: threads without a project are Ozone's chats.
+      assert.equal(scratchProjects[0]?.title, "Chats");
       assert.deepEqual(scratchProjects[0]?.projectIcon, {
         kind: "lucide",
         name: "message-square-dashed",

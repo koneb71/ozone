@@ -301,7 +301,8 @@ export function DraftHeroHeadline({
           }
         >
           <DraftProjectName
-            value={isScratchDraft ? "No project" : (activeProjectTitle ?? "Choose a project")}
+            // ozone-seam: threads without a project are Ozone's chats.
+            value={isScratchDraft ? "Chats" : (activeProjectTitle ?? "Choose a project")}
             singleLine
           />
         </TooltipTrigger>
