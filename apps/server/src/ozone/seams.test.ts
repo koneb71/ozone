@@ -20,6 +20,22 @@ const OZONE_OWNED: ReadonlyArray<RegExp> = [
 
 const isOzoneOwned = (file: string) => OZONE_OWNED.some((pattern) => pattern.test(file));
 
+/** Directories that hold nothing but files Ozone commits. */
+const OZONE_SOURCE = [
+  "apps/server/src/ozone",
+  "apps/web/src/ozone",
+  "docs/ozone",
+  "packages/ozone-templates/templates",
+];
+
+const gitLines = Effect.fn("seams.gitLines")(function* (args: ReadonlyArray<string>) {
+  const path = yield* Path.Path;
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const root = yield* path.fromFileUrl(new URL("../../../../", import.meta.url));
+  const lines = yield* spawner.lines(ChildProcess.make("git", [...args], { cwd: root }));
+  return { root, lines: lines.map((line) => line.trim()).filter((line) => line.length > 0) };
+});
+
 /** Paths in the first column of the table under `## <heading>`. */
 const listedUnder = (markdown: string, heading: string): ReadonlyArray<string> => {
   const section = markdown.split(/^## /m).find((part) => part.startsWith(`${heading}\n`)) ?? "";
@@ -32,16 +48,10 @@ it.live("SEAMS.md lists exactly the upstream files tagged ozone-seam", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const root = yield* path.fromFileUrl(new URL("../../../../", import.meta.url));
+    const { root, lines } = yield* gitLines(["grep", "--untracked", "-l", SEAM_TAG]);
 
     const registry = yield* fs.readFileString(path.join(root, "docs/ozone/SEAMS.md"));
-    const tagged = (yield* spawner.lines(
-      ChildProcess.make("git", ["grep", "--untracked", "-l", SEAM_TAG], { cwd: root }),
-    ))
-      .map((line) => line.trim())
-      .filter((file) => file.length > 0 && !isOzoneOwned(file))
-      .toSorted();
+    const tagged = lines.filter((file) => !isOzoneOwned(file)).toSorted();
 
     assert.deepStrictEqual(tagged, listedUnder(registry, "Tagged").toSorted());
 
@@ -50,5 +60,22 @@ it.live("SEAMS.md lists exactly the upstream files tagged ozone-seam", () =>
       fs.exists(path.join(root, file)).pipe(Effect.map((exists) => !exists)),
     );
     assert.deepStrictEqual(missing, []);
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+// Upstream's .gitignore names directories such as `build/` and `dist/`. An Ozone module inside one
+// passes every local check and is missing from the commit.
+it.live("git ignores no Ozone file", () =>
+  Effect.gen(function* () {
+    const { lines } = yield* gitLines([
+      "ls-files",
+      "--others",
+      "--ignored",
+      "--exclude-standard",
+      "--directory",
+      "--",
+      ...OZONE_SOURCE,
+    ]);
+    assert.deepStrictEqual(lines, []);
   }).pipe(Effect.provide(NodeServices.layer)),
 );

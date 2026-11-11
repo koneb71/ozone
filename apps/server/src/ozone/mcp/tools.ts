@@ -21,7 +21,7 @@ import * as McpInvocationContext from "../../mcp/McpInvocationContext.ts";
 import * as ThreadManagementService from "../../orchestration-v2/ThreadManagementService.ts";
 import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as OzoneApps from "../apps/OzoneApps.ts";
-import * as BuildConductor from "../build/BuildConductor.ts";
+import * as BuildConductor from "../builds/BuildConductor.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
 
 // A tool that takes nothing declares no `parameters`: MCP needs an object schema, and Tool.make

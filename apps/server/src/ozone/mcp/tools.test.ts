@@ -8,7 +8,7 @@ import * as ProviderRegistry from "../../provider/ProviderRegistry.ts";
 import * as AnalyticsService from "../../telemetry/AnalyticsService.ts";
 import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as OzoneApps from "../apps/OzoneApps.ts";
-import * as BuildConductor from "../build/BuildConductor.ts";
+import * as BuildConductor from "../builds/BuildConductor.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
 import * as OzoneMcpHandlers from "./handlers.ts";
 import { OzoneToolkit } from "./tools.ts";

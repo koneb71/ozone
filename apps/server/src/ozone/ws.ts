@@ -16,8 +16,8 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 
 import * as OzoneApps from "./apps/OzoneApps.ts";
-import * as BuildModel from "./build/BuildModel.ts";
-import * as BuildStore from "./build/BuildStore.ts";
+import * as BuildModel from "./builds/BuildModel.ts";
+import * as BuildStore from "./builds/BuildStore.ts";
 import * as AppData from "./data/AppData.ts";
 import * as AppRuntime from "./runtime/AppRuntime.ts";
 

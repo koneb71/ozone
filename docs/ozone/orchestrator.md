@@ -2,7 +2,7 @@
 
 Upstream gives an agent `delegate_task`: a durable child thread on any provider. It gives no plan,
 no checks, no retries and no limits above that. The conductor is that missing structure. It lives
-in [`apps/server/src/ozone/build`](../../apps/server/src/ozone/build) and is made only from
+in [`apps/server/src/ozone/builds`](../../apps/server/src/ozone/builds) and is made only from
 upstream's public services, so upstream's orchestration core is not edited at all.
 
 One build belongs to one lead thread. The lead writes the plan with `ozone_build_plan` and calls
@@ -24,7 +24,7 @@ Every call may be the first after a crash, so nothing in it assumes the previous
 ## Decisions
 
 **The server runs the checks.** A worker's claim that its work passes is never used.
-[`BuildGates`](../../apps/server/src/ozone/build/BuildGates.ts) runs the manifest's gates inside
+[`BuildGates`](../../apps/server/src/ozone/builds/BuildGates.ts) runs the manifest's gates inside
 the app's container and probes that the app still answers.
 
 **Repair goes to a fresh worker.** It gets the failed checks' output and the last worker's summary.
@@ -68,7 +68,7 @@ workers, and a worker's brief starts with `Ozone task`, which that file keys on.
   service it drives only exists there.
 - An MCP tool without parameters must omit `parameters`. An empty struct is rejected when the server
   starts, which no type check sees; `mcp/tools.test.ts` registers every tool for that reason.
-- The text of briefs and `next` lines is in [`briefs.ts`](../../apps/server/src/ozone/build/briefs.ts).
+- The text of briefs and `next` lines is in [`briefs.ts`](../../apps/server/src/ozone/builds/briefs.ts).
   It is model-facing: an agent follows it literally.
 
 ## Not built yet
