@@ -1262,4 +1262,8 @@ export const layerTools = Layer.mergeAll(
   layerHtmlToolkit,
 );
 
+/**
+ * ozone-seam: the server registers Ozone's tools beside these, so nothing imports this now.
+ * @public
+ */
 export const layer = layerMcpTransport(layerTools);

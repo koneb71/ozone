@@ -1,12 +1,14 @@
 import {
   OZONE_WS_METHODS,
   type OzoneAppCreateInput,
+  type OzoneBuild,
   type OzoneDataRestoreInput,
   type OzoneDataSnapshotInput,
   type OzoneRuntimeActInput,
   type OzoneRuntimeLogsInput,
   type OzoneRuntimeSubscribeInput,
   type ProjectId,
+  type ThreadId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -14,6 +16,8 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 
 import * as OzoneApps from "./apps/OzoneApps.ts";
+import * as BuildModel from "./build/BuildModel.ts";
+import * as BuildStore from "./build/BuildStore.ts";
 import * as AppData from "./data/AppData.ts";
 import * as AppRuntime from "./runtime/AppRuntime.ts";
 
@@ -21,6 +25,11 @@ const make = Effect.gen(function* () {
   const apps = yield* OzoneApps.OzoneApps;
   const runtime = yield* AppRuntime.AppRuntime;
   const data = yield* AppData.AppData;
+  const builds = yield* BuildStore.BuildStore;
+  const buildSnapshot = (build: OzoneBuild | null) => ({
+    build,
+    status: build === null ? ("planning" as const) : BuildModel.statusOf(build),
+  });
   return {
     [OZONE_WS_METHODS.appsList]: () => apps.list,
     [OZONE_WS_METHODS.appsCreate]: (input: OzoneAppCreateInput) => apps.create(input),
@@ -33,6 +42,8 @@ const make = Effect.gen(function* () {
     [OZONE_WS_METHODS.dataSnapshot]: (input: OzoneDataSnapshotInput) =>
       data.snapshot({ ...input, reason: "manual" }),
     [OZONE_WS_METHODS.dataRestore]: (input: OzoneDataRestoreInput) => data.restore(input),
+    [OZONE_WS_METHODS.buildSubscribe]: (input: { readonly threadId: ThreadId }) =>
+      Stream.map(builds.changes(input.threadId), buildSnapshot),
   };
 });
 
@@ -56,6 +67,7 @@ export class OzoneWsHandlers extends Context.Reference<Effect.Success<typeof mak
       [OZONE_WS_METHODS.dataList]: () => notProvided,
       [OZONE_WS_METHODS.dataSnapshot]: () => notProvided,
       [OZONE_WS_METHODS.dataRestore]: () => notProvided,
+      [OZONE_WS_METHODS.buildSubscribe]: () => Stream.fromEffect(notProvided),
     }),
   },
 ) {}

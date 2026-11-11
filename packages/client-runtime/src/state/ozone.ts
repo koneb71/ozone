@@ -39,6 +39,10 @@ export function createOzoneEnvironmentAtoms<R, E>(
       tag: OZONE_WS_METHODS.runtimeLogs,
       staleTimeMs: 0,
     }),
+    buildStatus: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:ozone:build-status",
+      tag: OZONE_WS_METHODS.buildSubscribe,
+    }),
     snapshots: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:ozone:snapshots",
       tag: OZONE_WS_METHODS.dataList,

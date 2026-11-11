@@ -6,7 +6,15 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/*.md", "!.ozone", "!drizzle", "!public", "!src/routeTree.gen.ts"]
+    "includes": [
+      "**",
+      "!**/*.md",
+      "!**/*.svg",
+      "!.ozone",
+      "!drizzle",
+      "!public",
+      "!src/routeTree.gen.ts"
+    ]
   },
   "formatter": {
     "indentStyle": "space",

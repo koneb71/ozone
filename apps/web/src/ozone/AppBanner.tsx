@@ -36,6 +36,7 @@ import { useAtomCommand } from "~/state/use-atom-command";
 
 import { AppDataDialog } from "./AppDataDialog";
 import { AppLogsDialog } from "./AppLogsDialog";
+import { buildBannerItem } from "./BuildCard";
 import { ozoneEnvironment } from "./state";
 
 /** Threads whose preview Ozone has opened by itself, so closing it stays the user's decision. */
@@ -116,8 +117,26 @@ export function useOzoneComposerBanners(
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
   const [logsOpen, setLogsOpen] = useState(false);
   const [dataOpen, setDataOpen] = useState(false);
+  const build = useEnvironmentQuery(
+    threadRef === null || app === undefined
+      ? null
+      : ozoneEnvironment.buildStatus({
+          environmentId: threadRef.environmentId,
+          input: { threadId: threadRef.threadId },
+        }),
+  );
+  const previews = useEnvironmentQuery(
+    threadRef === null || app === undefined
+      ? null
+      : previewEnvironment.list({
+          environmentId: threadRef.environmentId,
+          input: { threadId: threadRef.threadId },
+        }),
+  );
   const status = statusQuery.data;
   const url = status?.url ?? null;
+  // Null until the server has answered: a thread that already has a preview tab keeps it.
+  const hasPreview = previews.data === null ? null : previews.data.sessions.length > 0;
 
   const showPreview = async (target: ScopedThreadRef, appUrl: string) => {
     const result = await openPreviewSession({
@@ -142,8 +161,8 @@ export function useOzoneComposerBanners(
   });
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- opens the preview pane once, when the app's containers first report healthy
   useEffect(() => {
-    if (threadRef !== null && url !== null) openPreviewOnce(threadRef, url);
-  }, [threadRef, url]);
+    if (threadRef !== null && url !== null && hasPreview === false) openPreviewOnce(threadRef, url);
+  }, [threadRef, url, hasPreview]);
 
   if (threadRef === null || app === undefined) return [];
 
@@ -170,7 +189,9 @@ export function useOzoneComposerBanners(
   const copy = bannerCopy(app, status);
   const phase = status?.phase;
   const busy = phase === "starting";
+  const buildItem = buildBannerItem(build.data);
   return [
+    ...(buildItem === null ? [] : [buildItem]),
     {
       id: "ozone-app",
       variant: copy.variant,

@@ -7,6 +7,7 @@ import {
   EnvironmentAuthorizationError,
 } from "./auth.ts";
 import { IsoDateTime, ProjectId, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { OzoneBuildSnapshot, OzoneBuildSubscribeInput } from "./ozoneBuild.ts";
 
 const ShortText = TrimmedNonEmptyString.check(Schema.isMaxLength(128));
 const CommandText = TrimmedNonEmptyString.check(Schema.isMaxLength(2_048));
@@ -212,12 +213,15 @@ export const OZONE_WS_METHODS = {
   dataList: "ozone.data.list",
   dataSnapshot: "ozone.data.snapshot",
   dataRestore: "ozone.data.restore",
+  buildSubscribe: "ozone.build.subscribe",
 } as const;
 
 type OzoneWsMethod = (typeof OZONE_WS_METHODS)[keyof typeof OZONE_WS_METHODS];
 
 /** The methods that stream; the client keeps its own list of those. */
-export type OzoneSubscriptionMethod = typeof OZONE_WS_METHODS.runtimeSubscribe;
+export type OzoneSubscriptionMethod =
+  | typeof OZONE_WS_METHODS.runtimeSubscribe
+  | typeof OZONE_WS_METHODS.buildSubscribe;
 
 /** Spread into the server's scope map, which must name every method. */
 export const OZONE_RPC_SCOPES = {
@@ -230,6 +234,7 @@ export const OZONE_RPC_SCOPES = {
   [OZONE_WS_METHODS.dataSnapshot]: AuthOrchestrationOperateScope,
   // Replaces the app's data: only a client that can already change the project may.
   [OZONE_WS_METHODS.dataRestore]: AuthOrchestrationOperateScope,
+  [OZONE_WS_METHODS.buildSubscribe]: AuthOrchestrationReadScope,
 } as const;
 
 /** Every Ozone method reports under one aggregate in traces. */
@@ -282,4 +287,12 @@ export const OzoneWsRpcs = [
     success: OzoneDataRestoreResult,
     error: OzoneRpcError,
   }),
+  Rpc.make(OZONE_WS_METHODS.buildSubscribe, {
+    payload: OzoneBuildSubscribeInput,
+    success: OzoneBuildSnapshot,
+    error: OzoneRpcError,
+    stream: true,
+  }),
 ] as const;
+
+export * from "./ozoneBuild.ts";

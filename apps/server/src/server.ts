@@ -803,7 +803,10 @@ const layerMakeRoutes = Layer.mergeAll(
     Ws.layer,
     speechStreamRouteLayer,
   ),
-  McpHttpServer.layer.pipe(
+  // ozone-seam: Ozone's tools are registered beside upstream's, on the same MCP server.
+  McpHttpServer.layerMcpTransport(
+    Layer.mergeAll(McpHttpServer.layerTools, Ozone.layerMcpTools),
+  ).pipe(
     Layer.provide(ProviderAdapterRegistry.layerFromProviderInstanceRegistry),
     Layer.provide(McpOAuth.layerMcpClientAuthenticator),
   ),
