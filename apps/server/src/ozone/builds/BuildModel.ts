@@ -357,7 +357,10 @@ export const guided = (build: OzoneBuild, taskId: string, note: string): OzoneBu
   ),
 });
 
-/** Puts back tasks whose commits are gone from history, after a rollback or a reset. */
+/**
+ * Puts back tasks whose commits are gone from history, after a rollback or a reset. Each keeps
+ * its commit, so a restore that brings that commit back can mark it done again.
+ */
 export const reopened = (
   build: OzoneBuild,
   taskIds: ReadonlyArray<string>,
@@ -373,8 +376,6 @@ export const reopened = (
             ...task,
             status: "pending",
             attempts: 0,
-            commitSha: null,
-            snapshotId: null,
             evidence: [],
             workerTaskId: null,
             workerThreadId: null,
@@ -382,6 +383,27 @@ export const reopened = (
         : task,
     ),
     ...unfinished(build),
+    updatedAt: now,
+  };
+};
+
+/**
+ * The plan after the app's code was restored to an earlier point: tasks whose work it undid go
+ * back into the plan, and reopened tasks whose commits it brought back are done again.
+ */
+export const rewound = (
+  build: OzoneBuild,
+  change: { readonly undone: ReadonlyArray<string>; readonly redone: ReadonlyArray<string> },
+  now: string,
+): OzoneBuild => {
+  const reopenedBuild = reopened(build, change.undone, now);
+  if (change.redone.length === 0) return reopenedBuild;
+  const back = new Set(change.redone);
+  return {
+    ...reopenedBuild,
+    tasks: reopenedBuild.tasks.map((task) =>
+      back.has(task.id) ? { ...task, status: "done" } : task,
+    ),
     updatedAt: now,
   };
 };

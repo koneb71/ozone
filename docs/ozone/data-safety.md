@@ -21,6 +21,8 @@ that keeps it. Read it before changing `apps/server/src/ozone/runtime` or `apps/
 4. **Restoring and deleting are a person's decisions.** They are offered in the app's menu and
    nowhere else. No MCP tool restores or deletes data. A restore first snapshots the data it is
    about to replace, so it can be undone. A deleted app leaves its last snapshot and its folder.
+   Once confirmed, a restore or a deletion runs to its end in the server's own fiber: a window
+   closed halfway must not leave a database dropped and empty.
 5. **A destructive migration is never applied silently.**
    [`findDestructiveStatements`](../../apps/server/src/ozone/data/migrationGuard.ts) names the
    statements in a migration that can lose data. A build stops on them and asks.
@@ -31,6 +33,16 @@ that keeps it. Read it before changing `apps/server/src/ozone/runtime` or `apps/
 would survive, while the migration journal went back in time, and the next start would fail trying
 to create that table again. Restoring into a freshly created database gives exactly the state the
 snapshot recorded. The app's service is stopped for the duration so nothing writes in between.
+
+## Going back in History
+
+[`AppHistory`](../../apps/server/src/ozone/history/AppHistory.ts) takes an app back to an earlier
+commit with the data of that time: the newest snapshot taken at that commit. It never rewrites
+history. Uncommitted changes are committed first, the data is restored (its safety snapshot is
+filed under the commit being left, which is the data that belongs with it), and the old tree is
+committed as a new commit. Going back is therefore undone by going back to the commit before it.
+Build tasks whose commits the restored point lacks go back into their plans, and come back as done
+when a later restore brings their commits back. A restore is refused while a build is working.
 
 ## Why the dump is copied, not streamed
 

@@ -9,6 +9,7 @@ import {
   type OzoneAppDeleteInput,
   type OzoneAppDeleteResult,
   type OzoneAppsListResult,
+  type ProjectId,
 } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as NetService from "@t3tools/shared/Net";
@@ -16,6 +17,7 @@ import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -164,6 +166,27 @@ export const make = Effect.gen(function* () {
     return { app, workspaceRoot };
   });
 
+  const remove = Effect.fn("OzoneApps.removeApp")(function* (projectId: ProjectId) {
+    const { workspaceRoot } = yield* registry.resolve(projectId);
+    const { snapshot } = yield* data.remove(projectId);
+    yield* registry.unregister(projectId);
+    // The data is gone by now, so a project that cannot be removed is said, not undone.
+    yield* projects
+      .delete({
+        commandId: CommandId.make(`ozone-app-delete:${projectId}`),
+        projectId,
+        force: true,
+      })
+      .pipe(
+        Effect.mapError((error) =>
+          failed(
+            `The app's containers and data are removed, and snapshot ${snapshot.id} is kept. Its project could not be removed: ${error.message} Delete the project from its own menu.`,
+          ),
+        ),
+      );
+    return { snapshot, workspaceRoot };
+  });
+
   return OzoneApps.of({
     list: Effect.gen(function* () {
       return {
@@ -176,26 +199,10 @@ export const make = Effect.gen(function* () {
     configure: Effect.fn("OzoneApps.configure")((input) =>
       registry.configure(input.projectId, input.settings),
     ),
-    remove: Effect.fn("OzoneApps.remove")(function* (input) {
-      const { workspaceRoot } = yield* registry.resolve(input.projectId);
-      const { snapshot } = yield* data.remove(input.projectId);
-      yield* registry.unregister(input.projectId);
-      // The data is gone by now, so a project that cannot be removed is said, not undone.
-      yield* projects
-        .delete({
-          commandId: CommandId.make(`ozone-app-delete:${input.projectId}`),
-          projectId: input.projectId,
-          force: true,
-        })
-        .pipe(
-          Effect.mapError((error) =>
-            failed(
-              `The app's containers and data are removed, and snapshot ${snapshot.id} is kept. Its project could not be removed: ${error.message} Delete the project from its own menu.`,
-            ),
-          ),
-        );
-      return { snapshot, workspaceRoot };
-    }),
+    remove: Effect.fn("OzoneApps.remove")((input) =>
+      // Confirmed once, so it runs to its end even if the person's window closes halfway.
+      Effect.forkIn(remove(input.projectId), scope).pipe(Effect.flatMap(Fiber.join)),
+    ),
   });
 });
 

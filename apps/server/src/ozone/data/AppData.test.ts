@@ -2,7 +2,10 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { DEFAULT_OZONE_APP_SETTINGS, ProjectId, type OzoneAppManifest } from "@t3tools/contracts";
+import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -49,7 +52,13 @@ const step = (args: ReadonlyArray<string>): string => {
   return args.join(" ");
 };
 
-const makeHarness = (options: { readonly dumpFails?: boolean } = {}) =>
+const makeHarness = (
+  options: {
+    readonly dumpFails?: boolean;
+    /** A step that waits, once reached, until the test releases it. */
+    readonly holdAt?: string;
+  } = {},
+) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -57,11 +66,16 @@ const makeHarness = (options: { readonly dumpFails?: boolean } = {}) =>
     const calls = yield* Ref.make<ReadonlyArray<ReadonlyArray<string>>>([]);
     const removals = yield* Ref.make<ReadonlyArray<string>>([]);
     const running = yield* Ref.make<ReadonlySet<string>>(new Set(["app", "db"]));
+    const reached = yield* Deferred.make<void>();
 
     const compose = Layer.succeed(
       AppCompose.AppCompose,
       AppCompose.AppCompose.of({
         run: Effect.fn("TestCompose.run")(function* (_app, args, composeOptions) {
+          if (step(args) === options.holdAt) {
+            yield* Deferred.succeed(reached, undefined);
+            yield* Effect.sleep(Duration.minutes(1));
+          }
           yield* Ref.update(calls, (all) => [...all, args]);
           if (composeOptions?.allowDataRemoval === true) {
             yield* Ref.update(removals, (all) => [...all, args.join(" ")]);
@@ -127,7 +141,7 @@ const makeHarness = (options: { readonly dumpFails?: boolean } = {}) =>
     );
     const steps = Ref.get(calls).pipe(Effect.map((all) => all.map(step)));
     const forget = Ref.set(calls, []);
-    return { data, calls, steps, forget, running, removals };
+    return { data, calls, steps, forget, running, removals, reached };
   });
 
 const layerTest = Layer.merge(NodeServices.layer, NodeCrypto.layer);
@@ -272,6 +286,26 @@ describe("AppData", () => {
 
       const missing = yield* Effect.flip(data.restore({ projectId, snapshotId: "not-a-snapshot" }));
       assert.include(missing.message, "no longer exists");
+    }).pipe(Effect.provide(layerTest)),
+  );
+
+  // A restore is confirmed once; a client that disconnects mid-swap must not leave the database
+  // dropped and empty.
+  it.effect("finishes swapping the database when its caller goes away", () =>
+    Effect.gen(function* () {
+      const { data, steps, forget, reached } = yield* makeHarness({ holdAt: "drop database" });
+      const wanted = yield* data.snapshot({ projectId, reason: "manual" });
+      yield* forget;
+      const restoring = yield* Effect.forkChild(data.restore({ projectId, snapshotId: wanted.id }));
+      yield* Deferred.await(reached);
+      yield* Fiber.interrupt(restoring);
+      yield* TestClock.adjust(Duration.minutes(1));
+      // Waits its turn behind the restore, so the steps before it are all the restore took.
+      yield* data.snapshot({ projectId, reason: "manual" });
+      assert.include(
+        (yield* steps).join(" | "),
+        "drop database | create database | restore | clean up | start app",
+      );
     }).pipe(Effect.provide(layerTest)),
   );
 

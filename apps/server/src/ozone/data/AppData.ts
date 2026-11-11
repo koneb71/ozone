@@ -11,11 +11,13 @@ import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 
 import * as ServerConfig from "../../config.ts";
@@ -89,6 +91,13 @@ export const make = Effect.gen(function* () {
   const random = yield* SecureRandom.SecureRandom;
   // One data operation at a time: a restore must never overlap a snapshot of the same database.
   const working = yield* Semaphore.make(1);
+  const scope = yield* Scope.Scope;
+  /**
+   * Runs in the service's own fiber, so a caller that goes away stops waiting, not the work: a
+   * restore cut off between dropping and reloading a database would leave it empty.
+   */
+  const toTheEnd = <A, E>(effect: Effect.Effect<A, E>) =>
+    Effect.forkIn(effect, scope).pipe(Effect.flatMap(Fiber.join));
 
   const backupsRoot = path.join(config.stateDir, "ozone", "backups");
   const appDirectory = (app: AppRegistry.ResolvedApp) => path.join(backupsRoot, app.app.slug);
@@ -318,39 +327,43 @@ export const make = Effect.gen(function* () {
     }),
     restore: Effect.fn("AppData.restore")(function* (input) {
       const app = yield* registry.resolve(input.projectId);
-      return yield* working.withPermits(1)(
-        Effect.gen(function* () {
-          const stored = (yield* listStored(app)).find(
-            (entry) => entry.snapshot.id === input.snapshotId,
-          );
-          if (stored === undefined) return yield* failed("That snapshot no longer exists.");
-          const safety = yield* takeSnapshot(app, {
-            projectId: input.projectId,
-            reason: "before-restore",
-          });
-          yield* restoreStored(app, stored);
-          return { safety };
-        }),
+      return yield* toTheEnd(
+        working.withPermits(1)(
+          Effect.gen(function* () {
+            const stored = (yield* listStored(app)).find(
+              (entry) => entry.snapshot.id === input.snapshotId,
+            );
+            if (stored === undefined) return yield* failed("That snapshot no longer exists.");
+            const safety = yield* takeSnapshot(app, {
+              projectId: input.projectId,
+              reason: "before-restore",
+            });
+            yield* restoreStored(app, stored);
+            return { safety };
+          }),
+        ),
       );
     }),
     remove: Effect.fn("AppData.remove")(function* (projectId) {
       const app = yield* registry.resolve(projectId);
-      return yield* working.withPermits(1)(
-        Effect.gen(function* () {
-          // First, and nothing is removed unless it worked.
-          const snapshot = yield* takeSnapshot(app, { projectId, reason: "before-delete" });
-          const output = yield* compose.run(app, ["down", "--volumes", "--remove-orphans"], {
-            timeout: DUMP_TIMEOUT,
-            allowDataRemoval: true,
-          });
-          if (output.code !== 0) {
-            const detail = (output.stderr.trim() || output.stdout.trim()).slice(-600);
-            return yield* failed(
-              `The data is saved as snapshot ${snapshot.id}, but the containers could not be removed. ${detail}`.trim(),
-            );
-          }
-          return { snapshot };
-        }),
+      return yield* toTheEnd(
+        working.withPermits(1)(
+          Effect.gen(function* () {
+            // First, and nothing is removed unless it worked.
+            const snapshot = yield* takeSnapshot(app, { projectId, reason: "before-delete" });
+            const output = yield* compose.run(app, ["down", "--volumes", "--remove-orphans"], {
+              timeout: DUMP_TIMEOUT,
+              allowDataRemoval: true,
+            });
+            if (output.code !== 0) {
+              const detail = (output.stderr.trim() || output.stdout.trim()).slice(-600);
+              return yield* failed(
+                `The data is saved as snapshot ${snapshot.id}, but the containers could not be removed. ${detail}`.trim(),
+              );
+            }
+            return { snapshot };
+          }),
+        ),
       );
     }),
   });

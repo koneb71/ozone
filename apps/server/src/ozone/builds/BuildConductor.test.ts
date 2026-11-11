@@ -211,6 +211,8 @@ const makeHarness = (settings: Partial<OzoneAppSettings> = {}) =>
             Effect.map((count) => `sha-${count}`),
           ),
         setAside: (_root, label) => record(`set aside (${label})`),
+        log: () => Effect.succeed([]),
+        restoreTree: () => Effect.succeed(null),
       }),
     );
     const data = Layer.mock(AppData.AppData)({

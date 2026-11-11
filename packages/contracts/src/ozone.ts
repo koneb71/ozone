@@ -265,6 +265,37 @@ export const OzoneDataRestoreResult = Schema.Struct({
 });
 export type OzoneDataRestoreResult = typeof OzoneDataRestoreResult.Type;
 
+/** One commit of an app: a passed build task, a restore, or the template it started from. */
+export const OzoneHistoryEntry = Schema.Struct({
+  sha: Schema.String,
+  subject: Schema.String,
+  committedAt: Schema.String,
+  /** The newest snapshot taken at this commit: restoring here brings that data back too. */
+  snapshot: Schema.NullOr(OzoneSnapshot),
+});
+export type OzoneHistoryEntry = typeof OzoneHistoryEntry.Type;
+
+export const OzoneHistoryListInput = Schema.Struct({ projectId: ProjectId });
+export const OzoneHistoryListResult = Schema.Struct({
+  /** Newest first. The first is where the app is now. */
+  entries: Schema.Array(OzoneHistoryEntry),
+});
+export type OzoneHistoryListResult = typeof OzoneHistoryListResult.Type;
+
+export const OzoneHistoryRestoreInput = Schema.Struct({
+  projectId: ProjectId,
+  sha: TrimmedNonEmptyString.check(Schema.isPattern(/^[0-9a-f]{40,64}$/)),
+});
+export type OzoneHistoryRestoreInput = typeof OzoneHistoryRestoreInput.Type;
+
+export const OzoneHistoryRestoreResult = Schema.Struct({
+  /** The new commit that holds the restored code. */
+  commitSha: Schema.String,
+  /** Taken from the data as it was just before, when data was restored too. */
+  safety: Schema.NullOr(OzoneSnapshot),
+});
+export type OzoneHistoryRestoreResult = typeof OzoneHistoryRestoreResult.Type;
+
 export const OZONE_WS_METHODS = {
   appsList: "ozone.apps.list",
   appsCreate: "ozone.apps.create",
@@ -278,6 +309,8 @@ export const OZONE_WS_METHODS = {
   dataRestore: "ozone.data.restore",
   buildSubscribe: "ozone.build.subscribe",
   buildApprove: "ozone.build.approve",
+  historyList: "ozone.history.list",
+  historyRestore: "ozone.history.restore",
 } as const;
 
 type OzoneWsMethod = (typeof OZONE_WS_METHODS)[keyof typeof OZONE_WS_METHODS];
@@ -304,6 +337,9 @@ export const OZONE_RPC_SCOPES = {
   [OZONE_WS_METHODS.appsConfigure]: AuthOrchestrationOperateScope,
   // Starts the work of a plan: the same right as sending the lead a message.
   [OZONE_WS_METHODS.buildApprove]: AuthOrchestrationOperateScope,
+  [OZONE_WS_METHODS.historyList]: AuthOrchestrationReadScope,
+  // Replaces the app's code and data, behind a commit and a snapshot of both as they are.
+  [OZONE_WS_METHODS.historyRestore]: AuthOrchestrationOperateScope,
 } as const;
 
 /** Every Ozone method reports under one aggregate in traces. */
@@ -375,6 +411,16 @@ export const OzoneWsRpcs = [
   Rpc.make(OZONE_WS_METHODS.buildApprove, {
     payload: OzoneBuildApproveInput,
     success: OzoneBuildSnapshot,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.historyList, {
+    payload: OzoneHistoryListInput,
+    success: OzoneHistoryListResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.historyRestore, {
+    payload: OzoneHistoryRestoreInput,
+    success: OzoneHistoryRestoreResult,
     error: OzoneRpcError,
   }),
 ] as const;

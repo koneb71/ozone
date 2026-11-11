@@ -262,7 +262,12 @@ describe("BuildModel", () => {
     assert.strictEqual(BuildModel.statusOf(build), "complete");
 
     build = BuildModel.reopened(build, ["page"], LATER);
-    assert.include(find(build, "page"), { status: "pending", attempts: 0, commitSha: null });
+    // The commit stays known, so a restore that brings it back can mark the task done again.
+    assert.include(find(build, "page"), {
+      status: "pending",
+      attempts: 0,
+      commitSha: "commit-page",
+    });
     assert.strictEqual(find(build, "schema").status, "done");
     assert.strictEqual(BuildModel.statusOf(build), "building");
     assert.strictEqual(build.completedAt, null);

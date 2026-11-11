@@ -15,6 +15,7 @@ import * as BuildStore from "./builds/BuildStore.ts";
 import * as BuildWake from "./builds/BuildWake.ts";
 import * as BuildWorkers from "./builds/BuildWorkers.ts";
 import * as AppData from "./data/AppData.ts";
+import * as AppHistory from "./history/AppHistory.ts";
 import * as OzoneMcpHandlers from "./mcp/handlers.ts";
 import { OzoneToolkit } from "./mcp/tools.ts";
 import * as AppCompose from "./runtime/AppCompose.ts";
@@ -28,7 +29,7 @@ import * as OzoneWs from "./ws.ts";
  */
 export const layer = OzoneWs.layer.pipe(
   Layer.provideMerge(OzoneApps.layer),
-  Layer.provideMerge(Layer.mergeAll(BuildChecks.layer, BuildReview.layer)),
+  Layer.provideMerge(Layer.mergeAll(BuildChecks.layer, BuildReview.layer, AppHistory.layer)),
   Layer.provideMerge(BuildGates.layer),
   Layer.provideMerge(AppRuntime.layer),
   Layer.provideMerge(AppData.layer),

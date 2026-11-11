@@ -7,6 +7,7 @@ import {
   type OzoneBuildApproveInput,
   type OzoneDataRestoreInput,
   type OzoneDataSnapshotInput,
+  type OzoneHistoryRestoreInput,
   type OzoneRuntimeActInput,
   type OzoneRuntimeLogsInput,
   type OzoneRuntimeSubscribeInput,
@@ -23,6 +24,7 @@ import * as BuildModel from "./builds/BuildModel.ts";
 import * as BuildReview from "./builds/BuildReview.ts";
 import * as BuildStore from "./builds/BuildStore.ts";
 import * as AppData from "./data/AppData.ts";
+import * as AppHistory from "./history/AppHistory.ts";
 import * as AppRuntime from "./runtime/AppRuntime.ts";
 
 const make = Effect.gen(function* () {
@@ -31,6 +33,7 @@ const make = Effect.gen(function* () {
   const data = yield* AppData.AppData;
   const builds = yield* BuildStore.BuildStore;
   const review = yield* BuildReview.BuildReview;
+  const history = yield* AppHistory.AppHistory;
   const buildSnapshot = (build: OzoneBuild | null) => ({
     build,
     status: build === null ? ("planning" as const) : BuildModel.statusOf(build),
@@ -53,6 +56,9 @@ const make = Effect.gen(function* () {
       Stream.map(builds.changes(input.threadId), buildSnapshot),
     [OZONE_WS_METHODS.buildApprove]: (input: OzoneBuildApproveInput) =>
       Effect.map(review.approve(input.threadId), buildSnapshot),
+    [OZONE_WS_METHODS.historyList]: (input: { readonly projectId: ProjectId }) =>
+      history.list(input.projectId),
+    [OZONE_WS_METHODS.historyRestore]: (input: OzoneHistoryRestoreInput) => history.restore(input),
   };
 });
 
@@ -80,6 +86,8 @@ export class OzoneWsHandlers extends Context.Reference<Effect.Success<typeof mak
       [OZONE_WS_METHODS.dataRestore]: () => notProvided,
       [OZONE_WS_METHODS.buildSubscribe]: () => Stream.fromEffect(notProvided),
       [OZONE_WS_METHODS.buildApprove]: () => notProvided,
+      [OZONE_WS_METHODS.historyList]: () => notProvided,
+      [OZONE_WS_METHODS.historyRestore]: () => notProvided,
     }),
   },
 ) {}
