@@ -74,9 +74,10 @@ function BuildSettings({
 
   const instanceEntries = providerInstanceEntriesFor(providers, settings, app.projectId);
   const chosen = app.settings.workerModel;
-  const fallback = instanceEntries.find(isProviderInstancePickerReady);
-  const activeInstanceId = chosen?.providerInstanceId ?? fallback?.instanceId;
-  const activeModel = chosen?.model ?? fallback?.models[0]?.slug ?? "";
+  const activeInstanceId =
+    chosen?.providerInstanceId ?? instanceEntries.find(isProviderInstancePickerReady)?.instanceId;
+  // Empty when none is chosen, so the list ticks no model.
+  const activeModel = chosen?.model ?? "";
 
   return (
     <>
