@@ -16,8 +16,10 @@ it as read, and see how many are left to read." This is the app it built:
 
 ## What it does
 
-- **Builds apps from a prompt.** A new app is a real project on your disk: TanStack Start with
-  React 19, Tailwind CSS 4, Drizzle on Postgres and Better Auth, in a git repository of its own.
+- **Builds apps from a prompt.** A new app is a real project on your disk, in a git repository of
+  its own, started from a tested template: a **web app** (TanStack Start with React 19, Tailwind
+  CSS 4, Drizzle on Postgres and Better Auth), a **landing page** with no database, or an **API**
+  (Hono, Drizzle on Postgres and zod).
 - **Runs them in Docker.** Each app is a Docker Compose project with one address that never
   changes. Start, stop, restart, rebuild and read its logs from the thread. Give it settings and
   secrets under **Environment**: they reach its container and never its code.

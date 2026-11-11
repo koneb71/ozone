@@ -111,12 +111,16 @@ export function useOzoneLaunch() {
   const build = async (
     environmentId: EnvironmentId,
     prompt: string,
-    options: { readonly files: ReadonlyArray<File>; readonly reviewPlans: boolean },
+    options: {
+      readonly files: ReadonlyArray<File>;
+      readonly reviewPlans: boolean;
+      readonly templateId: string;
+    },
   ): Promise<LaunchOutcome> => {
-    const { files, reviewPlans } = options;
+    const { files, reviewPlans, templateId } = options;
     const created = await createApp({
       environmentId,
-      input: { name: appNameFromPrompt(prompt), settings: { reviewPlans } },
+      input: { name: appNameFromPrompt(prompt), templateId, settings: { reviewPlans } },
     });
     if (created._tag === "Failure") return failureMessage(created, "Could not create the app.");
     // The thread it opens next looks the new app up in this list.

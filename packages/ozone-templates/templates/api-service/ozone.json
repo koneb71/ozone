@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "template": "api-service",
+  "runtime": {
+    "kind": "compose",
+    "file": "compose.yaml",
+    "appService": "app",
+    "appPort": 3000,
+    "healthPath": "/api/health"
+  },
+  "gates": [
+    {
+      "id": "typecheck",
+      "command": "npm run typecheck",
+      "when": "task"
+    },
+    {
+      "id": "lint",
+      "command": "npm run lint",
+      "when": "task"
+    },
+    {
+      "id": "test",
+      "command": "npm run test",
+      "when": "task"
+    },
+    {
+      "id": "build",
+      "command": "npm run build",
+      "when": "final"
+    }
+  ],
+  "data": {
+    "services": [
+      {
+        "service": "db",
+        "kind": "postgres",
+        "volume": "pgdata",
+        "database": "app",
+        "user": "app"
+      }
+    ]
+  },
+  "migrations": {
+    "directory": "drizzle",
+    "generate": "npm run db:generate",
+    "apply": "npm run db:migrate"
+  }
+}

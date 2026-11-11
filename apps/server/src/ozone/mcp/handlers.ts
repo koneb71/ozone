@@ -128,7 +128,12 @@ export const layer = McpToolAccess.toLayer(OzoneToolkit, {
   ozone_app_create: McpToolAccess.writesWithCapability((input) =>
     Effect.gen(function* () {
       const apps = yield* OzoneApps.OzoneApps;
-      const created = yield* apps.create({ name: input.name }).pipe(Effect.mapError(fromApp));
+      const created = yield* apps
+        .create({
+          name: input.name,
+          ...(input.template === undefined ? {} : { templateId: input.template }),
+        })
+        .pipe(Effect.mapError(fromApp));
       return {
         projectId: created.app.projectId,
         workspaceRoot: created.workspaceRoot,

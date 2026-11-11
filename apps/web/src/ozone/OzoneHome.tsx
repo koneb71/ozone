@@ -16,6 +16,13 @@ import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { DiscoveryList, DiscoveryListRow } from "~/components/ui/discovery-list";
+import {
+  Select,
+  SelectItem,
+  SelectPopup,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
 import { SidebarInset } from "~/components/ui/sidebar";
 import { Spinner } from "~/components/ui/spinner";
 import { Switch } from "~/components/ui/switch";
@@ -56,6 +63,7 @@ const MODE_COPY = {
 
 const carriesFiles = (event: DragEvent) => event.dataTransfer.types.includes("Files");
 const REVIEW_PLANS_STORAGE_KEY = "ozone:review-plans:v1";
+const DEFAULT_TEMPLATE_ID = "web-app";
 
 export function OzoneHome() {
   const contentArea = workspaceAreaProps("home", 1, "Home");
@@ -73,11 +81,13 @@ export function OzoneHome() {
     false,
     Schema.Boolean,
   );
+  const [templateId, setTemplateId] = useState(DEFAULT_TEMPLATE_ID);
   const fileInput = useRef<HTMLInputElement>(null);
   const apps = useEnvironmentQuery(
     environmentId === null ? null : ozoneEnvironment.apps({ environmentId, input: {} }),
   );
   const copy = MODE_COPY[mode];
+  const templates = apps.data?.templates ?? [];
   const docker = apps.data?.docker;
   const dockerMissing = mode === "build" && docker !== undefined && !docker.available;
   const canSubmit =
@@ -90,7 +100,7 @@ export function OzoneHome() {
     const text = prompt.trim();
     const outcome =
       mode === "build"
-        ? await launch.build(environmentId, text, { files, reviewPlans })
+        ? await launch.build(environmentId, text, { files, reviewPlans, templateId })
         : files.length > 0
           ? await launch.chatWithFiles(environmentId, text, files)
           : await launch.chat(environmentId, text);
@@ -228,6 +238,29 @@ export function OzoneHome() {
                 </Toggle>
               </ToggleGroup>
               <div className="flex items-center gap-1">
+                {mode === "build" && templates.length > 1 ? (
+                  <Select
+                    value={templateId}
+                    items={Object.fromEntries(
+                      templates.map((template) => [template.id, template.name]),
+                    )}
+                    disabled={launching}
+                    onValueChange={(value) => {
+                      if (typeof value === "string") setTemplateId(value);
+                    }}
+                  >
+                    <SelectTrigger aria-label="What to build" size="xs" variant="ghost">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectPopup>
+                      {templates.map((template) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          {template.name}
+                        </SelectItem>
+                      ))}
+                    </SelectPopup>
+                  </Select>
+                ) : null}
                 {mode === "build" ? (
                   <label className="mr-2 flex cursor-pointer items-center gap-1.5 text-muted-foreground text-xs">
                     <Switch

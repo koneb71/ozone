@@ -15,6 +15,7 @@ export const verifierBrief = (acceptance: ReadonlyArray<string>, port: number): 
       "How to work:",
       `- Open the app with preview_open, passing \`target: {kind: "environment-port", port: ${port}}\`. It signs in with a demo account by itself. If it shows a sign-in page, press "Continue with the demo account".`,
       "- For each criterion do what a person would do: preview_snapshot shows the page, preview_act clicks and types. Then look at what the page shows.",
+      "- If the app is an API with no pages, call its endpoints from the open tab with preview_evaluate, using fetch(), and read the status and the JSON it returns.",
       "- Change no files, and do not start, stop or rebuild the app.",
       "- When you are done, remove what you added where the app lets you, so the person finds it as it was.",
       "- If the browser tools do not work, do not guess. Mark every criterion UNCHECKED and say why.",

@@ -92,6 +92,11 @@ git merge upstream/main
 - A request is interrupted when its client disconnects. A restore, deletion or deploy that a
   person confirmed would stop halfway, so each runs in its service's own fiber and the request only
   waits for it.
+- Every template is copied into each app made from it, and is checked by
+  `apps/server/src/ozone/apps/templates.test.ts`. A template's lockfile, `src/routeTree.gen.ts` and
+  formatting are produced by its own tools: change one in a copy with its placeholders filled in,
+  run `npm install`, `npm run build` and `npm run format` there in a `node:26-alpine` container,
+  and copy the results back with the placeholders restored.
 - Text that agents read is code: the instructions in `apps/server/src/ozone/apps/appInstructions.ts`
   and `chat/chatPersona.ts`, the briefs in `builds/briefs.ts`, the tool descriptions in
   `mcp/tools.ts` and the template's `AGENTS.md`. An agent follows it literally. It has no eval

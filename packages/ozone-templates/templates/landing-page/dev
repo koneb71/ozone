@@ -1,0 +1,22 @@
+#!/bin/sh
+# Runs a command inside the app container, where Node and the dependencies live.
+#
+#   ./dev npm run typecheck
+#   ./dev npm install zod
+#
+# Uses the running `app` service when there is one. Otherwise it starts a
+# throwaway container; that container does not start the database, so commands
+# that need it (such as `npm run db:migrate`) require the app to be running.
+set -eu
+
+cd "$(dirname "$0")"
+
+if [ "$#" -eq 0 ]; then
+  echo "Usage: ./dev <command> [args...]" >&2
+  exit 64
+fi
+
+if [ -n "$(docker compose ps --quiet --status running app 2>/dev/null)" ]; then
+  exec docker compose exec -T app "$@"
+fi
+exec docker compose run --rm --no-deps -T app "$@"

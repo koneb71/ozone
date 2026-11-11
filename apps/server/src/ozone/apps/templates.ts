@@ -7,10 +7,24 @@ export const DEFAULT_TEMPLATE_ID = "web-app";
 export const TEMPLATES: ReadonlyArray<OzoneTemplateSummary> = [
   {
     id: DEFAULT_TEMPLATE_ID,
-    name: "Full-stack web app",
+    name: "Web app",
     description:
       "TanStack Start with React, Tailwind and shadcn-style components, a Postgres database through Drizzle, and Better Auth sign-in. Runs in Docker Compose.",
     stack: ["TanStack Start", "React", "Tailwind", "Drizzle", "Postgres", "Better Auth"],
+  },
+  {
+    id: "landing-page",
+    name: "Landing page",
+    description:
+      "A website with no database and no accounts: TanStack Start with React, rendered on the server, Tailwind and shadcn-style components.",
+    stack: ["TanStack Start", "React", "Tailwind"],
+  },
+  {
+    id: "api-service",
+    name: "API",
+    description:
+      "An HTTP JSON API with no pages: Hono on Node, a Postgres database through Drizzle, and request validation with zod.",
+    stack: ["Hono", "Node", "Drizzle", "Postgres", "zod"],
   },
 ];
 

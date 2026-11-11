@@ -126,6 +126,12 @@ const AppCreateTool = Tool.make("ozone_app_create", {
     name: TrimmedNonEmptyString.check(Schema.isMaxLength(80)).annotate({
       description: "A short name for the app, such as `Habit tracker`.",
     }),
+    template: Schema.optional(
+      Schema.Literals(["web-app", "landing-page", "api-service"]).annotate({
+        description:
+          "`web-app` (default): pages, a database and sign-in. `landing-page`: a website with no database or accounts. `api-service`: a JSON API with a database and no pages.",
+      }),
+    ),
   }),
   success: Schema.Struct({
     projectId: ProjectId,
