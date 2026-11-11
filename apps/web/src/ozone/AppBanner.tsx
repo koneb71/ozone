@@ -9,6 +9,7 @@ import type {
 } from "@t3tools/contracts";
 import {
   BoxIcon,
+  DatabaseIcon,
   EllipsisIcon,
   HammerIcon,
   MonitorIcon,
@@ -33,6 +34,7 @@ import { previewEnvironment } from "~/state/preview";
 import { useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
 
+import { AppDataDialog } from "./AppDataDialog";
 import { AppLogsDialog } from "./AppLogsDialog";
 import { ozoneEnvironment } from "./state";
 
@@ -113,6 +115,7 @@ export function useOzoneComposerBanners(
   const runAction = useAtomCommand(ozoneEnvironment.runtimeAct, { reportFailure: false });
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
   const [logsOpen, setLogsOpen] = useState(false);
+  const [dataOpen, setDataOpen] = useState(false);
   const status = statusQuery.data;
   const url = status?.url ?? null;
 
@@ -219,6 +222,10 @@ export function useOzoneComposerBanners(
                 <ScrollTextIcon />
                 Logs
               </MenuItem>
+              <MenuItem onClick={() => setDataOpen(true)}>
+                <DatabaseIcon />
+                Data
+              </MenuItem>
             </MenuPopup>
           </Menu>
           <AppLogsDialog
@@ -226,6 +233,12 @@ export function useOzoneComposerBanners(
             environmentId={threadRef.environmentId}
             open={logsOpen}
             onOpenChange={setLogsOpen}
+          />
+          <AppDataDialog
+            app={app}
+            environmentId={threadRef.environmentId}
+            open={dataOpen}
+            onOpenChange={setDataOpen}
           />
         </>
       ),

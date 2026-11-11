@@ -9,23 +9,21 @@ import {
   type OzoneRuntimeStatus,
   type ProjectId,
 } from "@t3tools/contracts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FiberMap from "effect/FiberMap";
-import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Path from "effect/Path";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 
-import * as ServerConfig from "../../config.ts";
 import * as AppRegistry from "../apps/AppRegistry.ts";
+import * as AppData from "../data/AppData.ts";
+import * as AppCompose from "./AppCompose.ts";
 import * as DockerCli from "./DockerCli.ts";
 
 export interface AppExecInput {
@@ -57,7 +55,6 @@ export class AppRuntime extends Context.Service<
   }
 >()("t3/ozone/runtime/AppRuntime") {}
 
-const HOST_CA_MOUNT = "/ozone-host-ca.crt";
 const START_TIMEOUT = Duration.minutes(30);
 const STATUS_POLL_INTERVAL = Duration.seconds(3);
 // Shorter than the poll, so watchers of many apps share one listing per tick.
@@ -126,19 +123,6 @@ export const derivePhase = (input: {
   return { phase: "running", message: null };
 };
 
-/** Lets the app's container trust the certificate authority this machine trusts. */
-const hostCaOverride = (appService: string, hostCaPath: string): string =>
-  [
-    "services:",
-    `  ${JSON.stringify(appService)}:`,
-    "    environment:",
-    `      NODE_EXTRA_CA_CERTS: ${JSON.stringify(HOST_CA_MOUNT)}`,
-    `      SSL_CERT_FILE: ${JSON.stringify(HOST_CA_MOUNT)}`,
-    "    volumes:",
-    `      - ${JSON.stringify(`${hostCaPath}:${HOST_CA_MOUNT}:ro`)}`,
-    "",
-  ].join("\n");
-
 const tail = (text: string, limit: number) =>
   text.length <= limit ? text : text.slice(text.length - limit);
 
@@ -159,10 +143,8 @@ const sameStatus = (previous: OzoneRuntimeStatus, next: OzoneRuntimeStatus) =>
 
 export const make = Effect.gen(function* () {
   const docker = yield* DockerCli.DockerCli;
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const config = yield* ServerConfig.ServerConfig;
-  const hostEnvironment = yield* HostProcess.Environment;
+  const compose = yield* AppCompose.AppCompose;
+  const data = yield* AppData.AppData;
   const registry = yield* AppRegistry.AppRegistry;
 
   const operations = yield* Ref.make<ReadonlyMap<ProjectId, RuntimeOperation>>(new Map());
@@ -213,63 +195,8 @@ export const make = Effect.gen(function* () {
       Effect.asVoid,
     );
 
-  /** The CA bundle the host trusts beyond the public roots, if it has one. */
-  const hostCaPath = Effect.gen(function* () {
-    const candidate = hostEnvironment.NODE_EXTRA_CA_CERTS ?? hostEnvironment.SSL_CERT_FILE;
-    if (candidate === undefined || candidate.trim().length === 0) return null;
-    const exists = yield* fs.exists(candidate).pipe(Effect.orElseSucceed(() => false));
-    return exists ? candidate : null;
-  });
-
-  const composeArgs = Effect.fn("AppRuntime.composeArgs")(function* (
-    resolved: AppRegistry.ResolvedApp,
-  ) {
-    const base = [
-      "compose",
-      "--project-directory",
-      resolved.workspaceRoot,
-      "-f",
-      path.join(resolved.workspaceRoot, resolved.manifest.runtime.file),
-    ];
-    const ca = yield* hostCaPath;
-    if (ca === null) return base;
-    const overridePath = path.join(
-      config.stateDir,
-      "ozone",
-      "apps",
-      resolved.app.slug,
-      "compose.override.yaml",
-    );
-    const written = yield* fs.makeDirectory(path.dirname(overridePath), { recursive: true }).pipe(
-      Effect.andThen(
-        fs.writeFileString(overridePath, hostCaOverride(resolved.manifest.runtime.appService, ca)),
-      ),
-      Effect.as(true),
-      Effect.orElseSucceed(() => false),
-    );
-    return written ? [...base, "-f", overridePath] : base;
-  });
-
   const unavailable = (detail: string) =>
     new OzoneAppError({ reason: "docker_unavailable", message: detail });
-
-  const compose = Effect.fn("AppRuntime.compose")(function* (
-    resolved: AppRegistry.ResolvedApp,
-    args: ReadonlyArray<string>,
-    options?: { readonly timeout?: Duration.Input; readonly maxOutputBytes?: number },
-  ) {
-    const base = yield* composeArgs(resolved);
-    return yield* docker
-      .run({
-        args: [...base, ...args],
-        cwd: resolved.workspaceRoot,
-        ...(options?.timeout === undefined ? {} : { timeout: options.timeout }),
-        ...(options?.maxOutputBytes === undefined
-          ? {}
-          : { maxOutputBytes: options.maxOutputBytes }),
-      })
-      .pipe(Effect.mapError((error) => unavailable(error.detail)));
-  });
 
   const statusOf = Effect.fn("AppRuntime.statusOf")(function* (resolved: AppRegistry.ResolvedApp) {
     const projectId = resolved.app.projectId;
@@ -328,7 +255,7 @@ export const make = Effect.gen(function* () {
     yield* FiberMap.run(
       starts,
       projectId,
-      compose(resolved, args, { timeout: START_TIMEOUT }).pipe(
+      compose.run(resolved, args, { timeout: START_TIMEOUT }).pipe(
         Effect.flatMap((output) =>
           output.code === 0
             ? setOperation(projectId, undefined)
@@ -353,7 +280,7 @@ export const make = Effect.gen(function* () {
   ) {
     const projectId = resolved.app.projectId;
     yield* supersede(projectId);
-    const output = yield* compose(resolved, args, { timeout: Duration.minutes(3) });
+    const output = yield* compose.run(resolved, args, { timeout: Duration.minutes(3) });
     yield* setOperation(
       projectId,
       output.code === 0
@@ -379,6 +306,10 @@ export const make = Effect.gen(function* () {
           yield* start(resolved, ["up", "--detach", "--build"], "Building and starting the app.");
           break;
         case "rebuild":
+          // Recreating containers keeps the volumes; the snapshot is for what a new image might do.
+          yield* data
+            .snapshot({ projectId: input.projectId, reason: "before-rebuild" })
+            .pipe(Effect.ignore);
           yield* start(
             resolved,
             ["up", "--detach", "--build", "--force-recreate"],
@@ -396,7 +327,7 @@ export const make = Effect.gen(function* () {
     }),
     logs: Effect.fn("AppRuntime.logs")(function* (input) {
       const resolved = yield* registry.resolve(input.projectId);
-      const output = yield* compose(
+      const output = yield* compose.run(
         resolved,
         [
           "logs",
@@ -411,7 +342,7 @@ export const make = Effect.gen(function* () {
     }),
     exec: Effect.fn("AppRuntime.exec")(function* (input) {
       const resolved = yield* registry.resolve(input.projectId);
-      const output = yield* compose(
+      const output = yield* compose.run(
         resolved,
         ["exec", "-T", resolved.manifest.runtime.appService, "sh", "-lc", input.command],
         { timeout: input.timeout ?? Duration.minutes(10), maxOutputBytes: 512 * 1024 },

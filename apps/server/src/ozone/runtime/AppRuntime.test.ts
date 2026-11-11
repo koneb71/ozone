@@ -19,6 +19,8 @@ import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerConfig from "../../config.ts";
 import * as AppRegistry from "../apps/AppRegistry.ts";
+import * as AppData from "../data/AppData.ts";
+import * as AppCompose from "./AppCompose.ts";
 import * as AppRuntime from "./AppRuntime.ts";
 import * as DockerCli from "./DockerCli.ts";
 
@@ -93,15 +95,33 @@ const makeHarness = (options: { readonly hostCa?: boolean; readonly docker?: "mi
           manifest,
         }),
     });
+    const snapshots = yield* Queue.unbounded<string>();
+    const data = Layer.mock(AppData.AppData)({
+      snapshot: (input) =>
+        Queue.offer(snapshots, input.reason).pipe(
+          Effect.as({
+            id: "snapshot-1",
+            projectId,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            reason: input.reason,
+            label: null,
+            commitSha: null,
+            sizeBytes: 0,
+          }),
+        ),
+    });
     const runtime = yield* AppRuntime.make.pipe(
       Effect.provide(
-        Layer.mergeAll(
-          docker,
-          registry,
-          ServerConfig.layerTest(root, { prefix: "ozone-runtime-home-" }),
-          Layer.succeed(
-            HostProcess.Environment,
-            options.hostCa === true ? { NODE_EXTRA_CA_CERTS: hostCa } : {},
+        Layer.mergeAll(registry, data, AppCompose.layer).pipe(
+          Layer.provideMerge(
+            Layer.mergeAll(
+              docker,
+              ServerConfig.layerTest(root, { prefix: "ozone-runtime-home-" }),
+              Layer.succeed(
+                HostProcess.Environment,
+                options.hostCa === true ? { NODE_EXTRA_CA_CERTS: hostCa } : {},
+              ),
+            ),
           ),
         ),
       ),
@@ -112,7 +132,17 @@ const makeHarness = (options: { readonly hostCa?: boolean; readonly docker?: "mi
       Stream.runForEach((status) => Queue.offer(statuses, status)),
       Effect.forkScoped,
     );
-    return { runtime, containers, started, statuses, watch, composeCalls, workspaceRoot, hostCa };
+    return {
+      runtime,
+      containers,
+      started,
+      statuses,
+      watch,
+      composeCalls,
+      snapshots,
+      workspaceRoot,
+      hostCa,
+    };
   });
 
 describe("AppRuntime", () => {
@@ -288,6 +318,8 @@ describe("AppRuntime", () => {
         ],
       );
       assert.isFalse(issued.some(DockerCli.removesData));
+      // Only the rebuild is preceded by a snapshot of the data.
+      assert.deepStrictEqual(yield* Queue.takeAll(harness.snapshots), ["before-rebuild"]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 

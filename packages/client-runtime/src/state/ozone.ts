@@ -39,5 +39,18 @@ export function createOzoneEnvironmentAtoms<R, E>(
       tag: OZONE_WS_METHODS.runtimeLogs,
       staleTimeMs: 0,
     }),
+    snapshots: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:ozone:snapshots",
+      tag: OZONE_WS_METHODS.dataList,
+      staleTimeMs: 0,
+    }),
+    takeSnapshot: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:take-snapshot",
+      tag: OZONE_WS_METHODS.dataSnapshot,
+    }),
+    restoreSnapshot: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:restore-snapshot",
+      tag: OZONE_WS_METHODS.dataRestore,
+    }),
   };
 }

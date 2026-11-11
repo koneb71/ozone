@@ -1,9 +1,12 @@
 import {
   OZONE_WS_METHODS,
   type OzoneAppCreateInput,
+  type OzoneDataRestoreInput,
+  type OzoneDataSnapshotInput,
   type OzoneRuntimeActInput,
   type OzoneRuntimeLogsInput,
   type OzoneRuntimeSubscribeInput,
+  type ProjectId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -11,11 +14,13 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 
 import * as OzoneApps from "./apps/OzoneApps.ts";
+import * as AppData from "./data/AppData.ts";
 import * as AppRuntime from "./runtime/AppRuntime.ts";
 
 const make = Effect.gen(function* () {
   const apps = yield* OzoneApps.OzoneApps;
   const runtime = yield* AppRuntime.AppRuntime;
+  const data = yield* AppData.AppData;
   return {
     [OZONE_WS_METHODS.appsList]: () => apps.list,
     [OZONE_WS_METHODS.appsCreate]: (input: OzoneAppCreateInput) => apps.create(input),
@@ -23,6 +28,11 @@ const make = Effect.gen(function* () {
     [OZONE_WS_METHODS.runtimeLogs]: (input: OzoneRuntimeLogsInput) => runtime.logs(input),
     [OZONE_WS_METHODS.runtimeSubscribe]: (input: OzoneRuntimeSubscribeInput) =>
       runtime.changes(input.projectId),
+    [OZONE_WS_METHODS.dataList]: (input: { readonly projectId: ProjectId }) =>
+      Effect.map(data.list(input.projectId), (snapshots) => ({ snapshots })),
+    [OZONE_WS_METHODS.dataSnapshot]: (input: OzoneDataSnapshotInput) =>
+      data.snapshot({ ...input, reason: "manual" }),
+    [OZONE_WS_METHODS.dataRestore]: (input: OzoneDataRestoreInput) => data.restore(input),
   };
 });
 
@@ -43,6 +53,9 @@ export class OzoneWsHandlers extends Context.Reference<Effect.Success<typeof mak
       [OZONE_WS_METHODS.runtimeAct]: () => notProvided,
       [OZONE_WS_METHODS.runtimeLogs]: () => notProvided,
       [OZONE_WS_METHODS.runtimeSubscribe]: () => Stream.fromEffect(notProvided),
+      [OZONE_WS_METHODS.dataList]: () => notProvided,
+      [OZONE_WS_METHODS.dataSnapshot]: () => notProvided,
+      [OZONE_WS_METHODS.dataRestore]: () => notProvided,
     }),
   },
 ) {}

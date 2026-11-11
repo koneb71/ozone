@@ -162,12 +162,56 @@ export type OzoneRuntimeLogsResult = typeof OzoneRuntimeLogsResult.Type;
 export const OzoneRuntimeSubscribeInput = Schema.Struct({ projectId: ProjectId });
 export type OzoneRuntimeSubscribeInput = typeof OzoneRuntimeSubscribeInput.Type;
 
+export const OzoneSnapshotReason = Schema.Literals([
+  "manual",
+  "task",
+  "before-rebuild",
+  "before-restore",
+  "before-delete",
+]);
+export type OzoneSnapshotReason = typeof OzoneSnapshotReason.Type;
+
+/** A restorable copy of an app's data, kept outside its workspace. */
+export const OzoneSnapshot = Schema.Struct({
+  id: ShortText,
+  projectId: ProjectId,
+  createdAt: IsoDateTime,
+  reason: OzoneSnapshotReason,
+  label: Schema.NullOr(Schema.String),
+  /** The commit the app's code was at, so a code rollback and a data restore can line up. */
+  commitSha: Schema.NullOr(Schema.String),
+  sizeBytes: Schema.Number,
+});
+export type OzoneSnapshot = typeof OzoneSnapshot.Type;
+
+export const OzoneDataListInput = Schema.Struct({ projectId: ProjectId });
+export const OzoneDataListResult = Schema.Struct({ snapshots: Schema.Array(OzoneSnapshot) });
+export type OzoneDataListResult = typeof OzoneDataListResult.Type;
+
+export const OzoneDataSnapshotInput = Schema.Struct({
+  projectId: ProjectId,
+  label: Schema.optionalKey(TrimmedNonEmptyString.check(Schema.isMaxLength(80))),
+});
+export type OzoneDataSnapshotInput = typeof OzoneDataSnapshotInput.Type;
+
+export const OzoneDataRestoreInput = Schema.Struct({ projectId: ProjectId, snapshotId: ShortText });
+export type OzoneDataRestoreInput = typeof OzoneDataRestoreInput.Type;
+
+export const OzoneDataRestoreResult = Schema.Struct({
+  /** Taken from the data as it was just before the restore, so the restore can be undone. */
+  safety: OzoneSnapshot,
+});
+export type OzoneDataRestoreResult = typeof OzoneDataRestoreResult.Type;
+
 export const OZONE_WS_METHODS = {
   appsList: "ozone.apps.list",
   appsCreate: "ozone.apps.create",
   runtimeAct: "ozone.runtime.act",
   runtimeLogs: "ozone.runtime.logs",
   runtimeSubscribe: "ozone.runtime.subscribe",
+  dataList: "ozone.data.list",
+  dataSnapshot: "ozone.data.snapshot",
+  dataRestore: "ozone.data.restore",
 } as const;
 
 type OzoneWsMethod = (typeof OZONE_WS_METHODS)[keyof typeof OZONE_WS_METHODS];
@@ -182,6 +226,10 @@ export const OZONE_RPC_SCOPES = {
   [OZONE_WS_METHODS.runtimeAct]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.runtimeLogs]: AuthOrchestrationReadScope,
   [OZONE_WS_METHODS.runtimeSubscribe]: AuthOrchestrationReadScope,
+  [OZONE_WS_METHODS.dataList]: AuthOrchestrationReadScope,
+  [OZONE_WS_METHODS.dataSnapshot]: AuthOrchestrationOperateScope,
+  // Replaces the app's data: only a client that can already change the project may.
+  [OZONE_WS_METHODS.dataRestore]: AuthOrchestrationOperateScope,
 } as const;
 
 /** Every Ozone method reports under one aggregate in traces. */
@@ -218,5 +266,20 @@ export const OzoneWsRpcs = [
     success: OzoneRuntimeStatus,
     error: OzoneRpcError,
     stream: true,
+  }),
+  Rpc.make(OZONE_WS_METHODS.dataList, {
+    payload: OzoneDataListInput,
+    success: OzoneDataListResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.dataSnapshot, {
+    payload: OzoneDataSnapshotInput,
+    success: OzoneSnapshot,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.dataRestore, {
+    payload: OzoneDataRestoreInput,
+    success: OzoneDataRestoreResult,
+    error: OzoneRpcError,
   }),
 ] as const;
