@@ -58,11 +58,13 @@ jobs:
       - name: Ozone tests
         run: vp test run apps/server/src/ozone apps/web/src/ozone
 
-      # A seam can break the upstream test that sits beside the file it edits.
+      # A seam can break the upstream test that sits beside the file it edits. Browser tests need
+      # Chromium, so the web job runs those.
       - name: Tests beside seams
         run: |
           tests=$(git grep -l ozone-seam -- 'apps/*.ts' 'apps/*.tsx' 'packages/*.ts' 'scripts/*.ts' \
             | grep -v '/ozone/' \
+            | grep -v '\.browser\.test\.' \
             | sed -E 's/\.test\.(ts|tsx)$/.\1/; s/\.(ts|tsx)$/.test.\1/' \
             | sort -u \
             | while read -r file; do if [ -f "$file" ]; then echo "$file"; fi; done)
@@ -70,8 +72,7 @@ jobs:
           vp test run $tests
 
   # Ozone's seams in the web client change what upstream's React tests render, so the whole web
-  # suite runs in headless Chromium. Upstream runs it in one job on a larger runner; on a standard
-  # runner the browser stops answering about 100 files in, so the files are split across jobs.
+  # suite runs in headless Chromium, split across jobs to fit a standard runner.
   web:
     name: Web tests (${{ matrix.shard }}/4)
     runs-on: ubuntu-24.04
@@ -115,7 +116,24 @@ jobs:
             node apps/web/node_modules/playwright/cli.js install-deps chromium
           fi
 
-      # The package's own test script, plus the shard.
+      # Vite bundles a dependency the first time a test asks for it. On a fresh runner the browser
+      # sometimes loses its connection in the middle of a run, most likely when a late bundle makes
+      # the page reload. The cache keeps what earlier runs bundled.
+      - name: Cache Vite's dependency bundles
+        uses: actions/cache@v6
+        with:
+          path: apps/web/node_modules/.vite
+          key: web-vite-deps-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'apps/web/vite.config.ts') }}-${{ matrix.shard }}
+
+      # The package's own test script, plus the shard. A shard that fails runs once more, on what
+      # its first try bundled: a lost browser passes then, and a test that is broken fails again.
       - name: Test
         working-directory: apps/web
-        run: vp test run --passWithNoTests --project unit --project browser --shard=${{ matrix.shard }}/4
+        run: |
+          run_shard() {
+            vp test run --passWithNoTests --project unit --project browser --shard=${{ matrix.shard }}/4
+          }
+          run_shard || {
+            echo "::warning::Web shard ${{ matrix.shard }} failed once. Running it again."
+            run_shard
+          }

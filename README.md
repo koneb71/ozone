@@ -7,7 +7,12 @@ and opens a live preview beside the conversation. It also has a plain chat that 
 Ozone is a fork of [T3 Code](https://github.com/pingdotgg/t3code) and keeps everything T3 Code
 does: threads, providers, checkpoints, the preview browser and remote access.
 
-![A build thread: the plan, the running app and its preview](docs/ozone/assets/build.png)
+![A build thread: the plan with its repair task, the running app and its preview](docs/ozone/assets/build.png)
+
+That thread started from one sentence: "A reading list. Add a book with its title and author, mark
+it as read, and see how many are left to read." This is the app it built:
+
+![The reading list app that the build produced](docs/ozone/assets/app.png)
 
 ## What it does
 

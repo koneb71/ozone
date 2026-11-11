@@ -104,7 +104,7 @@ const report = (lead: BuildLead, build: OzoneBuild, next?: string): OzoneBuildRe
         : blockedTask !== undefined
           ? NEXT.blocked(blockedTask)
           : status === "blocked"
-            ? NEXT.finalFailed(failures(build.finalEvidence).map((gate) => gate.id))
+            ? NEXT.finalFailed(failures(build.finalEvidence))
             : workingTask !== undefined
               ? NEXT.working(workingTask)
               : NEXT.advance;
@@ -334,6 +334,9 @@ const make = Effect.gen(function* () {
         yield* workers.wait(lead.scope, working.workerThreadId, Duration.millis(remaining));
         continue;
       }
+      // The lead's harness may have put a long call in the background and ended the lead's
+      // turn, and upstream starts a worker only for a lead whose turn is running.
+      if ((yield* Clock.currentTimeMillis) >= deadline) return report(lead, build);
 
       const ready = BuildModel.nextTasks(build);
       if (ready.length > 0) {
@@ -425,14 +428,28 @@ const make = Effect.gen(function* () {
         baseSha: yield* repo.head(lead.app.workspaceRoot),
       });
       const failed = failures(outcome.results);
+      if (outcome.needsDecision !== null) {
+        return {
+          gates: outcome.results,
+          next: `${outcome.needsDecision}\nAsk the user before keeping this migration.`,
+        };
+      }
+      if (failed.length > 0) {
+        return {
+          gates: outcome.results,
+          next: `Fix what failed (${failed.map((gate) => gate.id).join(", ")}), then call ozone_build_check again.`,
+        };
+      }
+      // A build stopped by its final check is not fine until that check passes too.
+      const build = yield* load(lead);
+      if (failures(build.finalEvidence).length === 0) {
+        return { gates: outcome.results, next: NEXT.checksPass };
+      }
+      const final = yield* gates.final(lead.app);
+      const finalFailed = failures(final);
       return {
-        gates: outcome.results,
-        next:
-          outcome.needsDecision !== null
-            ? `${outcome.needsDecision}\nAsk the user before keeping this migration.`
-            : failed.length === 0
-              ? "Every check passes."
-              : `Fix what failed (${failed.map((gate) => gate.id).join(", ")}), then call ozone_build_check again.`,
+        gates: [...outcome.results, ...final],
+        next: finalFailed.length > 0 ? NEXT.finalFailed(finalFailed) : NEXT.finalPasses,
       };
     }),
   });

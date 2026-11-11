@@ -12,9 +12,13 @@ import * as BuildConductor from "../builds/BuildConductor.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
 import { OzoneToolkit } from "./tools.ts";
 
-/** Providers whose adapters let a tool call run for an hour; the others give up within a minute. */
+/**
+ * How long one step waits for a worker. Claude Code moves a tool call to the background after two
+ * minutes, and the checks that follow a worker run in the same call. Other harnesses give up on a
+ * call within a minute.
+ */
 const PATIENT_DRIVERS = new Set(["claudeAgent", "codex"]);
-const LONG_PATIENCE = Duration.minutes(8);
+const LONG_PATIENCE = Duration.seconds(75);
 const SHORT_PATIENCE = Duration.seconds(40);
 
 const invalid = (message: string) =>

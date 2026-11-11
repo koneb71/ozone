@@ -2,9 +2,7 @@
  * The text a build sends to agents: each worker's brief, and the `next` line of every report.
  * Model-facing, with no eval cases yet: after a change, run a real build and read what agents do.
  */
-import type { OzoneBuild, OzoneBuildTask } from "@t3tools/contracts";
-
-const DETAIL_CHARS = 1_200;
+import type { OzoneBuild, OzoneBuildTask, OzoneGateResult } from "@t3tools/contracts";
 
 const bullets = (lines: ReadonlyArray<string>) => lines.map((line) => `- ${line}`).join("\n");
 
@@ -30,7 +28,7 @@ export const workerBrief = (
         bullets(
           failures.length === 0
             ? ["Its worker stopped before finishing."]
-            : failures.map((gate) => `${gate.id}: ${gate.detail.slice(-DETAIL_CHARS)}`),
+            : failures.map((gate) => `${gate.id}: ${gate.detail}`),
         ),
         ...(task.summary === null ? [] : [`The last worker reported: ${task.summary}`]),
         "Its changes are still in the working tree. Fix the cause, not the check.",
@@ -65,8 +63,15 @@ export const NEXT = {
     `The worker on task ${task.id} is waiting for an answer in its thread${task.workerThreadId === null ? "" : ` ${task.workerThreadId}`}. Answer it with t3_pending_request if you can, or ask the user, then call ozone_build_advance again.`,
   blocked: (task: OzoneBuildTask) =>
     `Task ${task.id} is blocked: ${task.blockedReason ?? "it needs a decision."} Rule on it with ozone_build_resolve: retry (with a note on what to do differently), skip, or accept. Ask the user first only if the choice changes what they get.`,
-  finalFailed: (checks: ReadonlyArray<string>) =>
-    `Every task passed, but the final check failed (${checks.join(", ")}). Add a task that fixes it with ozone_build_plan, keeping the finished tasks, then call ozone_build_advance.`,
+  finalFailed: (failed: ReadonlyArray<OzoneGateResult>) =>
+    [
+      `Every task passed, but the final check failed (${failed.map((gate) => gate.id).join(", ")}).`,
+      ...failed.map((gate) => `${gate.id}: ${gate.detail}`),
+      "The build is not done. Add a task that fixes it with ozone_build_plan, keeping the finished tasks, then call ozone_build_advance.",
+    ].join("\n"),
+  checksPass: "Every check passes.",
+  finalPasses:
+    "Every check passes, the final one too. Call ozone_build_advance to finish the build.",
   waitingOnPlan:
     "Nothing can start: the remaining tasks wait on tasks that are not in the plan as done. Revise the plan with ozone_build_plan.",
 } as const;

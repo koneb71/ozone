@@ -33,6 +33,7 @@ The dev server is already running with hot reload. Saved edits appear without a 
 
 - The installed TanStack packages ship guides that match their version. Read the one for what you are about to write, for example `./dev cat node_modules/@tanstack/start-client-core/skills/start-core/server-functions/SKILL.md`. List them all with `./dev find node_modules/@tanstack -name SKILL.md`.
 - Loaders run in the browser too. Read and write the database only inside `createServerFn` handlers or server route handlers. `src/db` is server-only, and importing it into browser code fails the build.
+- A file that exports server functions is imported by pages. Do not put `import "@tanstack/react-start/server-only"` in it: the production build rejects that. The marker belongs only in files no page imports, such as `src/db/index.ts`.
 - A server function is a public endpoint. Check the session inside every handler that touches private data, and validate its input with zod through `.validator(...)`.
 - After a write, `await router.invalidate()` so the loader reads what was saved. Do not patch local state instead.
 - Style with Tailwind utilities and the tokens: `bg-background`, `text-muted-foreground`, `border-border`, `bg-primary`. No colour literals in components. Light and dark must both look right.

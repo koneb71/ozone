@@ -37,11 +37,14 @@ export class BuildGates extends Context.Service<
 >()("t3/ozone/builds/BuildGates") {}
 
 const GATE_TIMEOUT = Duration.minutes(10);
-const DETAIL_CHARS = 1_500;
+const DETAIL_CHARS = 2_000;
 
-const tail = (text: string) => {
+/** A bundler prints its error first and a stack after it; a test runner ends with its summary. */
+export const excerpt = (text: string) => {
   const trimmed = text.trim();
-  return trimmed.length <= DETAIL_CHARS ? trimmed : trimmed.slice(trimmed.length - DETAIL_CHARS);
+  if (trimmed.length <= DETAIL_CHARS) return trimmed;
+  const half = DETAIL_CHARS / 2;
+  return `${trimmed.slice(0, half)}\n[...]\n${trimmed.slice(trimmed.length - half)}`;
 };
 
 const make = Effect.gen(function* () {
@@ -64,7 +67,11 @@ const make = Effect.gen(function* () {
     return {
       id,
       ok,
-      detail: ok ? "" : output.timedOut ? "It did not finish in ten minutes." : tail(output.output),
+      detail: ok
+        ? ""
+        : output.timedOut
+          ? "It did not finish in ten minutes."
+          : excerpt(output.output) || `It exited with code ${output.code} and printed nothing.`,
     } satisfies OzoneGateResult;
   });
 

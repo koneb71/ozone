@@ -86,6 +86,8 @@ interface Script {
   readonly finalChecks: ReadonlyArray<ReadonlyArray<OzoneGateResult>>;
   /** Whether a worker finishes while the conductor waits for it. */
   readonly finishesWhileWaiting: boolean;
+  /** A worker that finishes only as the step's patience runs out. */
+  readonly finishesLate: boolean;
   readonly workerEndings: ReadonlyArray<BuildWorkers.WorkerStatus>;
   readonly treeHasChanges: boolean;
   readonly lostCommits: ReadonlySet<string>;
@@ -101,6 +103,7 @@ const makeHarness = Effect.gen(function* () {
     taskChecks: [],
     finalChecks: [],
     finishesWhileWaiting: true,
+    finishesLate: false,
     workerEndings: [],
     treeHasChanges: false,
     lostCommits: new Set(),
@@ -137,10 +140,8 @@ const makeHarness = Effect.gen(function* () {
         const id = workerThreadId.replace("thread-of-", "");
         yield* record(`wait ${taskOf(id).split("#")[0]}`);
         const current = yield* Ref.get(script);
-        if (!current.finishesWhileWaiting) {
-          yield* TestClock.adjust(timeout);
-          return;
-        }
+        if (!current.finishesWhileWaiting || current.finishesLate) yield* TestClock.adjust(timeout);
+        if (!current.finishesWhileWaiting) return;
         const [ending, ...later] = current.workerEndings;
         yield* Ref.set(script, { ...current, workerEndings: later });
         yield* Ref.update(workerStates, (all) =>
@@ -387,6 +388,30 @@ describe("BuildConductor", () => {
     }).pipe(Effect.provide(layerTest)),
   );
 
+  // The lead's harness can put a long call in the background and end the lead's turn, and
+  // upstream starts a worker only for a lead whose turn is running.
+  it.effect("starts no more work in a step that has used its patience", () =>
+    Effect.gen(function* () {
+      const { conductor, lead, set, steps, statuses } = yield* makeHarness;
+      yield* conductor.plan(lead, plan(task("schema"), task("page", { dependsOn: ["schema"] })));
+      yield* set({ finishesLate: true });
+
+      const report = yield* conductor.advance(lead);
+      assert.deepStrictEqual(yield* steps, [
+        "dispatch schema",
+        "wait schema",
+        "check",
+        "commit Task schema",
+        "snapshot Task schema",
+      ]);
+      assert.deepStrictEqual(statuses(report), { schema: "done", page: "pending" });
+      assert.strictEqual(report.next, NEXT.advance);
+
+      yield* set({ finishesLate: false });
+      assert.strictEqual((yield* conductor.advance(lead)).status, "complete");
+    }).pipe(Effect.provide(layerTest)),
+  );
+
   it.effect("stops for a decision on a migration that can lose data", () =>
     Effect.gen(function* () {
       const { conductor, lead, set, steps, forget, statuses } = yield* makeHarness;
@@ -560,10 +585,19 @@ describe("BuildConductor", () => {
     Effect.gen(function* () {
       const { conductor, lead, set, steps, forget } = yield* makeHarness;
       yield* conductor.plan(lead, plan(task("page")));
-      yield* set({ finalChecks: [[{ id: "build", ok: false, detail: "vite: build failed" }]] });
+      const failing = [{ id: "build", ok: false, detail: "vite: build failed" }];
+      yield* set({ finalChecks: [failing, failing] });
       const broken = yield* conductor.advance(lead);
       assert.strictEqual(broken.status, "blocked");
-      assert.match(broken.next, /the final check failed \(build\)\. Add a task that fixes it/);
+      assert.match(broken.next, /the final check failed \(build\)\.\nbuild: vite: build failed\n/);
+      assert.include(broken.next, "Add a task that fixes it with ozone_build_plan");
+
+      // The task checks pass on this tree, but the build is still stopped by its final check.
+      yield* forget;
+      const checked = yield* conductor.check(lead);
+      assert.deepStrictEqual(yield* steps, ["check", "final check"]);
+      assert.deepStrictEqual(checked.gates, [...PASS, ...failing]);
+      assert.strictEqual(checked.next, broken.next);
 
       yield* forget;
       yield* conductor.plan(lead, plan(task("page"), task("fix-build")));

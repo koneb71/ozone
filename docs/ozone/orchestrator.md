@@ -46,9 +46,19 @@ worker.
 `taskStatus` acknowledges the result, so a step that saw the worker finish does not also get a wake.
 A step that ran out of patience returns, and that wake is what brings the lead back.
 
-**Patience depends on the provider.** Claude and Codex are configured upstream to let a tool call
-run for an hour, so a step waits up to eight minutes. Other providers give up within a minute, so
-a step waits forty seconds and relies on the wake. Correctness never depends on one long call.
+**A step is short, and never outlives its lead's turn on purpose.** Claude Code moves a tool call
+to the background after two minutes, and the lead's turn can then end while the step still runs.
+Upstream starts a worker only for a lead whose turn is running, so a step that went on would fail
+at its next hand-off. A step therefore waits for a worker for at most 75 seconds (40 for harnesses
+that give up on a call within a minute), starts no more work once that time is spent, and returns.
+The wake that follows a finished worker brings the lead back. Correctness never depends on one
+long call.
+
+**A failed check reaches the next reader with both ends of its output.** A bundler prints its error
+first and a stack after it; a test runner ends with its summary. Evidence keeps the head and the
+tail. When the final check fails, the lead gets that output with the status, and
+`ozone_build_check` runs the final check too, so it cannot answer "every check passes" for a build
+that is still stopped.
 
 **A migration that can lose data needs a person.** Another attempt cannot decide it, so the task is
 blocked at once instead of retried. See [data safety](./data-safety.md).
@@ -73,5 +83,12 @@ workers, and a worker's brief starts with `Ozone task`, which that file keys on.
 
 ## Not built yet
 
-An independent verifier that checks the acceptance criteria in the preview browser, writers in
-parallel worktrees with a merge queue, and cost budgets.
+- An independent verifier that checks the acceptance criteria in the preview browser, writers in
+  parallel worktrees with a merge queue, and cost budgets.
+- Checks run inside the lead's call. A check that takes more than about a minute keeps that call
+  open past the point where Claude Code moves it to the background. The result still arrives, as a
+  notification. Running checks as server jobs that wake the lead would remove the limit.
+- The preview is not refreshed when a build completes. A page that showed an error while a worker
+  was editing stays on screen until it is reloaded.
+- Ozone's instructions, briefs and tool descriptions have no eval cases. They were tried on real
+  builds with Claude Haiku as lead and worker.
