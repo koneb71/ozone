@@ -26,6 +26,7 @@ These files contain a comment with `ozone-seam` at each edit.
 | `apps/web/index.html`                                 | product name on the splash screen                                   |
 | `apps/web/src/branding.ts`                            | product name                                                        |
 | `apps/web/src/components/chat/useComposerSend.ts`     | sending a prompt no longer counts towards upstream's star prompt    |
+| `apps/web/src/components/ChatView.tsx`                | adds an Ozone app's status to the composer notices                  |
 | `apps/web/src/components/T3Wordmark.tsx`              | renders the Ozone mark wherever upstream shows its wordmark         |
 | `apps/web/src/components/sidebar/SidebarChrome.tsx`   | sidebar brand name                                                  |
 | `apps/web/src/routes/_chat.index.tsx`                 | the index route shows Ozone's home                                  |

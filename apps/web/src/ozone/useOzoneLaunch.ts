@@ -111,6 +111,8 @@ export function useOzoneLaunch() {
       input: { name: appNameFromPrompt(prompt) },
     });
     if (created._tag === "Failure") return failureMessage(created, "Could not create the app.");
+    // The thread it opens next looks the new app up in this list.
+    appAtomRegistry.refresh(ozoneEnvironment.apps({ environmentId, input: {} }));
     const { projectId } = created.value.app;
     const arrived = await waitForProject(scopeProjectRef(environmentId, projectId)).then(
       () => true,
