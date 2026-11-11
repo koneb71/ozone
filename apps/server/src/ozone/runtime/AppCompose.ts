@@ -9,6 +9,7 @@ import * as Path from "effect/Path";
 
 import * as ServerConfig from "../../config.ts";
 import type { ResolvedApp } from "../apps/AppRegistry.ts";
+import { composeValue, ENV_FILE_MODE, envFilePath, readEnvFile } from "../env/envFile.ts";
 import * as DockerCli from "./DockerCli.ts";
 
 export interface ComposeOptions {
@@ -32,18 +33,38 @@ export class AppCompose extends Context.Service<
 
 const HOST_CA_MOUNT = "/ozone-host-ca.crt";
 
-/** Lets the app's container trust the certificate authority this machine trusts. */
-const hostCaOverride = (appService: string, hostCaPath: string): string =>
-  [
+/**
+ * What Ozone adds to an app's own compose file, for its app service: trust in the certificate
+ * authority this machine trusts, and the variables the person set. Null when there is neither.
+ */
+export const composeOverride = (
+  appService: string,
+  input: {
+    readonly hostCaPath: string | null;
+    readonly variables: ReadonlyArray<{ readonly name: string; readonly value: string }>;
+  },
+): string | null => {
+  const environment = new Map<string, string>(
+    input.hostCaPath === null
+      ? []
+      : [
+          ["NODE_EXTRA_CA_CERTS", HOST_CA_MOUNT],
+          ["SSL_CERT_FILE", HOST_CA_MOUNT],
+        ],
+  );
+  for (const variable of input.variables) environment.set(variable.name, variable.value);
+  if (environment.size === 0) return null;
+  return [
     "services:",
     `  ${JSON.stringify(appService)}:`,
     "    environment:",
-    `      NODE_EXTRA_CA_CERTS: ${JSON.stringify(HOST_CA_MOUNT)}`,
-    `      SSL_CERT_FILE: ${JSON.stringify(HOST_CA_MOUNT)}`,
-    "    volumes:",
-    `      - ${JSON.stringify(`${hostCaPath}:${HOST_CA_MOUNT}:ro`)}`,
+    ...[...environment].map(([name, value]) => `      ${name}: ${composeValue(value)}`),
+    ...(input.hostCaPath === null
+      ? []
+      : ["    volumes:", `      - ${composeValue(`${input.hostCaPath}:${HOST_CA_MOUNT}:ro`)}`]),
     "",
   ].join("\n");
+};
 
 const make = Effect.gen(function* () {
   const docker = yield* DockerCli.DockerCli;
@@ -68,9 +89,12 @@ const make = Effect.gen(function* () {
       "-f",
       path.join(app.workspaceRoot, app.manifest.runtime.file),
     ];
-    const ca = yield* hostCaPath;
-    if (ca === null) return base;
-    // Kept in Ozone's state, so the app's repository never names a path on this machine.
+    const override = composeOverride(app.manifest.runtime.appService, {
+      hostCaPath: yield* hostCaPath,
+      variables: yield* readEnvFile(fs, envFilePath(path, config.stateDir, app.app.slug)),
+    });
+    if (override === null) return base;
+    // Kept in Ozone's state, so the app's repository never names a path or holds a secret.
     const overridePath = path.join(
       config.stateDir,
       "ozone",
@@ -79,9 +103,8 @@ const make = Effect.gen(function* () {
       "compose.override.yaml",
     );
     const written = yield* fs.makeDirectory(path.dirname(overridePath), { recursive: true }).pipe(
-      Effect.andThen(
-        fs.writeFileString(overridePath, hostCaOverride(app.manifest.runtime.appService, ca)),
-      ),
+      Effect.andThen(fs.writeFileString(overridePath, override, { mode: ENV_FILE_MODE })),
+      Effect.andThen(fs.chmod(overridePath, ENV_FILE_MODE)),
       Effect.as(true),
       Effect.orElseSucceed(() => false),
     );

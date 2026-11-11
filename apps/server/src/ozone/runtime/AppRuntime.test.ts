@@ -344,6 +344,21 @@ describe("AppRuntime", () => {
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 
+  // A start that began before a setting changed would bring the app up without it.
+  it.effect("applies changed settings even while a start is in flight", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness();
+      yield* harness.runtime.act({ projectId, action: "up" });
+      yield* Queue.take(harness.composeCalls);
+      yield* harness.runtime.apply(projectId);
+      assert.deepStrictEqual((yield* Queue.take(harness.composeCalls)).slice(5), [
+        "up",
+        "--detach",
+        "--build",
+      ]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("says what to do when Docker is missing, and starts nothing", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness({ docker: "missing" });

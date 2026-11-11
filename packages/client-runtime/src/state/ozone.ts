@@ -77,5 +77,18 @@ export function createOzoneEnvironmentAtoms<R, E>(
       label: "environment-data:ozone:restore-history",
       tag: OZONE_WS_METHODS.historyRestore,
     }),
+    env: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:ozone:env",
+      tag: OZONE_WS_METHODS.envList,
+      staleTimeMs: 0,
+    }),
+    setEnv: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:set-env",
+      tag: OZONE_WS_METHODS.envSet,
+    }),
+    removeEnv: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:remove-env",
+      tag: OZONE_WS_METHODS.envRemove,
+    }),
   };
 }

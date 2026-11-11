@@ -9,6 +9,7 @@ import * as ProviderRegistry from "../../provider/ProviderRegistry.ts";
 import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as OzoneApps from "../apps/OzoneApps.ts";
 import * as BuildConductor from "../builds/BuildConductor.ts";
+import * as AppEnv from "../env/AppEnv.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
 import { OzoneToolkit } from "./tools.ts";
 
@@ -97,6 +98,13 @@ export const layer = McpToolAccess.toLayer(OzoneToolkit, {
       const { app } = yield* callingApp;
       const runtime = yield* AppRuntime.AppRuntime;
       const projectId = app.app.projectId;
+      if (input.action === "env") {
+        const env = yield* AppEnv.AppEnv;
+        return {
+          status: yield* runtime.status(projectId).pipe(Effect.mapError(fromApp)),
+          env: (yield* env.list(projectId).pipe(Effect.mapError(fromApp))).variables,
+        };
+      }
       if (input.action === "logs") {
         const logs = yield* runtime
           .logs({

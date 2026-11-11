@@ -9,6 +9,7 @@ import {
   OzoneBuildPlanInput,
   OzoneBuildReport,
   OzoneBuildResolveInput,
+  OzoneEnvVariable,
   OzoneRuntimeStatus,
   ProjectId,
   TrimmedNonEmptyString,
@@ -23,6 +24,7 @@ import * as ThreadManagementService from "../../orchestration-v2/ThreadManagemen
 import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as OzoneApps from "../apps/OzoneApps.ts";
 import * as BuildConductor from "../builds/BuildConductor.ts";
+import * as AppEnv from "../env/AppEnv.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
 
 // A tool that takes nothing declares no `parameters`: MCP needs an object schema, and Tool.make
@@ -94,9 +96,9 @@ const BuildCheckTool = Tool.make("ozone_build_check", {
 const AppRuntimeTool = Tool.make("ozone_app_runtime", {
   ...shared,
   description:
-    "This app's containers. `status` and `logs` read. `restart` restarts them. `rebuild` rebuilds the image, for a changed Dockerfile or compose file. The app's data is kept by all of them.",
+    "This app's containers. `status` and `logs` read. `restart` restarts them. `rebuild` rebuilds the image, for a changed Dockerfile or compose file. The app's data is kept by all of them. `env` lists the environment variables the user set for the app; a secret's value is not shown.",
   parameters: Schema.Struct({
-    action: Schema.Literals(["status", "logs", "restart", "rebuild"]),
+    action: Schema.Literals(["status", "logs", "restart", "rebuild", "env"]),
     service: Schema.optional(
       TrimmedNonEmptyString.annotate({ description: "For `logs`: one service, such as `app`." }),
     ),
@@ -105,12 +107,14 @@ const AppRuntimeTool = Tool.make("ozone_app_runtime", {
   success: Schema.Struct({
     status: OzoneRuntimeStatus,
     logs: Schema.optional(Schema.String),
+    env: Schema.optional(Schema.Array(OzoneEnvVariable)),
   }),
   dependencies: [
     McpInvocationContext.McpInvocationContext,
     ThreadManagementService.ThreadManagementService,
     AppRegistry.AppRegistry,
     AppRuntime.AppRuntime,
+    AppEnv.AppEnv,
   ],
 }).annotate(Tool.Destructive, false);
 

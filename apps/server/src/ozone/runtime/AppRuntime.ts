@@ -46,6 +46,11 @@ export class AppRuntime extends Context.Service<
     readonly status: (projectId: ProjectId) => Effect.Effect<OzoneRuntimeStatus, OzoneAppError>;
     /** Returns as soon as the action is under way; `changes` reports how it ends. */
     readonly act: (input: OzoneRuntimeActInput) => Effect.Effect<OzoneRuntimeStatus, OzoneAppError>;
+    /**
+     * Brings the app up with its settings as they are now. Unlike `up`, it replaces a start in
+     * flight, which began with the settings as they were.
+     */
+    readonly apply: (projectId: ProjectId) => Effect.Effect<OzoneRuntimeStatus, OzoneAppError>;
     readonly logs: (
       input: OzoneRuntimeLogsInput,
     ) => Effect.Effect<OzoneRuntimeLogsResult, OzoneAppError>;
@@ -324,6 +329,19 @@ export const make = Effect.gen(function* () {
           yield* settle(resolved, ["restart"], "Docker could not restart the app.");
           break;
       }
+      return yield* statusOf(resolved);
+    }),
+    apply: Effect.fn("AppRuntime.apply")(function* (projectId) {
+      const resolved = yield* registry.resolve(projectId);
+      const availability = yield* dockerStatus;
+      if (!availability.available) {
+        return yield* unavailable(availability.message ?? "Docker is not available.");
+      }
+      yield* start(
+        resolved,
+        ["up", "--detach", "--build"],
+        "Starting the app with its new settings.",
+      );
       return yield* statusOf(resolved);
     }),
     logs: Effect.fn("AppRuntime.logs")(function* (input) {

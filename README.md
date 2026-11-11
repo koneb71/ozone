@@ -19,7 +19,8 @@ it as read, and see how many are left to read." This is the app it built:
 - **Builds apps from a prompt.** A new app is a real project on your disk: TanStack Start with
   React 19, Tailwind CSS 4, Drizzle on Postgres and Better Auth, in a git repository of its own.
 - **Runs them in Docker.** Each app is a Docker Compose project with one address that never
-  changes. Start, stop, restart, rebuild and read its logs from the thread.
+  changes. Start, stop, restart, rebuild and read its logs from the thread. Give it settings and
+  secrets under **Environment**: they reach its container and never its code.
 - **Orchestrates the work.** The Build Conductor turns a request into a task graph. A worker does
   each task. The server, not the agent, runs the type check, the linter and the tests inside the
   app's container. A failed check goes to a fresh worker with the evidence. Every task that passes

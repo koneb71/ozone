@@ -11,6 +11,7 @@ export const OZONE_APP_INSTRUCTIONS = `This app was created by Ozone, which runs
 
 - Ozone runs the app with Docker Compose and keeps it running. Do not start another dev server. Do not run \`docker compose up\`, \`down\`, \`stop\` or \`restart\`. Use \`ozone_app_runtime\` on the \`t3-code\` MCP server for status, logs, restart and rebuild.
 - Run every project command inside the container: \`./dev <command>\`.
+- Settings and secrets reach the app as environment variables the user sets in Ozone, in the app's menu under Environment. Read them from \`process.env\`. Never write a secret into a file. When the app needs one, tell the user its name and where to add it. \`ozone_app_runtime\` with \`env\` lists the ones that are set.
 
 ### Data
 

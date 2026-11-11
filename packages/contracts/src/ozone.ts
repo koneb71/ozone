@@ -296,6 +296,41 @@ export const OzoneHistoryRestoreResult = Schema.Struct({
 });
 export type OzoneHistoryRestoreResult = typeof OzoneHistoryRestoreResult.Type;
 
+const EnvName = TrimmedNonEmptyString.check(
+  Schema.isMaxLength(128),
+  Schema.isPattern(/^[A-Za-z_][A-Za-z0-9_]*$/),
+).annotate({ description: "A variable name such as `STRIPE_API_KEY`." });
+
+/** A variable as it is stored, value included. It never leaves the server for a secret. */
+export const OzoneEnvVariableValue = Schema.Struct({
+  name: EnvName,
+  value: Schema.String.check(Schema.isMaxLength(32_768)),
+  /** A secret is written once and never read back by a client or an agent. */
+  secret: Schema.Boolean,
+});
+export type OzoneEnvVariableValue = typeof OzoneEnvVariableValue.Type;
+
+/** A variable as clients see it: a secret's value is null. */
+export const OzoneEnvVariable = Schema.Struct({
+  name: Schema.String,
+  secret: Schema.Boolean,
+  value: Schema.NullOr(Schema.String),
+});
+export type OzoneEnvVariable = typeof OzoneEnvVariable.Type;
+
+export const OzoneEnvListInput = Schema.Struct({ projectId: ProjectId });
+export const OzoneEnvListResult = Schema.Struct({ variables: Schema.Array(OzoneEnvVariable) });
+export type OzoneEnvListResult = typeof OzoneEnvListResult.Type;
+
+export const OzoneEnvSetInput = Schema.Struct({
+  projectId: ProjectId,
+  ...OzoneEnvVariableValue.fields,
+});
+export type OzoneEnvSetInput = typeof OzoneEnvSetInput.Type;
+
+export const OzoneEnvRemoveInput = Schema.Struct({ projectId: ProjectId, name: EnvName });
+export type OzoneEnvRemoveInput = typeof OzoneEnvRemoveInput.Type;
+
 export const OZONE_WS_METHODS = {
   appsList: "ozone.apps.list",
   appsCreate: "ozone.apps.create",
@@ -311,6 +346,9 @@ export const OZONE_WS_METHODS = {
   buildApprove: "ozone.build.approve",
   historyList: "ozone.history.list",
   historyRestore: "ozone.history.restore",
+  envList: "ozone.env.list",
+  envSet: "ozone.env.set",
+  envRemove: "ozone.env.remove",
 } as const;
 
 type OzoneWsMethod = (typeof OZONE_WS_METHODS)[keyof typeof OZONE_WS_METHODS];
@@ -340,6 +378,10 @@ export const OZONE_RPC_SCOPES = {
   [OZONE_WS_METHODS.historyList]: AuthOrchestrationReadScope,
   // Replaces the app's code and data, behind a commit and a snapshot of both as they are.
   [OZONE_WS_METHODS.historyRestore]: AuthOrchestrationOperateScope,
+  // Secrets' values are never in the list.
+  [OZONE_WS_METHODS.envList]: AuthOrchestrationReadScope,
+  [OZONE_WS_METHODS.envSet]: AuthOrchestrationOperateScope,
+  [OZONE_WS_METHODS.envRemove]: AuthOrchestrationOperateScope,
 } as const;
 
 /** Every Ozone method reports under one aggregate in traces. */
@@ -421,6 +463,21 @@ export const OzoneWsRpcs = [
   Rpc.make(OZONE_WS_METHODS.historyRestore, {
     payload: OzoneHistoryRestoreInput,
     success: OzoneHistoryRestoreResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.envList, {
+    payload: OzoneEnvListInput,
+    success: OzoneEnvListResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.envSet, {
+    payload: OzoneEnvSetInput,
+    success: OzoneEnvListResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.envRemove, {
+    payload: OzoneEnvRemoveInput,
+    success: OzoneEnvListResult,
     error: OzoneRpcError,
   }),
 ] as const;
