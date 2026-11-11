@@ -63,5 +63,7 @@ the recovery, which is why a snapshot is taken after every task that passes its 
   containers and volumes in Docker until someone removes them by hand.
 - A deleted app's snapshot cannot be restored from the interface yet: there is no app left to
   restore it into.
+- A deployed app's data lives in a volume of its own (`<slug>-prod_pgdata`) that nothing in Ozone
+  removes, but Ozone does not snapshot it yet. Stop keeps it; the next deploy uses it again.
 - Snapshots Ozone takes by itself are pruned to the newest 20 per app. Ones a person takes are kept
   until removed by hand.

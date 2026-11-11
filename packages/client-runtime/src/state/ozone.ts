@@ -90,5 +90,18 @@ export function createOzoneEnvironmentAtoms<R, E>(
       label: "environment-data:ozone:remove-env",
       tag: OZONE_WS_METHODS.envRemove,
     }),
+    deployStatus: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:ozone:deploy-status",
+      tag: OZONE_WS_METHODS.deployStatus,
+      staleTimeMs: 0,
+    }),
+    deploy: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:deploy",
+      tag: OZONE_WS_METHODS.deployRun,
+    }),
+    stopDeploy: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:stop-deploy",
+      tag: OZONE_WS_METHODS.deployStop,
+    }),
   };
 }

@@ -28,6 +28,7 @@ The dev server is already running with hot reload. Saved edits appear without a 
 - `drizzle/` holds generated SQL migrations. Never edit or delete one that already exists.
 - `src/lib/auth.ts` is the server's auth configuration. `src/lib/auth-client.ts` exports `authClient` for the browser.
 - `src/styles/app.css` holds the design tokens.
+- `compose.prod.yaml` is how Ozone deploys the app: the production image, its own database and a migration step. Keep it working when you add a service.
 
 ## How to write it
 

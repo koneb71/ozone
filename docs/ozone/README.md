@@ -27,6 +27,15 @@ starts its lead thread.
   into a project in place, so a chat's text must stay true when that happens.
 - **An app is a plain Compose project.** Nothing about it depends on the machine that made it, so
   hosting an app later means another environment that runs Docker, not a second runtime.
+- **A deploy is a second Compose project.** `compose.prod.yaml` runs the production image as
+  `<slug>-prod`, with a database volume of its own, so development data is never what people use.
+  Ozone generates the database password and auth secret once and keeps them in its state: a
+  Postgres volume keeps the password it was created with. Migrations run from the build stage,
+  which has the tools the production image leaves out. A server is reached with `docker -H ssh://`,
+  so Ozone needs no agent there, only Docker and this machine's SSH access.
+- **What an app is given stays out of its repository.** Its environment variables, Ozone's secrets
+  and the host's certificate bundle reach Compose through override files in Ozone's state, which
+  only their owner can read. A value is escaped for Compose, which would otherwise interpolate it.
 - **Home hands files to the composer.** Upstream's composer owns attachment intake: conversion,
   compression and upload. Home opens a new chat and gives its files to that composer instead of
   preparing them a second way.
@@ -77,6 +86,12 @@ git merge upstream/main
   failing test's own setup, as upstream's tests do.
 - Browser tests need the Chromium build the repository's Playwright expects. Where another build
   is installed instead, set `OZONE_TEST_CHROMIUM` to its executable.
+- Docker Compose builds through buildx bake, which refuses to read a file outside the project, such
+  as the host's certificate bundle given as a build secret, and Compose has no flag to allow it.
+  Ozone sets `BUILDX_BAKE_ENTITLEMENTS_FS=0` for a build that uses the bundle, and only then.
+- A request is interrupted when its client disconnects. A restore, deletion or deploy that a
+  person confirmed would stop halfway, so each runs in its service's own fiber and the request only
+  waits for it.
 - Text that agents read is code: the instructions in `apps/server/src/ozone/apps/appInstructions.ts`
   and `chat/chatPersona.ts`, the briefs in `builds/briefs.ts`, the tool descriptions in
   `mcp/tools.ts` and the template's `AGENTS.md`. An agent follows it literally. It has no eval

@@ -33,6 +33,9 @@ it as read, and see how many are left to read." This is the app it built:
   removes, after a snapshot. Every finished task takes a snapshot, and **History** takes the code
   and the data back to any task, which you can undo the same way. A migration that can lose data
   stops the build and asks.
+- **Deploys.** **Deploy** runs the production build with a database of its own, on this machine or
+  on a server that runs Docker, reached over SSH. Your development data is never touched, and Stop
+  keeps the production data for the next deploy.
 - **Chats.** Ask anything and attach PDFs, Word documents, images and other files. Ask a chat
   for an app and it starts one.
 - **Uses your subscription.** Sign in to Claude from Settings. No API key is involved, and an API

@@ -331,6 +331,41 @@ export type OzoneEnvSetInput = typeof OzoneEnvSetInput.Type;
 export const OzoneEnvRemoveInput = Schema.Struct({ projectId: ProjectId, name: EnvName });
 export type OzoneEnvRemoveInput = typeof OzoneEnvRemoveInput.Type;
 
+/** Where Deploy runs the production image. */
+export const OzoneDeployTarget = Schema.Struct({
+  /** A Docker host reached with this machine's SSH setup, as `user@host`. Null: this machine. */
+  host: Schema.NullOr(
+    TrimmedNonEmptyString.check(
+      Schema.isMaxLength(255),
+      Schema.isPattern(/^(?:[A-Za-z0-9._-]+@)?[A-Za-z0-9][A-Za-z0-9.-]*(?::\d{1,5})?$/),
+    ),
+  ),
+  /** Where people reach the app, for sign-in links. Null: the host and its port. */
+  publicUrl: Schema.NullOr(
+    TrimmedNonEmptyString.check(Schema.isMaxLength(512), Schema.isPattern(/^https?:\/\/\S+$/)),
+  ),
+});
+export type OzoneDeployTarget = typeof OzoneDeployTarget.Type;
+
+export const OzoneDeployStatus = Schema.Struct({
+  state: Schema.Literals(["none", "deploying", "running", "stopped", "failed"]),
+  /** The target of the last deploy. */
+  target: Schema.NullOr(OzoneDeployTarget),
+  url: Schema.NullOr(Schema.String),
+  commitSha: Schema.NullOr(Schema.String),
+  deployedAt: Schema.NullOr(IsoDateTime),
+  /** What went wrong, or what is happening. */
+  message: Schema.NullOr(Schema.String),
+});
+export type OzoneDeployStatus = typeof OzoneDeployStatus.Type;
+
+export const OzoneDeployStatusInput = Schema.Struct({ projectId: ProjectId });
+export const OzoneDeployRunInput = Schema.Struct({
+  projectId: ProjectId,
+  target: OzoneDeployTarget,
+});
+export type OzoneDeployRunInput = typeof OzoneDeployRunInput.Type;
+
 export const OZONE_WS_METHODS = {
   appsList: "ozone.apps.list",
   appsCreate: "ozone.apps.create",
@@ -349,6 +384,9 @@ export const OZONE_WS_METHODS = {
   envList: "ozone.env.list",
   envSet: "ozone.env.set",
   envRemove: "ozone.env.remove",
+  deployStatus: "ozone.deploy.status",
+  deployRun: "ozone.deploy.run",
+  deployStop: "ozone.deploy.stop",
 } as const;
 
 type OzoneWsMethod = (typeof OZONE_WS_METHODS)[keyof typeof OZONE_WS_METHODS];
@@ -382,6 +420,10 @@ export const OZONE_RPC_SCOPES = {
   [OZONE_WS_METHODS.envList]: AuthOrchestrationReadScope,
   [OZONE_WS_METHODS.envSet]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.envRemove]: AuthOrchestrationOperateScope,
+  [OZONE_WS_METHODS.deployStatus]: AuthOrchestrationReadScope,
+  // Runs the app where others can reach it, with this machine's Docker or SSH access.
+  [OZONE_WS_METHODS.deployRun]: AuthOrchestrationOperateScope,
+  [OZONE_WS_METHODS.deployStop]: AuthOrchestrationOperateScope,
 } as const;
 
 /** Every Ozone method reports under one aggregate in traces. */
@@ -478,6 +520,21 @@ export const OzoneWsRpcs = [
   Rpc.make(OZONE_WS_METHODS.envRemove, {
     payload: OzoneEnvRemoveInput,
     success: OzoneEnvListResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.deployStatus, {
+    payload: OzoneDeployStatusInput,
+    success: OzoneDeployStatus,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.deployRun, {
+    payload: OzoneDeployRunInput,
+    success: OzoneDeployStatus,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.deployStop, {
+    payload: OzoneDeployStatusInput,
+    success: OzoneDeployStatus,
     error: OzoneRpcError,
   }),
 ] as const;

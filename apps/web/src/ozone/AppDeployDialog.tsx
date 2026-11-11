@@ -1,0 +1,219 @@
+import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import type { EnvironmentId, OzoneApp, OzoneDeployStatus } from "@t3tools/contracts";
+import { ExternalLinkIcon, RocketIcon, ServerIcon, SquareIcon } from "lucide-react";
+import { useState } from "react";
+
+import { Alert, AlertDescription } from "~/components/ui/alert";
+import { Button } from "~/components/ui/button";
+import {
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+} from "~/components/ui/dialog";
+import { Input } from "~/components/ui/input";
+import { Spinner } from "~/components/ui/spinner";
+import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
+import { useEnvironmentQuery } from "~/state/query";
+import { useAtomCommand } from "~/state/use-atom-command";
+import { formatRelativeTimeLabel } from "~/timestampFormat";
+
+import { ozoneEnvironment } from "./state";
+
+type Where = "here" | "server";
+
+const HOST = /^(?:[A-Za-z0-9._-]+@)?[A-Za-z0-9][A-Za-z0-9.-]*(?::\d{1,5})?$/;
+const URL = /^https?:\/\/\S+$/;
+
+function statusLine(status: OzoneDeployStatus): string {
+  switch (status.state) {
+    case "none":
+      return "Not deployed yet.";
+    case "deploying":
+      return status.message ?? "Deploying.";
+    case "running":
+      return `Running${status.deployedAt === null ? "" : `, deployed ${formatRelativeTimeLabel(status.deployedAt)}`}.`;
+    case "stopped":
+      return "Stopped. Its data is kept for the next deploy.";
+    case "failed":
+      return "The last deploy failed.";
+  }
+}
+
+/** Runs an app's production build where people can reach it, and stops it again. */
+export function AppDeployDialog(props: {
+  readonly app: OzoneApp;
+  readonly environmentId: EnvironmentId;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+      <DialogPopup className="sm:max-w-lg">
+        {props.open ? <AppDeploy app={props.app} environmentId={props.environmentId} /> : null}
+      </DialogPopup>
+    </Dialog>
+  );
+}
+
+function AppDeploy(props: { readonly app: OzoneApp; readonly environmentId: EnvironmentId }) {
+  const target = { environmentId: props.environmentId, input: { projectId: props.app.projectId } };
+  const status = useEnvironmentQuery(ozoneEnvironment.deployStatus(target));
+  const deploy = useAtomCommand(ozoneEnvironment.deploy, { reportFailure: false });
+  const stopDeploy = useAtomCommand(ozoneEnvironment.stopDeploy, { reportFailure: false });
+  const last = status.data?.target ?? null;
+  const [where, setWhere] = useState<Where>(last?.host == null ? "here" : "server");
+  const [host, setHost] = useState(last?.host ?? "");
+  const [publicUrl, setPublicUrl] = useState(last?.publicUrl ?? "");
+  const [working, setWorking] = useState<"deploy" | "stop" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const trimmedHost = host.trim();
+  const trimmedUrl = publicUrl.trim();
+  const problem =
+    where === "server" && !HOST.test(trimmedHost)
+      ? "Name the server as user@host, the way ssh reaches it."
+      : trimmedUrl.length > 0 && !URL.test(trimmedUrl)
+        ? "The public address starts with http:// or https://."
+        : null;
+  const current = status.data;
+  const busy = working !== null || current?.state === "deploying";
+
+  const run = async (action: "deploy" | "stop") => {
+    setWorking(action);
+    setError(null);
+    const result =
+      action === "deploy"
+        ? await deploy({
+            environmentId: props.environmentId,
+            input: {
+              projectId: props.app.projectId,
+              target: {
+                host: where === "server" ? trimmedHost : null,
+                publicUrl: trimmedUrl.length > 0 ? trimmedUrl : null,
+              },
+            },
+          })
+        : await stopDeploy(target);
+    setWorking(null);
+    if (result._tag === "Failure") {
+      const failure = squashAtomCommandFailure(result);
+      setError(failure instanceof Error ? failure.message : "That did not work.");
+    }
+    status.refresh();
+  };
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>Deploy {props.app.name}</DialogTitle>
+        <DialogDescription>
+          Builds the production version and runs it with a database of its own, after applying the
+          migrations. The app you are building, and its data, are not touched.
+        </DialogDescription>
+      </DialogHeader>
+      <DialogPanel>
+        <div className="flex flex-col gap-4">
+          {current === null || current === undefined ? null : (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 px-3 py-2.5 text-sm">
+              <span className="flex min-w-0 items-center gap-2 text-foreground">
+                {current.state === "deploying" ? <Spinner className="size-4 shrink-0" /> : null}
+                <span className="min-w-0">{statusLine(current)}</span>
+              </span>
+              {current.url !== null && current.state === "running" ? (
+                <a
+                  className="flex shrink-0 items-center gap-1 text-primary text-sm hover:underline"
+                  href={current.url}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  {current.url.replace(/^https?:\/\//, "")}
+                  <ExternalLinkIcon aria-hidden="true" className="size-3.5" />
+                </a>
+              ) : null}
+            </div>
+          )}
+          {current?.state === "failed" && current.message !== null ? (
+            <Alert variant="error">
+              <AlertDescription>
+                <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-xs">
+                  {current.message}
+                </pre>
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          {error === null ? null : (
+            <Alert variant="error">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          <ToggleGroup
+            aria-label="Where to deploy"
+            disabled={busy}
+            value={[where]}
+            onValueChange={(next) => {
+              const value = next[0];
+              if (value === "here" || value === "server") setWhere(value);
+            }}
+          >
+            <Toggle value="here">This machine</Toggle>
+            <Toggle value="server">
+              <ServerIcon />A server
+            </Toggle>
+          </ToggleGroup>
+          {where === "server" ? (
+            <div className="flex flex-col gap-2">
+              <Input
+                aria-label="Server"
+                autoComplete="off"
+                disabled={busy}
+                placeholder="deploy@example.com"
+                spellCheck={false}
+                value={host}
+                onChange={(event) => setHost(event.target.value)}
+              />
+              <p className="text-muted-foreground text-xs">
+                Ozone runs Docker on it over SSH, with the keys this machine already uses for it.
+              </p>
+            </div>
+          ) : null}
+          <div className="flex flex-col gap-2">
+            <Input
+              aria-label="Public address"
+              autoComplete="off"
+              disabled={busy}
+              placeholder={
+                where === "server"
+                  ? `Public address, such as https://${props.app.slug}.example.com`
+                  : "Public address, if a proxy serves it under one"
+              }
+              spellCheck={false}
+              value={publicUrl}
+              onChange={(event) => setPublicUrl(event.target.value)}
+            />
+            {problem === null ? null : (
+              <p className="text-destructive-foreground text-xs">{problem}</p>
+            )}
+          </div>
+        </div>
+      </DialogPanel>
+      <DialogFooter>
+        {current?.state === "running" ? (
+          <Button disabled={busy} variant="outline" onClick={() => void run("stop")}>
+            {working === "stop" ? <Spinner /> : <SquareIcon />}
+            Stop
+          </Button>
+        ) : null}
+        <Button disabled={busy || problem !== null} onClick={() => void run("deploy")}>
+          {working === "deploy" || current?.state === "deploying" ? <Spinner /> : <RocketIcon />}
+          {current === null || current === undefined || current.state === "none"
+            ? "Deploy"
+            : "Deploy again"}
+        </Button>
+      </DialogFooter>
+    </>
+  );
+}

@@ -7,6 +7,7 @@ import {
   type OzoneBuildApproveInput,
   type OzoneDataRestoreInput,
   type OzoneDataSnapshotInput,
+  type OzoneDeployRunInput,
   type OzoneEnvRemoveInput,
   type OzoneEnvSetInput,
   type OzoneHistoryRestoreInput,
@@ -26,6 +27,7 @@ import * as BuildModel from "./builds/BuildModel.ts";
 import * as BuildReview from "./builds/BuildReview.ts";
 import * as BuildStore from "./builds/BuildStore.ts";
 import * as AppData from "./data/AppData.ts";
+import * as AppDeploy from "./deploy/AppDeploy.ts";
 import * as AppEnv from "./env/AppEnv.ts";
 import * as AppHistory from "./history/AppHistory.ts";
 import * as AppRuntime from "./runtime/AppRuntime.ts";
@@ -38,6 +40,7 @@ const make = Effect.gen(function* () {
   const review = yield* BuildReview.BuildReview;
   const history = yield* AppHistory.AppHistory;
   const env = yield* AppEnv.AppEnv;
+  const deploys = yield* AppDeploy.AppDeploy;
   const buildSnapshot = (build: OzoneBuild | null) => ({
     build,
     status: build === null ? ("planning" as const) : BuildModel.statusOf(build),
@@ -67,6 +70,11 @@ const make = Effect.gen(function* () {
       env.list(input.projectId),
     [OZONE_WS_METHODS.envSet]: (input: OzoneEnvSetInput) => env.set(input),
     [OZONE_WS_METHODS.envRemove]: (input: OzoneEnvRemoveInput) => env.remove(input),
+    [OZONE_WS_METHODS.deployStatus]: (input: { readonly projectId: ProjectId }) =>
+      deploys.status(input.projectId),
+    [OZONE_WS_METHODS.deployRun]: (input: OzoneDeployRunInput) => deploys.deploy(input),
+    [OZONE_WS_METHODS.deployStop]: (input: { readonly projectId: ProjectId }) =>
+      deploys.stop(input.projectId),
   };
 });
 
@@ -99,6 +107,9 @@ export class OzoneWsHandlers extends Context.Reference<Effect.Success<typeof mak
       [OZONE_WS_METHODS.envList]: () => notProvided,
       [OZONE_WS_METHODS.envSet]: () => notProvided,
       [OZONE_WS_METHODS.envRemove]: () => notProvided,
+      [OZONE_WS_METHODS.deployStatus]: () => notProvided,
+      [OZONE_WS_METHODS.deployRun]: () => notProvided,
+      [OZONE_WS_METHODS.deployStop]: () => notProvided,
     }),
   },
 ) {}

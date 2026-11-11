@@ -13,6 +13,7 @@ import {
   HistoryIcon,
   KeyRoundIcon,
   ListChecksIcon,
+  RocketIcon,
   RotateCwIcon,
   ScrollTextIcon,
   SquareIcon,
@@ -29,12 +30,13 @@ import { useAtomCommand } from "~/state/use-atom-command";
 
 import { AppBuildSettingsDialog } from "./AppBuildSettingsDialog";
 import { AppDataDialog } from "./AppDataDialog";
+import { AppDeployDialog } from "./AppDeployDialog";
 import { AppEnvDialog } from "./AppEnvDialog";
 import { AppHistoryDialog } from "./AppHistoryDialog";
 import { AppLogsDialog } from "./AppLogsDialog";
 import { ozoneEnvironment } from "./state";
 
-type AppDialog = "logs" | "data" | "history" | "env" | "build";
+type AppDialog = "logs" | "data" | "history" | "env" | "build" | "deploy";
 
 /** Everything a person can do to an app besides opening it: its containers, its data, its end. */
 export function AppMenu(props: {
@@ -133,6 +135,10 @@ export function AppMenu(props: {
             <ListChecksIcon />
             Build settings
           </MenuItem>
+          <MenuItem onClick={() => setDialog("deploy")}>
+            <RocketIcon />
+            Deploy
+          </MenuItem>
           <MenuSeparator />
           <MenuItem disabled={phase === "unavailable"} onClick={() => void remove()}>
             <Trash2Icon />
@@ -162,6 +168,12 @@ export function AppMenu(props: {
         app={app}
         environmentId={environmentId}
         open={dialog === "env"}
+        onOpenChange={closeDialog}
+      />
+      <AppDeployDialog
+        app={app}
+        environmentId={environmentId}
+        open={dialog === "deploy"}
         onOpenChange={closeDialog}
       />
       <AppBuildSettingsDialog

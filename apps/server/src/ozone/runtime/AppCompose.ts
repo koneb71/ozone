@@ -11,6 +11,7 @@ import * as ServerConfig from "../../config.ts";
 import type { ResolvedApp } from "../apps/AppRegistry.ts";
 import { composeValue, ENV_FILE_MODE, envFilePath, readEnvFile } from "../env/envFile.ts";
 import * as DockerCli from "./DockerCli.ts";
+import { hostCaPath } from "./hostCa.ts";
 
 export interface ComposeOptions {
   readonly timeout?: Duration.Input;
@@ -73,14 +74,6 @@ const make = Effect.gen(function* () {
   const config = yield* ServerConfig.ServerConfig;
   const hostEnvironment = yield* HostProcess.Environment;
 
-  /** The CA bundle the host trusts beyond the public roots, if it has one. */
-  const hostCaPath = Effect.gen(function* () {
-    const candidate = hostEnvironment.NODE_EXTRA_CA_CERTS ?? hostEnvironment.SSL_CERT_FILE;
-    if (candidate === undefined || candidate.trim().length === 0) return null;
-    const exists = yield* fs.exists(candidate).pipe(Effect.orElseSucceed(() => false));
-    return exists ? candidate : null;
-  });
-
   const projectArgs = Effect.fn("AppCompose.projectArgs")(function* (app: ResolvedApp) {
     const base = [
       "compose",
@@ -90,7 +83,7 @@ const make = Effect.gen(function* () {
       path.join(app.workspaceRoot, app.manifest.runtime.file),
     ];
     const override = composeOverride(app.manifest.runtime.appService, {
-      hostCaPath: yield* hostCaPath,
+      hostCaPath: yield* hostCaPath(hostEnvironment, fs),
       variables: yield* readEnvFile(fs, envFilePath(path, config.stateDir, app.app.slug)),
     });
     if (override === null) return base;
