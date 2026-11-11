@@ -14,6 +14,8 @@ import * as DockerCli from "./DockerCli.ts";
 export interface ComposeOptions {
   readonly timeout?: Duration.Input;
   readonly maxOutputBytes?: number;
+  /** Set only by the user-confirmed "Delete app" flow, after its snapshot. */
+  readonly allowDataRemoval?: true;
 }
 
 /** Runs a Docker Compose command against one app's project, wherever Ozone needs one. */
@@ -97,6 +99,7 @@ const make = Effect.gen(function* () {
           ...(options?.maxOutputBytes === undefined
             ? {}
             : { maxOutputBytes: options.maxOutputBytes }),
+          ...(options?.allowDataRemoval === true ? { allowDataRemoval: true as const } : {}),
         })
         .pipe(
           Effect.mapError(

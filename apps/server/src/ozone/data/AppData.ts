@@ -44,6 +44,13 @@ export class AppData extends Context.Service<
     readonly restore: (
       input: OzoneDataRestoreInput,
     ) => Effect.Effect<OzoneDataRestoreResult, OzoneAppError>;
+    /**
+     * Removes the app's containers and volumes, after a snapshot that is kept. The only caller is
+     * the "Delete app" flow a person confirmed.
+     */
+    readonly remove: (
+      projectId: ProjectId,
+    ) => Effect.Effect<{ readonly snapshot: OzoneSnapshot }, OzoneAppError>;
   }
 >()("t3/ozone/data/AppData") {}
 
@@ -323,6 +330,26 @@ export const make = Effect.gen(function* () {
           });
           yield* restoreStored(app, stored);
           return { safety };
+        }),
+      );
+    }),
+    remove: Effect.fn("AppData.remove")(function* (projectId) {
+      const app = yield* registry.resolve(projectId);
+      return yield* working.withPermits(1)(
+        Effect.gen(function* () {
+          // First, and nothing is removed unless it worked.
+          const snapshot = yield* takeSnapshot(app, { projectId, reason: "before-delete" });
+          const output = yield* compose.run(app, ["down", "--volumes", "--remove-orphans"], {
+            timeout: DUMP_TIMEOUT,
+            allowDataRemoval: true,
+          });
+          if (output.code !== 0) {
+            const detail = (output.stderr.trim() || output.stdout.trim()).slice(-600);
+            return yield* failed(
+              `The data is saved as snapshot ${snapshot.id}, but the containers could not be removed. ${detail}`.trim(),
+            );
+          }
+          return { snapshot };
         }),
       );
     }),

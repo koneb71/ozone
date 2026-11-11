@@ -108,7 +108,11 @@ export function useOzoneLaunch() {
     return null;
   };
 
-  const build = async (environmentId: EnvironmentId, prompt: string): Promise<LaunchOutcome> => {
+  const build = async (
+    environmentId: EnvironmentId,
+    prompt: string,
+    files: ReadonlyArray<File> = [],
+  ): Promise<LaunchOutcome> => {
     const created = await createApp({
       environmentId,
       input: { name: appNameFromPrompt(prompt) },
@@ -123,7 +127,12 @@ export function useOzoneLaunch() {
     );
     if (!arrived)
       return "The app was created, but it has not reached this window. Reload to see it.";
-    return startThread(environmentId, projectId, prompt);
+    if (files.length === 0) return startThread(environmentId, projectId, prompt);
+    // The composer prepares attachments, so the request waits in it for the person to send.
+    const draft = await handleNewThread(scopeProjectRef(environmentId, projectId), { prompt });
+    if (draft === null) return "The app was created. Open it from the list to start its build.";
+    queueHomeFiles(scopeThreadRef(environmentId, draft.threadId), files, { startsBuild: true });
+    return null;
   };
 
   const chat = async (environmentId: EnvironmentId, prompt: string): Promise<LaunchOutcome> => {

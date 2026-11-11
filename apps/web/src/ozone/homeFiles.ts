@@ -7,6 +7,8 @@ import { useComposerHandleContext } from "~/composerHandleContext";
 interface HomeFiles {
   readonly threadRef: ScopedThreadRef;
   readonly files: ReadonlyArray<File>;
+  /** A build waits for the person to send: the files are staged, not sent. */
+  readonly startsBuild: boolean;
 }
 
 /**
@@ -14,18 +16,36 @@ interface HomeFiles {
  * composer owns attachment intake (conversion, compression, upload), so Home hands files over
  * instead of preparing them a second way.
  */
-const useHomeFilesStore = create<{ readonly waiting: HomeFiles | null }>()(() => ({
+const useHomeFilesStore = create<{
+  readonly waiting: HomeFiles | null;
+  /** The thread whose composer holds a build request that has not been sent yet. */
+  readonly buildStagedIn: ScopedThreadRef | null;
+}>()(() => ({
   waiting: null,
+  buildStagedIn: null,
 }));
 
-const isFor = (waiting: HomeFiles | null, threadRef: ScopedThreadRef | null) =>
-  waiting !== null &&
-  threadRef !== null &&
-  waiting.threadRef.environmentId === threadRef.environmentId &&
-  waiting.threadRef.threadId === threadRef.threadId;
+const sameThread = (left: ScopedThreadRef | null, right: ScopedThreadRef | null) =>
+  left !== null &&
+  right !== null &&
+  left.environmentId === right.environmentId &&
+  left.threadId === right.threadId;
 
-export const queueHomeFiles = (threadRef: ScopedThreadRef, files: ReadonlyArray<File>) =>
-  useHomeFilesStore.setState({ waiting: { threadRef, files } });
+const isFor = (waiting: HomeFiles | null, threadRef: ScopedThreadRef | null) =>
+  waiting !== null && sameThread(waiting.threadRef, threadRef);
+
+export const queueHomeFiles = (
+  threadRef: ScopedThreadRef,
+  files: ReadonlyArray<File>,
+  options?: { readonly startsBuild?: boolean },
+) =>
+  useHomeFilesStore.setState({
+    waiting: { threadRef, files, startsBuild: options?.startsBuild === true },
+  });
+
+/** True while `threadRef`'s composer holds a build request from Home that was not sent yet. */
+export const useBuildStagedIn = (threadRef: ScopedThreadRef | null) =>
+  useHomeFilesStore((state) => sameThread(state.buildStagedIn, threadRef));
 
 /** Gives the composer of `threadRef` the files Home queued for it, once. */
 export function useHomeFilesDelivery(threadRef: ScopedThreadRef | null) {
@@ -39,7 +59,10 @@ export function useHomeFilesDelivery(threadRef: ScopedThreadRef | null) {
       const composer = composerRef.current;
       const { waiting } = useHomeFilesStore.getState();
       if (composer === null || waiting === null || !isFor(waiting, threadRef)) return;
-      useHomeFilesStore.setState({ waiting: null });
+      useHomeFilesStore.setState({
+        waiting: null,
+        buildStagedIn: waiting.startsBuild ? waiting.threadRef : null,
+      });
       composer.addDroppedFiles([...waiting.files]);
     };
     // A parent's effect can run before the composer below it has published its handle.

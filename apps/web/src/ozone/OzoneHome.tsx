@@ -1,7 +1,14 @@
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentId, OzoneApp, ThreadId } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowUpIcon, BoxIcon, HammerIcon, MessageCircleIcon, PaperclipIcon } from "lucide-react";
+import {
+  ArrowUpIcon,
+  BoxIcon,
+  HammerIcon,
+  MessageCircleIcon,
+  PaperclipIcon,
+  XIcon,
+} from "lucide-react";
 import { type DragEvent, type KeyboardEvent, useRef, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
@@ -31,7 +38,8 @@ type HomeMode = "build" | "chat";
 const MODE_COPY = {
   build: {
     title: "What do you want to build?",
-    description: "Describe an app. Ozone builds it, runs it in Docker and keeps its data safe.",
+    description:
+      "Describe an app, or attach a sketch of it. Ozone builds it, runs it and keeps its data safe.",
     placeholder: "A habit tracker with streaks and a weekly chart",
     action: "Build the app",
   },
@@ -43,8 +51,6 @@ const MODE_COPY = {
   },
 } as const;
 
-const BUILD_FILES_HINT = "Files go in the app's thread. Start the build, then attach them there.";
-
 const carriesFiles = (event: DragEvent) => event.dataTransfer.types.includes("Files");
 
 export function OzoneHome() {
@@ -55,7 +61,8 @@ export function OzoneHome() {
   const [prompt, setPrompt] = useState("");
   const [launching, setLaunching] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hint, setHint] = useState<string | null>(null);
+  // A build has nowhere to put files until its app exists, so they wait here until then.
+  const [files, setFiles] = useState<ReadonlyArray<File>>([]);
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const apps = useEnvironmentQuery(
@@ -71,25 +78,33 @@ export function OzoneHome() {
     if (!canSubmit || environmentId === null) return;
     setLaunching(true);
     setError(null);
-    setHint(null);
+    const text = prompt.trim();
     const outcome =
       mode === "build"
-        ? await launch.build(environmentId, prompt.trim())
-        : await launch.chat(environmentId, prompt.trim());
+        ? await launch.build(environmentId, text, files)
+        : files.length > 0
+          ? await launch.chatWithFiles(environmentId, text, files)
+          : await launch.chat(environmentId, text);
     setLaunching(false);
     if (outcome !== null) setError(outcome);
   };
 
-  // The chat's own composer prepares attachments, so files open it with the text typed so far.
-  const takeFiles = async (files: ReadonlyArray<File>) => {
-    if (files.length === 0 || environmentId === null || launching) return;
+  // The thread's own composer prepares attachments. A chat opens it at once with the text typed
+  // so far; a build opens it once its app exists.
+  const takeFiles = async (added: ReadonlyArray<File>) => {
+    if (added.length === 0 || environmentId === null || launching) return;
     setError(null);
     if (mode === "build") {
-      setHint(BUILD_FILES_HINT);
+      setFiles((current) => [
+        ...current,
+        ...added.filter(
+          (file) => !current.some((kept) => kept.name === file.name && kept.size === file.size),
+        ),
+      ]);
       return;
     }
     setLaunching(true);
-    const outcome = await launch.chatWithFiles(environmentId, prompt.trim(), files);
+    const outcome = await launch.chatWithFiles(environmentId, prompt.trim(), [...files, ...added]);
     setLaunching(false);
     if (outcome !== null) setError(outcome);
   };
@@ -112,7 +127,7 @@ export function OzoneHome() {
         onDragOver={(event) => {
           if (!carriesFiles(event)) return;
           event.preventDefault();
-          setDragging(mode === "chat");
+          setDragging(true);
         }}
         onDragLeave={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
@@ -161,6 +176,28 @@ export function OzoneHome() {
                 void takeFiles(files);
               }}
             />
+            {files.length === 0 ? null : (
+              <ul aria-label="Attached files" className="flex flex-wrap gap-1.5 px-1">
+                {files.map((file) => (
+                  <li
+                    key={`${file.name}:${file.size}`}
+                    className="flex max-w-full items-center gap-1 rounded-md border border-border bg-muted py-0.5 pr-0.5 pl-2 text-muted-foreground text-xs"
+                  >
+                    <span className="truncate">{file.name}</span>
+                    <Button
+                      aria-label={`Remove ${file.name}`}
+                      disabled={launching}
+                      size="icon-micro"
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setFiles((current) => current.filter((kept) => kept !== file))}
+                    >
+                      <XIcon />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
             <div className="flex items-center justify-between gap-2">
               <ToggleGroup
                 aria-label="What to start"
@@ -170,7 +207,6 @@ export function OzoneHome() {
                   const value = next[0];
                   if (value === "build" || value === "chat") setMode(value);
                   setError(null);
-                  setHint(null);
                 }}
               >
                 <Toggle value="build">
@@ -183,42 +219,33 @@ export function OzoneHome() {
                 </Toggle>
               </ToggleGroup>
               <div className="flex items-center gap-1">
-                {mode === "chat" ? (
-                  <>
-                    <input
-                      ref={fileInput}
-                      type="file"
-                      multiple
-                      className="hidden"
-                      onChange={(event) => {
-                        const files = Array.from(event.currentTarget.files ?? []);
-                        event.currentTarget.value = "";
-                        void takeFiles(files);
-                      }}
-                    />
-                    <Button
-                      aria-label="Attach files"
-                      disabled={launching || environmentId === null}
-                      size="icon"
-                      type="button"
-                      variant="ghost"
-                      onClick={() => fileInput.current?.click()}
-                    >
-                      <PaperclipIcon />
-                    </Button>
-                  </>
-                ) : null}
+                <input
+                  ref={fileInput}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(event) => {
+                    const picked = Array.from(event.currentTarget.files ?? []);
+                    event.currentTarget.value = "";
+                    void takeFiles(picked);
+                  }}
+                />
+                <Button
+                  aria-label="Attach files"
+                  disabled={launching || environmentId === null}
+                  size="icon"
+                  type="button"
+                  variant="ghost"
+                  onClick={() => fileInput.current?.click()}
+                >
+                  <PaperclipIcon />
+                </Button>
                 <Button aria-label={copy.action} disabled={!canSubmit} size="icon" type="submit">
                   {launching ? <Spinner /> : <ArrowUpIcon />}
                 </Button>
               </div>
             </div>
           </form>
-          {hint === null ? null : (
-            <p className="text-center text-muted-foreground text-sm" role="status">
-              {hint}
-            </p>
-          )}
 
           {dockerMissing ? (
             <Alert variant="warning">

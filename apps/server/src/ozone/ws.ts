@@ -1,6 +1,7 @@
 import {
   OZONE_WS_METHODS,
   type OzoneAppCreateInput,
+  type OzoneAppDeleteInput,
   type OzoneBuild,
   type OzoneDataRestoreInput,
   type OzoneDataSnapshotInput,
@@ -33,6 +34,7 @@ const make = Effect.gen(function* () {
   return {
     [OZONE_WS_METHODS.appsList]: () => apps.list,
     [OZONE_WS_METHODS.appsCreate]: (input: OzoneAppCreateInput) => apps.create(input),
+    [OZONE_WS_METHODS.appsDelete]: (input: OzoneAppDeleteInput) => apps.remove(input),
     [OZONE_WS_METHODS.runtimeAct]: (input: OzoneRuntimeActInput) => runtime.act(input),
     [OZONE_WS_METHODS.runtimeLogs]: (input: OzoneRuntimeLogsInput) => runtime.logs(input),
     [OZONE_WS_METHODS.runtimeSubscribe]: (input: OzoneRuntimeSubscribeInput) =>
@@ -61,6 +63,7 @@ export class OzoneWsHandlers extends Context.Reference<Effect.Success<typeof mak
     defaultValue: () => ({
       [OZONE_WS_METHODS.appsList]: () => notProvided,
       [OZONE_WS_METHODS.appsCreate]: () => notProvided,
+      [OZONE_WS_METHODS.appsDelete]: () => notProvided,
       [OZONE_WS_METHODS.runtimeAct]: () => notProvided,
       [OZONE_WS_METHODS.runtimeLogs]: () => notProvided,
       [OZONE_WS_METHODS.runtimeSubscribe]: () => Stream.fromEffect(notProvided),

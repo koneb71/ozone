@@ -1,7 +1,13 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import { OzoneAppManifest, ProjectId, type OzoneApp } from "@t3tools/contracts";
+import {
+  OzoneAppError,
+  OzoneAppManifest,
+  ProjectId,
+  type OzoneApp,
+  type OzoneSnapshot,
+} from "@t3tools/contracts";
 import * as NetService from "@t3tools/shared/Net";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -13,13 +19,25 @@ import * as Schema from "effect/Schema";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
 import * as ManagedProjectFolders from "../../project/ManagedProjectFolders.ts";
+import * as ProjectService from "../../project/ProjectService.ts";
 import * as GitVcsDriver from "../../vcs/GitVcsDriver.ts";
+import * as AppData from "../data/AppData.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
 import { OZONE_APP_INSTRUCTIONS } from "./appInstructions.ts";
 import * as AppRegistry from "./AppRegistry.ts";
 import * as OzoneApps from "./OzoneApps.ts";
 
 const decodeManifest = Schema.decodeUnknownEffect(Schema.fromJsonString(OzoneAppManifest));
+
+const lastSnapshot: OzoneSnapshot = {
+  id: "20260101T000000000Z-a1b2c3d4",
+  projectId: ProjectId.make("a1b2c3-project-1"),
+  createdAt: "2026-01-01T00:00:00.000Z",
+  reason: "before-delete",
+  label: null,
+  commitSha: null,
+  sizeBytes: 1,
+};
 
 const makeHarness = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -29,6 +47,9 @@ const makeHarness = Effect.gen(function* () {
   const created = yield* Ref.make(0);
   const commits = yield* Ref.make<ReadonlyArray<ReadonlyArray<string>>>([]);
   const started = yield* Queue.unbounded<ProjectId>();
+  const removal = yield* Ref.make<ReadonlyArray<string>>([]);
+  const backupFails = yield* Ref.make(false);
+  const record = (step: string) => Ref.update(removal, (all) => [...all, step]);
 
   const apps = yield* OzoneApps.make.pipe(
     Effect.provide(
@@ -36,6 +57,28 @@ const makeHarness = Effect.gen(function* () {
         Layer.mock(AppRegistry.AppRegistry)({
           list: Ref.get(registered),
           register: (app) => Ref.update(registered, (all) => [...all, app]),
+          resolve: (projectId) =>
+            Effect.succeed({
+              app: { ...lastSnapshot, projectId } as never,
+              workspaceRoot: path.join(root, "habits"),
+              manifest: {} as never,
+            }),
+          unregister: () => record("forget the app"),
+        }),
+        Layer.mock(AppData.AppData)({
+          remove: Effect.fn("TestData.remove")(function* () {
+            if (yield* Ref.get(backupFails)) {
+              return yield* new OzoneAppError({ reason: "failed", message: "Could not dump." });
+            }
+            yield* record("snapshot, then remove containers and volumes");
+            return { snapshot: lastSnapshot };
+          }),
+        }),
+        Layer.mock(ProjectService.ProjectService)({
+          delete: (input) =>
+            record(`delete the project${input.force === true ? " and its threads" : ""}`).pipe(
+              Effect.as({} as never),
+            ),
         }),
         Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
           namedProjectsRoot: root,
@@ -68,7 +111,7 @@ const makeHarness = Effect.gen(function* () {
       ),
     ),
   );
-  return { apps, root, registered, created, commits, started, fs, path };
+  return { apps, root, registered, created, commits, started, fs, path, removal, backupFails };
 });
 
 it.effect("OzoneApps creates an app from the template, registers it and starts it", () =>
@@ -145,5 +188,30 @@ it.effect("OzoneApps refuses an unknown template before creating anything", () =
     const error = yield* Effect.flip(apps.create({ name: "Habits", templateId: "mobile-app" }));
     assert.strictEqual(error.reason, "unknown_template");
     assert.strictEqual(yield* Ref.get(created), 0);
+  }).pipe(Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer))),
+);
+
+it.effect("OzoneApps deletes an app's data behind a snapshot, then forgets the app", () =>
+  Effect.gen(function* () {
+    const { apps, removal, backupFails, root, path } = yield* makeHarness;
+    const projectId = ProjectId.make("a1b2c3-project-1");
+
+    // Nothing is forgotten while the data could not be saved.
+    yield* Ref.set(backupFails, true);
+    const error = yield* Effect.flip(apps.remove({ projectId }));
+    assert.strictEqual(error.message, "Could not dump.");
+    assert.deepStrictEqual(yield* Ref.get(removal), []);
+
+    yield* Ref.set(backupFails, false);
+    const removed = yield* apps.remove({ projectId });
+    assert.deepStrictEqual(yield* Ref.get(removal), [
+      "snapshot, then remove containers and volumes",
+      "forget the app",
+      "delete the project and its threads",
+    ]);
+    assert.deepStrictEqual(removed, {
+      snapshot: lastSnapshot,
+      workspaceRoot: path.join(root, "habits"),
+    });
   }).pipe(Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer))),
 );

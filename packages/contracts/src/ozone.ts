@@ -102,6 +102,9 @@ export const OzoneAppCreateResult = Schema.Struct({
 });
 export type OzoneAppCreateResult = typeof OzoneAppCreateResult.Type;
 
+export const OzoneAppDeleteInput = Schema.Struct({ projectId: ProjectId });
+export type OzoneAppDeleteInput = typeof OzoneAppDeleteInput.Type;
+
 export class OzoneAppError extends Schema.TaggedError<OzoneAppError>()("OzoneAppError", {
   /** Clients branch on the named reasons and show the message for `failed`. */
   reason: Schema.Literals([
@@ -188,6 +191,13 @@ export const OzoneSnapshot = Schema.Struct({
 });
 export type OzoneSnapshot = typeof OzoneSnapshot.Type;
 
+/** What is left after an app is deleted: its last snapshot and its folder. */
+export const OzoneAppDeleteResult = Schema.Struct({
+  snapshot: OzoneSnapshot,
+  workspaceRoot: Schema.String,
+});
+export type OzoneAppDeleteResult = typeof OzoneAppDeleteResult.Type;
+
 export const OzoneDataListInput = Schema.Struct({ projectId: ProjectId });
 export const OzoneDataListResult = Schema.Struct({ snapshots: Schema.Array(OzoneSnapshot) });
 export type OzoneDataListResult = typeof OzoneDataListResult.Type;
@@ -210,6 +220,7 @@ export type OzoneDataRestoreResult = typeof OzoneDataRestoreResult.Type;
 export const OZONE_WS_METHODS = {
   appsList: "ozone.apps.list",
   appsCreate: "ozone.apps.create",
+  appsDelete: "ozone.apps.delete",
   runtimeAct: "ozone.runtime.act",
   runtimeLogs: "ozone.runtime.logs",
   runtimeSubscribe: "ozone.runtime.subscribe",
@@ -230,6 +241,8 @@ export type OzoneSubscriptionMethod =
 export const OZONE_RPC_SCOPES = {
   [OZONE_WS_METHODS.appsList]: AuthOrchestrationReadScope,
   [OZONE_WS_METHODS.appsCreate]: AuthOrchestrationOperateScope,
+  // Removes the app's containers and data, behind a snapshot.
+  [OZONE_WS_METHODS.appsDelete]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.runtimeAct]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.runtimeLogs]: AuthOrchestrationReadScope,
   [OZONE_WS_METHODS.runtimeSubscribe]: AuthOrchestrationReadScope,
@@ -257,6 +270,11 @@ export const OzoneWsRpcs = [
   Rpc.make(OZONE_WS_METHODS.appsCreate, {
     payload: OzoneAppCreateInput,
     success: OzoneAppCreateResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.appsDelete, {
+    payload: OzoneAppDeleteInput,
+    success: OzoneAppDeleteResult,
     error: OzoneRpcError,
   }),
   Rpc.make(OZONE_WS_METHODS.runtimeAct, {

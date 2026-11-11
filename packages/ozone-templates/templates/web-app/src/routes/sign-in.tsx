@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { type SubmitEvent, useState } from "react";
+import { createServerFn } from "@tanstack/react-start";
+import { type SubmitEvent, useEffect, useState } from "react";
 import { z } from "zod";
 import { CenteredPage } from "@/components/centered-page";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { demoAccount } from "@/lib/demo";
 import { site } from "@/lib/site";
 
 const signInSchema = z.object({
@@ -21,16 +23,61 @@ const signInSchema = z.object({
   password: z.string().min(1, "Enter your password."),
 });
 
+const getDemoMode = createServerFn({ method: "GET" }).handler(
+  () => process.env.OZONE_DEMO_ACCOUNT === "1",
+);
+
+/** Set once a browser has been signed in by itself, so signing out still works. */
+const DEMO_USED_KEY = "demo-account-used";
+
+/** Signs in as the demo account, creating it the first time. Returns what went wrong, if anything. */
+async function signInWithDemo() {
+  const signedIn = await authClient.signIn.email({
+    email: demoAccount.email,
+    password: demoAccount.password,
+  });
+  if (!signedIn.error) {
+    return null;
+  }
+  const signedUp = await authClient.signUp.email(demoAccount);
+  return signedUp.error ? (signedUp.error.message ?? "Could not use the demo account.") : null;
+}
+
 export const Route = createFileRoute("/sign-in")({
   head: () => ({ meta: [{ title: `Sign in · ${site.name}` }] }),
+  loader: async () => ({ demo: await getDemoMode() }),
   component: SignIn,
 });
 
 function SignIn() {
   const navigate = useNavigate();
-  const { data: session } = authClient.useSession();
+  const { demo } = Route.useLoaderData();
+  const { data: session, isPending: sessionPending } = authClient.useSession();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+
+  // In development the preview should open on the app, not on this form.
+  useEffect(() => {
+    if (!demo || sessionPending || session || localStorage.getItem(DEMO_USED_KEY) !== null) {
+      return;
+    }
+    localStorage.setItem(DEMO_USED_KEY, "1");
+    void signInWithDemo().then((problem) =>
+      problem === null ? navigate({ to: "/" }) : setError(problem),
+    );
+  }, [demo, sessionPending, session, navigate]);
+
+  async function continueWithDemo() {
+    setError(null);
+    setPending(true);
+    const problem = await signInWithDemo();
+    setPending(false);
+    if (problem !== null) {
+      setError(problem);
+      return;
+    }
+    await navigate({ to: "/" });
+  }
 
   async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -106,6 +153,11 @@ function SignIn() {
             <Button type="submit" disabled={pending}>
               {pending ? "Signing in..." : "Sign in"}
             </Button>
+            {demo && (
+              <Button type="button" variant="outline" disabled={pending} onClick={continueWithDemo}>
+                Continue with the demo account
+              </Button>
+            )}
           </form>
         </CardContent>
         <CardFooter className="justify-center gap-1 text-sm text-muted-foreground">

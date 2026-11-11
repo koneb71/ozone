@@ -21,6 +21,10 @@ export function createOzoneEnvironmentAtoms<R, E>(
       label: "environment-data:ozone:create-app",
       tag: OZONE_WS_METHODS.appsCreate,
     }),
+    deleteApp: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:delete-app",
+      tag: OZONE_WS_METHODS.appsDelete,
+    }),
     runtimeStatus: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
       label: "environment-data:ozone:runtime-status",
       tag: OZONE_WS_METHODS.runtimeSubscribe,

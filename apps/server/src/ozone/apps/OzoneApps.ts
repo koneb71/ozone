@@ -1,8 +1,11 @@
 import {
+  CommandId,
   OzoneAppError,
   type OzoneApp,
   type OzoneAppCreateInput,
   type OzoneAppCreateResult,
+  type OzoneAppDeleteInput,
+  type OzoneAppDeleteResult,
   type OzoneAppsListResult,
 } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
@@ -19,7 +22,9 @@ import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 
 import * as ManagedProjectFolders from "../../project/ManagedProjectFolders.ts";
+import * as ProjectService from "../../project/ProjectService.ts";
 import * as GitVcsDriver from "../../vcs/GitVcsDriver.ts";
+import * as AppData from "../data/AppData.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
 import * as AppRegistry from "./AppRegistry.ts";
 import { appSlug, safeAppName, scaffold } from "./AppScaffolder.ts";
@@ -33,6 +38,13 @@ export class OzoneApps extends Context.Service<
     readonly create: (
       input: OzoneAppCreateInput,
     ) => Effect.Effect<OzoneAppCreateResult, OzoneAppError>;
+    /**
+     * Removes the app's containers, its data and its project. A snapshot is taken first and kept,
+     * and the folder stays on disk. Only a person may ask for this.
+     */
+    readonly remove: (
+      input: OzoneAppDeleteInput,
+    ) => Effect.Effect<OzoneAppDeleteResult, OzoneAppError>;
   }
 >()("t3/ozone/apps/OzoneApps") {}
 
@@ -51,6 +63,8 @@ export const make = Effect.gen(function* () {
   const path = yield* Path.Path;
   const random = yield* SecureRandom.SecureRandom;
   const runtime = yield* AppRuntime.AppRuntime;
+  const data = yield* AppData.AppData;
+  const projects = yield* ProjectService.ProjectService;
   const hostUserId = yield* HostProcess.UserId;
   const scope = yield* Scope.Scope;
   // One at a time, so two new apps can never be given the same port.
@@ -155,6 +169,26 @@ export const make = Effect.gen(function* () {
       };
     }),
     create: Effect.fn("OzoneApps.create")((input) => creating.withPermits(1)(createOne(input))),
+    remove: Effect.fn("OzoneApps.remove")(function* (input) {
+      const { workspaceRoot } = yield* registry.resolve(input.projectId);
+      const { snapshot } = yield* data.remove(input.projectId);
+      yield* registry.unregister(input.projectId);
+      // The data is gone by now, so a project that cannot be removed is said, not undone.
+      yield* projects
+        .delete({
+          commandId: CommandId.make(`ozone-app-delete:${input.projectId}`),
+          projectId: input.projectId,
+          force: true,
+        })
+        .pipe(
+          Effect.mapError((error) =>
+            failed(
+              `The app's containers and data are removed, and snapshot ${snapshot.id} is kept. Its project could not be removed: ${error.message} Delete the project from its own menu.`,
+            ),
+          ),
+        );
+      return { snapshot, workspaceRoot };
+    }),
   });
 });
 

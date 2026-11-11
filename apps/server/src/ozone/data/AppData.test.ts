@@ -55,13 +55,17 @@ const makeHarness = (options: { readonly dumpFails?: boolean } = {}) =>
     const path = yield* Path.Path;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "ozone-data-" });
     const calls = yield* Ref.make<ReadonlyArray<ReadonlyArray<string>>>([]);
+    const removals = yield* Ref.make<ReadonlyArray<string>>([]);
     const running = yield* Ref.make<ReadonlySet<string>>(new Set(["app", "db"]));
 
     const compose = Layer.succeed(
       AppCompose.AppCompose,
       AppCompose.AppCompose.of({
-        run: Effect.fn("TestCompose.run")(function* (_app, args) {
+        run: Effect.fn("TestCompose.run")(function* (_app, args, composeOptions) {
           yield* Ref.update(calls, (all) => [...all, args]);
+          if (composeOptions?.allowDataRemoval === true) {
+            yield* Ref.update(removals, (all) => [...all, args.join(" ")]);
+          }
           const service = args.at(-1) ?? "";
           if (args[0] === "ps") {
             return {
@@ -122,7 +126,7 @@ const makeHarness = (options: { readonly dumpFails?: boolean } = {}) =>
     );
     const steps = Ref.get(calls).pipe(Effect.map((all) => all.map(step)));
     const forget = Ref.set(calls, []);
-    return { data, calls, steps, forget, running };
+    return { data, calls, steps, forget, running, removals };
   });
 
 const layerTest = Layer.merge(NodeServices.layer, NodeCrypto.layer);
@@ -195,6 +199,30 @@ describe("AppData", () => {
       assert.strictEqual(error.reason, "failed");
       assert.include(error.message, "connection to server failed");
       assert.deepStrictEqual(yield* data.list(projectId), []);
+    }).pipe(Effect.provide(layerTest)),
+  );
+
+  it.effect("removes an app's volumes only behind a snapshot that is kept", () =>
+    Effect.gen(function* () {
+      const { data, steps, removals } = yield* makeHarness();
+      const { snapshot } = yield* data.remove(projectId);
+
+      assert.deepStrictEqual(yield* steps, [
+        "running? db",
+        "start db",
+        "dump",
+        "copy out",
+        "clean up",
+        "down --volumes --remove-orphans",
+      ]);
+      assert.strictEqual(snapshot.reason, "before-delete");
+      // The one command in Ozone that asks Docker's guard to let a volume go.
+      assert.deepStrictEqual(yield* Ref.get(removals), ["down --volumes --remove-orphans"]);
+      assert.deepStrictEqual(yield* data.list(projectId), [snapshot]);
+
+      const failing = yield* makeHarness({ dumpFails: true });
+      yield* Effect.flip(failing.data.remove(projectId));
+      assert.notInclude(yield* failing.steps, "down --volumes --remove-orphans");
     }).pipe(Effect.provide(layerTest)),
   );
 

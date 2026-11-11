@@ -30,6 +30,7 @@ export class AppRegistry extends Context.Service<
     readonly list: Effect.Effect<ReadonlyArray<OzoneApp>, OzoneAppError>;
     readonly resolve: (projectId: ProjectId) => Effect.Effect<ResolvedApp, OzoneAppError>;
     readonly register: (app: OzoneApp) => Effect.Effect<void, OzoneAppError>;
+    readonly unregister: (projectId: ProjectId) => Effect.Effect<void, OzoneAppError>;
   }
 >()("t3/ozone/apps/AppRegistry") {}
 
@@ -108,6 +109,11 @@ export const make = Effect.gen(function* () {
         INSERT INTO ozone_apps (project_id, slug, name, template_id, port, created_at)
         VALUES (${app.projectId}, ${app.slug}, ${app.name}, ${app.templateId}, ${app.port}, ${app.createdAt})
       `.pipe(Effect.mapError(storageFailed("record the app")));
+    }),
+    unregister: Effect.fn("AppRegistry.unregister")(function* (projectId) {
+      yield* sql`DELETE FROM ozone_apps WHERE project_id = ${projectId}`.pipe(
+        Effect.mapError(storageFailed("forget the app")),
+      );
     }),
   });
 });
