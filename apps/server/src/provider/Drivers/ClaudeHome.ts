@@ -8,6 +8,7 @@ import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 
+import { withoutAmbientClaudeApiKey } from "../../ozone/auth/ClaudeSubscriptionAuth.ts";
 import { readClaudeSettingsEnv } from "./ClaudeSkills.ts";
 
 const quotePath = Schema.encodeSync(Schema.fromJsonString(Schema.String));
@@ -71,8 +72,9 @@ export const mergeClaudeProcessEnvironment = Effect.fn("mergeClaudeProcessEnviro
   instanceEnvironment: ProviderInstanceEnvironment | undefined,
   hostEnvironment: NodeJS.ProcessEnv,
 ) {
+  // ozone-seam: an API key left in the shell must not replace the signed-in subscription.
   const baseEnvironment: NodeJS.ProcessEnv = {
-    ...hostEnvironment,
+    ...withoutAmbientClaudeApiKey(hostEnvironment),
     CLAUDE_CODE_ENTRYPOINT: "t3-code",
   };
   for (const name of CLAUDE_HOST_SESSION_VARIABLES) delete baseEnvironment[name];

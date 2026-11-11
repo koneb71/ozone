@@ -56,6 +56,10 @@ import {
 } from "./ClaudeHome.ts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { makeClaudeMaintenanceResolution } from "./ClaudeMaintenance.ts";
+import {
+  advertiseClaudeSignIn,
+  makeClaudeSubscriptionAuth,
+} from "../../ozone/auth/ClaudeSubscriptionAuth.ts";
 const decodeClaudeSettings = Schema.decodeSync(ClaudeSettings);
 
 const DRIVER_KIND = ProviderDriverKind.make("claudeAgent");
@@ -137,13 +141,16 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
         ? configDir
         : undefined,
     );
-    const stampIdentity = withInstanceIdentity({
+    const stampInstance = withInstanceIdentity({
       instanceId,
       driverKind: DRIVER_KIND,
       displayName,
       accentColor,
       continuationGroupKey,
     });
+    // ozone-seam: every Claude snapshot offers in-app sign-in.
+    const stampIdentity = (snapshot: Parameters<typeof stampInstance>[0]) =>
+      advertiseClaudeSignIn(stampInstance(snapshot));
 
     const scopedLimitNames = yield* makeClaudeScopedLimitNames;
     const orchestrationAdapter = yield* createClaudeAdapterV2(
@@ -371,6 +378,19 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
       ),
     );
 
+    // ozone-seam: sign in to a Claude subscription from the app.
+    const auth = yield* makeClaudeSubscriptionAuth({
+      instanceId,
+      binaryPath: effectiveConfig.binaryPath,
+      environment: processEnv,
+      cwd: stateDir,
+      configDir,
+      onChanged: Cache.invalidateAll(capabilitiesProbeCache).pipe(
+        Effect.andThen(snapshot.refresh),
+        Effect.asVoid,
+      ),
+    });
+
     return {
       instanceId,
       driverKind: DRIVER_KIND,
@@ -381,6 +401,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
       displayName,
       accentColor,
       enabled,
+      auth,
       snapshot,
       invalidateCaches: Cache.invalidateAll(capabilitiesProbeCache),
       snapshotForCwd: (cwd: string) =>

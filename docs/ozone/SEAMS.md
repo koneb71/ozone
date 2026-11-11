@@ -7,24 +7,26 @@ Every upstream file Ozone edits. `apps/server/src/ozone/seams.test.ts` checks th
 
 These files contain a comment with `ozone-seam` at each edit.
 
-| File                                                | Why                                                           |
-| --------------------------------------------------- | ------------------------------------------------------------- |
-| `apps/server/src/cli/app.test.ts`                   | expects Ozone's default data directory name                   |
-| `apps/server/src/cli/browser.ts`                    | browser setup under sudo uses the Ozone data directory        |
-| `apps/server/src/cli/config.test.ts`                | expects Ozone's default port                                  |
-| `apps/server/src/cloud/npmRelease.ts`               | keeps upstream's unused release layer exported                |
-| `apps/server/src/config.ts`                         | default port 3737                                             |
-| `apps/server/src/os-jank.ts`                        | default data directory `~/.ozone`                             |
-| `apps/server/src/telemetry/AnalyticsService.ts`     | telemetry off, with no upstream key or host                   |
-| `apps/server/src/ws.ts`                             | provides Ozone's release lookup instead of upstream's npm one |
-| `apps/web/index.html`                               | product name on the splash screen                             |
-| `apps/web/src/branding.ts`                          | product name                                                  |
-| `apps/web/src/components/GitHubStarPrompt.tsx`      | upstream's star prompt is off                                 |
-| `apps/web/src/components/T3Wordmark.tsx`            | renders the Ozone mark wherever upstream shows its wordmark   |
-| `apps/web/src/components/sidebar/SidebarChrome.tsx` | sidebar brand name                                            |
-| `knip.jsonc`                                        | finds the scripts upstream's parked workflows still name      |
-| `packages/shared/src/cliRelease.ts`                 | release archives come from Ozone's repository                 |
-| `scripts/notify-discord-release.test.ts`            | reads upstream's release workflow from its parked location    |
+| File                                                | Why                                                                 |
+| --------------------------------------------------- | ------------------------------------------------------------------- |
+| `apps/server/src/cli/app.test.ts`                   | expects Ozone's default data directory name                         |
+| `apps/server/src/cli/browser.ts`                    | browser setup under sudo uses the Ozone data directory              |
+| `apps/server/src/cli/config.test.ts`                | expects Ozone's default port                                        |
+| `apps/server/src/cloud/npmRelease.ts`               | keeps upstream's unused release layer exported                      |
+| `apps/server/src/config.ts`                         | default port 3737                                                   |
+| `apps/server/src/os-jank.ts`                        | default data directory `~/.ozone`                                   |
+| `apps/server/src/provider/Drivers/ClaudeDriver.ts`  | attaches Claude subscription sign-in and advertises it in snapshots |
+| `apps/server/src/provider/Drivers/ClaudeHome.ts`    | drops ambient Anthropic API-key variables from the host environment |
+| `apps/server/src/telemetry/AnalyticsService.ts`     | telemetry off, with no upstream key or host                         |
+| `apps/server/src/ws.ts`                             | provides Ozone's release lookup instead of upstream's npm one       |
+| `apps/web/index.html`                               | product name on the splash screen                                   |
+| `apps/web/src/branding.ts`                          | product name                                                        |
+| `apps/web/src/components/GitHubStarPrompt.tsx`      | upstream's star prompt is off                                       |
+| `apps/web/src/components/T3Wordmark.tsx`            | renders the Ozone mark wherever upstream shows its wordmark         |
+| `apps/web/src/components/sidebar/SidebarChrome.tsx` | sidebar brand name                                                  |
+| `knip.jsonc`                                        | finds the scripts upstream's parked workflows still name            |
+| `packages/shared/src/cliRelease.ts`                 | release archives come from Ozone's repository                       |
+| `scripts/notify-discord-release.test.ts`            | reads upstream's release workflow from its parked location          |
 
 ## Untagged
 
