@@ -1,3 +1,8 @@
+// @effect-diagnostics nodeBuiltinImport:off - Apps hash with node:crypto too; tokens must match.
+import * as NodeCrypto from "node:crypto";
+
+import * as Schema from "effect/Schema";
+
 export interface DestructiveStatement {
   readonly file: string;
   readonly line: number;
@@ -6,7 +11,11 @@ export interface DestructiveStatement {
   readonly statement: string;
 }
 
-const RULES: ReadonlyArray<{ readonly effect: string; readonly pattern: RegExp }> = [
+/** Each app's `src/db/migration-guard.ts` holds a copy; a test keeps the two the same. */
+export const DESTRUCTIVE_RULES: ReadonlyArray<{
+  readonly effect: string;
+  readonly pattern: RegExp;
+}> = [
   { effect: "drops a table", pattern: /^DROP\s+TABLE\b/i },
   { effect: "drops a schema", pattern: /^DROP\s+SCHEMA\b/i },
   { effect: "drops a database", pattern: /^DROP\s+DATABASE\b/i },
@@ -48,7 +57,7 @@ export const findDestructiveStatements = (
     const raw = text.slice(start, end);
     const statement = raw.trim();
     if (statement.length > 0) {
-      const rule = RULES.find((entry) => entry.pattern.test(statement));
+      const rule = DESTRUCTIVE_RULES.find((entry) => entry.pattern.test(statement));
       if (rule !== undefined) {
         const offset = start + raw.indexOf(statement);
         found.push({
@@ -63,3 +72,41 @@ export const findDestructiveStatements = (
     start = match.index + match[0].length;
   }
 };
+
+export const describeStatement = (found: DestructiveStatement) =>
+  `${found.file}:${found.line} ${found.effect}: ${found.statement}`;
+
+/** Where an app's migrate command says what it held back, from the app's root. */
+export const MIGRATION_REPORT_FILE = ".ozone/migrations.json";
+/** Names the migrations a person accepted, for one run of an app's migrate command. */
+export const ACCEPT_MIGRATIONS_ENV = "OZONE_ACCEPT_MIGRATIONS";
+
+/** What a held-back migration needs: the statements to show, and the tokens that accept them. */
+export const MigrationReport = Schema.Struct({
+  statements: Schema.Array(Schema.String),
+  accept: Schema.Array(Schema.String),
+});
+export type MigrationReport = typeof MigrationReport.Type;
+const MigrationReportJson = Schema.fromJsonString(MigrationReport);
+export const decodeMigrationReport = Schema.decodeUnknownEffect(MigrationReportJson);
+export const encodeMigrationReport = Schema.encodeEffect(MigrationReportJson);
+
+/** Names exactly the SQL a person saw. An app's migrate command computes the same token. */
+export const acceptToken = (file: string, sql: string) =>
+  `${file}@${NodeCrypto.createHash("sha256").update(sql).digest("hex")}`;
+
+const ACCEPT_LINE = "ozone-accept ";
+
+/** The report a migrate command printed when it held migrations back, or null if it did not. */
+export const parseHeldBack = (output: string): MigrationReport | null => {
+  const lines = output.split("\n").map((line) => line.trim());
+  const accept = lines.flatMap((line) =>
+    line.startsWith(ACCEPT_LINE) ? [line.slice(ACCEPT_LINE.length).trim()] : [],
+  );
+  if (accept.length === 0) return null;
+  return { statements: lines.filter((line) => /^\S+\.sql:\d+ /.test(line)), accept };
+};
+
+/** The evidence a held-back migration leaves, which a person's acceptance reads back. */
+export const formatHeldBack = (report: MigrationReport) =>
+  [...report.statements, ...report.accept.map((token) => `${ACCEPT_LINE}${token}`)].join("\n");

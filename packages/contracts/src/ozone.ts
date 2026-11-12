@@ -191,11 +191,17 @@ export const OzoneRuntimeStatus = Schema.Struct({
   url: Schema.NullOr(Schema.String),
   services: Schema.Array(OzoneRuntimeService),
   message: Schema.NullOr(Schema.String),
+  /**
+   * The statements of migrations the app's own migrate command held back because they can lose
+   * data, one per line. They run only when a person accepts them with the `migrate` action.
+   */
+  migration: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
   updatedAt: IsoDateTime,
 });
 export type OzoneRuntimeStatus = typeof OzoneRuntimeStatus.Type;
 
-export const OzoneRuntimeAction = Schema.Literals(["up", "stop", "restart", "rebuild"]);
+/** `migrate` runs held-back migrations after a snapshot. Only people can ask for it. */
+export const OzoneRuntimeAction = Schema.Literals(["up", "stop", "restart", "rebuild", "migrate"]);
 export type OzoneRuntimeAction = typeof OzoneRuntimeAction.Type;
 
 export const OzoneRuntimeActInput = Schema.Struct({
@@ -223,6 +229,8 @@ export const OzoneSnapshotReason = Schema.Literals([
   "before-rebuild",
   "before-restore",
   "before-delete",
+  "before-migrate",
+  "before-deploy",
 ]);
 export type OzoneSnapshotReason = typeof OzoneSnapshotReason.Type;
 

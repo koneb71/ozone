@@ -28,6 +28,8 @@ const REASON_LABEL: Record<OzoneSnapshot["reason"], string> = {
   "before-rebuild": "Before a rebuild",
   "before-restore": "Before a restore",
   "before-delete": "Before deleting data",
+  "before-migrate": "Before a migration",
+  "before-deploy": "Before a deploy",
 };
 
 /** An app's snapshots: take one, or put one back. */

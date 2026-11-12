@@ -31,7 +31,15 @@ else
 fi
 
 log "Applying database migrations"
-npm run --silent db:migrate
+if npm run --silent db:migrate; then
+  :
+else
+  status=$?
+  # 3: a migration that can lose data waits for the person in Ozone. The app
+  # starts on the data as it is, and Ozone shows what is waiting.
+  [ "$status" -eq 3 ] || exit "$status"
+  log "A migration waits for you in Ozone; starting without it"
+fi
 
 log "Starting the dev server on http://0.0.0.0:3000"
 exec npm run --silent dev

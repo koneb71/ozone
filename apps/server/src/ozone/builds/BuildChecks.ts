@@ -19,6 +19,8 @@ import * as Scope from "effect/Scope";
 
 import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as AppData from "../data/AppData.ts";
+import { parseHeldBack } from "../data/migrationGuard.ts";
+import * as AppRuntime from "../runtime/AppRuntime.ts";
 import { WAKE } from "./briefs.ts";
 import * as BuildGates from "./BuildGates.ts";
 import * as BuildModel from "./BuildModel.ts";
@@ -76,6 +78,7 @@ const make = Effect.gen(function* () {
   const gates = yield* BuildGates.BuildGates;
   const repo = yield* BuildRepo.BuildRepo;
   const data = yield* AppData.AppData;
+  const runtime = yield* AppRuntime.AppRuntime;
   const registry = yield* AppRegistry.AppRegistry;
   const wake = yield* BuildWake.BuildWake;
   // Jobs live as long as the server, not as long as the call that started them.
@@ -323,6 +326,17 @@ const make = Effect.gen(function* () {
       if (task.status !== "blocked") {
         return yield* refuse(
           `Task ${task.id} is ${task.status}, not blocked. Only a blocked task needs a ruling.`,
+        );
+      }
+      // Only the person runs a migration that can lose data, from the app's banner.
+      const held = parseHeldBack(
+        task.evidence.find((result) => result.id === "migrations")?.detail ?? "",
+      );
+      const waiting =
+        held === null ? null : (yield* runtime.status(target.app.app.projectId)).migration;
+      if (waiting !== null) {
+        return yield* refuse(
+          `Task ${task.id} waits for the user: a migration that can lose data runs only when they apply it from the app's banner in Ozone. Tell them what it does, then accept the task once they have:\n${waiting}`,
         );
       }
       yield* keep(target, task, task.evidence);

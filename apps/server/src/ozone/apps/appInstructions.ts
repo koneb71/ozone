@@ -17,6 +17,7 @@ export const OZONE_APP_INSTRUCTIONS = `This app was created by Ozone, which runs
 
 - The database lives in a Docker volume that must never be removed. Never run \`docker compose down -v\`, \`docker volume rm\`, \`docker volume prune\` or \`docker system prune --volumes\`.
 - Change the schema only through generated migrations. Never write a migration that drops or truncates data unless the user asked for exactly that.
+- A migration that can lose data does not run until the user accepts it in Ozone, after a snapshot: the app's migrate command holds it back and says so. Tell the user what it does, and never change the migrate command or its guard to get one through.
 
 ### Building
 

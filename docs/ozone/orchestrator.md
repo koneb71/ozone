@@ -90,7 +90,8 @@ tail. When the final check fails, the lead gets that output with the status, and
 that is still stopped.
 
 **A migration that can lose data needs a person.** Another attempt cannot decide it, so the task is
-blocked at once instead of retried. See [data safety](./data-safety.md).
+blocked at once instead of retried, and the lead's accept is refused until the person has applied
+the migration from the app's banner. See [data safety](./data-safety.md).
 
 **Each passed task is a commit and a data snapshot.** A code rollback and a data restore line up,
 and the worst an agent can do to the data is one task's worth.

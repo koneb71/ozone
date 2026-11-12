@@ -6,6 +6,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
+import { findDestructiveStatements } from "../data/migrationGuard.ts";
 import { PROD_COMPOSE_FILE } from "../deploy/AppDeploy.ts";
 import {
   readTemplateBundle,
@@ -46,6 +47,20 @@ it.effect.each(TEMPLATES.map((template) => template.id))(
       assert.include(yield* read("AGENTS.md"), "<!-- ozone:instructions -->");
       assert.isTrue(has("package-lock.json"));
       assert.isTrue(has("dev"));
+
+      const migrations = manifest.migrations?.directory;
+      if (migrations !== undefined) {
+        // Its migrate command holds back what can lose data, and the report stays out of git.
+        assert.isTrue(has("src/db/migration-guard.ts"));
+        assert.include(yield* read(".gitignore"), ".ozone/migrations.json");
+        // A new app applies these on its first start; none may need a person's decision.
+        for (const file of files.filter(
+          (entry) => entry.path.startsWith(`${migrations}/`) && entry.path.endsWith(".sql"),
+        )) {
+          const sql = new TextDecoder().decode(file.bytes);
+          assert.deepStrictEqual(findDestructiveStatements(file.path, sql), [], file.path);
+        }
+      }
     }).pipe(Effect.provide(NodeServices.layer)),
 );
 

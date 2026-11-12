@@ -16,14 +16,21 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FiberMap from "effect/FiberMap";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 
 import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as AppData from "../data/AppData.ts";
+import {
+  ACCEPT_MIGRATIONS_ENV,
+  decodeMigrationReport,
+  MIGRATION_REPORT_FILE,
+} from "../data/migrationGuard.ts";
 import * as AppCompose from "./AppCompose.ts";
 import * as DockerCli from "./DockerCli.ts";
 
@@ -32,6 +39,8 @@ export interface AppExecInput {
   readonly command: string;
   readonly timeout?: Duration.Input;
 }
+
+const failed = (message: string) => new OzoneAppError({ reason: "failed", message });
 
 export interface AppExecResult {
   readonly code: number | null;
@@ -56,6 +65,14 @@ export class AppRuntime extends Context.Service<
     ) => Effect.Effect<OzoneRuntimeLogsResult, OzoneAppError>;
     /** Runs a shell command inside the app's container, where its dependencies live. */
     readonly exec: (input: AppExecInput) => Effect.Effect<AppExecResult, OzoneAppError>;
+    /**
+     * Runs the app's migrations with the held-back ones a person accepted, once, after a snapshot
+     * of the data they change. Each token names the exact SQL the person was shown.
+     */
+    readonly acceptMigrations: (
+      projectId: ProjectId,
+      tokens: ReadonlyArray<string>,
+    ) => Effect.Effect<void, OzoneAppError>;
     /** The current status, then each change to it. */
     readonly changes: (projectId: ProjectId) => Stream.Stream<OzoneRuntimeStatus, OzoneAppError>;
   }
@@ -136,6 +153,7 @@ const sameStatus = (previous: OzoneRuntimeStatus, next: OzoneRuntimeStatus) =>
   previous.phase === next.phase &&
   previous.message === next.message &&
   previous.url === next.url &&
+  previous.migration === next.migration &&
   previous.services.length === next.services.length &&
   previous.services.every((service, index) => {
     const other = next.services[index];
@@ -152,6 +170,8 @@ export const make = Effect.gen(function* () {
   const compose = yield* AppCompose.AppCompose;
   const data = yield* AppData.AppData;
   const registry = yield* AppRegistry.AppRegistry;
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
 
   const operations = yield* Ref.make<ReadonlyMap<ProjectId, RuntimeOperation>>(new Map());
   const starts = yield* FiberMap.make<ProjectId>();
@@ -201,6 +221,54 @@ export const make = Effect.gen(function* () {
       Effect.asVoid,
     );
 
+  /** What the app's migrate command, or a build's check, held back for the person, if anything. */
+  const heldBack = (resolved: AppRegistry.ResolvedApp) =>
+    fs
+      .readFileString(path.join(resolved.workspaceRoot, ...MIGRATION_REPORT_FILE.split("/")))
+      .pipe(Effect.flatMap(decodeMigrationReport), Effect.option, Effect.map(Option.getOrNull));
+
+  const acceptMigrations = Effect.fn("AppRuntime.acceptMigrations")(function* (
+    projectId: ProjectId,
+    tokens: ReadonlyArray<string>,
+  ) {
+    const resolved = yield* registry.resolve(projectId);
+    const apply = resolved.manifest.migrations?.apply;
+    if (apply === undefined || tokens.length === 0) {
+      return yield* failed("No migration is waiting.");
+    }
+    // Nothing runs unless the data it changes is saved first.
+    yield* data.snapshot({ projectId, reason: "before-migrate" });
+    const output = yield* data.exclusive(
+      projectId,
+      compose.run(
+        resolved,
+        [
+          "exec",
+          "-T",
+          "-e",
+          `${ACCEPT_MIGRATIONS_ENV}=${tokens.join(" ")}`,
+          resolved.manifest.runtime.appService,
+          "sh",
+          "-lc",
+          apply,
+        ],
+        { timeout: Duration.minutes(10), maxOutputBytes: 512 * 1024 },
+      ),
+    );
+    if (output.code === 0) {
+      // An app made before the guard leaves its report behind; it is answered now.
+      yield* fs
+        .remove(path.join(resolved.workspaceRoot, ...MIGRATION_REPORT_FILE.split("/")))
+        .pipe(Effect.ignore);
+    }
+    yield* PubSub.publish(changed, projectId);
+    if (output.code !== 0) {
+      return yield* failed(
+        `The migration did not run. ${tail(output.stderr.trim() || output.stdout.trim(), FAILURE_TAIL_CHARS)}`.trim(),
+      );
+    }
+  });
+
   const unavailable = (detail: string) =>
     new OzoneAppError({ reason: "docker_unavailable", message: detail });
 
@@ -215,6 +283,7 @@ export const make = Effect.gen(function* () {
         url: null,
         services: [],
         message: availability.message,
+        migration: null,
         updatedAt,
       } satisfies OzoneRuntimeStatus;
     }
@@ -239,6 +308,7 @@ export const make = Effect.gen(function* () {
       url: derived.phase === "running" ? ozoneAppUrl(resolved.app) : null,
       services,
       message: derived.message,
+      migration: (yield* heldBack(resolved))?.statements.join("\n") ?? null,
       updatedAt,
     } satisfies OzoneRuntimeStatus;
   });
@@ -332,6 +402,12 @@ export const make = Effect.gen(function* () {
         case "restart":
           yield* settle(resolved, ["restart"], "Docker could not restart the app.");
           break;
+        case "migrate": {
+          const report = yield* heldBack(resolved);
+          if (report === null) return yield* failed("No migration is waiting.");
+          yield* acceptMigrations(input.projectId, report.accept);
+          break;
+        }
       }
       return yield* statusOf(resolved);
     }),
@@ -376,6 +452,7 @@ export const make = Effect.gen(function* () {
         timedOut: output.timedOut,
       };
     }),
+    acceptMigrations,
     changes: (projectId) =>
       Stream.unwrap(
         Effect.gen(function* () {

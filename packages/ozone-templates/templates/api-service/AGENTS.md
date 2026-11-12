@@ -23,7 +23,7 @@ The service is already running, and restarts by itself on every saved change.
 
 - `src/app.ts` is the whole service: each resource is a Hono router in `src/routes/`, mounted there under `/api/...`.
 - `src/routes/health.ts` answers `/api/health`, which Docker uses to tell whether the service is up. Keep it.
-- `src/db/schema.ts` holds the tables. `drizzle/` holds generated SQL migrations: never edit or delete one that already exists.
+- `src/db/schema.ts` holds the tables. `drizzle/` holds generated SQL migrations: never edit or delete one that already exists. A migration that can lose data, such as one that drops a table or a column, waits for the person: `db:migrate` holds it back until they accept it in Ozone. Tell them what it does. Never change `src/db/migrate.ts` or `src/db/migration-guard.ts` to get one through.
 - `src/index.ts` starts the server. `compose.prod.yaml` is how Ozone deploys the service: keep it working when you add a service.
 
 ## How to write it

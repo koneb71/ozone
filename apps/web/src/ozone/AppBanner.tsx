@@ -8,7 +8,7 @@ import {
   type ProjectId,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
-import { BoxIcon, HammerIcon, MonitorIcon, PlayIcon } from "lucide-react";
+import { BoxIcon, DatabaseIcon, HammerIcon, MonitorIcon, PlayIcon } from "lucide-react";
 import { useEffect, useEffectEvent } from "react";
 
 import { resolveDiscoveredServerUrl } from "~/browser/browserTargetResolver";
@@ -20,6 +20,7 @@ import { dispatchPreviewAction } from "~/components/preview/previewActionBus";
 import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
+import { ensureLocalApi } from "~/localApi";
 import { readThreadPreviewState } from "~/previewStateStore";
 import { useRightPanelStore } from "~/rightPanelStore";
 import { useQuietThreadShell } from "~/state/entities";
@@ -52,6 +53,12 @@ const reportFailure = (title: string, error: unknown) => {
       description: error instanceof Error ? error.message : undefined,
     }),
   );
+};
+
+/** The first statement held back, and how many more: the confirmation lists them all. */
+const heldBackSummary = (statements: string) => {
+  const [first = "", ...rest] = statements.split("\n");
+  return rest.length === 0 ? first : `${first} (and ${rest.length} more)`;
 };
 
 interface BannerCopy {
@@ -206,11 +213,24 @@ export function useAppBanners(
       input: { projectId: app.projectId, action },
     });
     if (result._tag === "Failure") {
-      reportFailure(
-        `Could not ${action === "up" ? "start" : action} ${app.name}`,
-        squashAtomCommandFailure(result),
-      );
+      const verb =
+        action === "up" ? "start" : action === "migrate" ? "run the migration of" : action;
+      reportFailure(`Could not ${verb} ${app.name}`, squashAtomCommandFailure(result));
     }
+  };
+  // A migration that can lose data runs only when the person says so, after a snapshot.
+  const applyMigration = async (statements: string) => {
+    const confirmed = await ensureLocalApi()
+      .dialogs.confirm(
+        [
+          `Run the migration ${app.name} is holding back?`,
+          statements,
+          "A snapshot of the data is taken first, so Data or History can bring it back.",
+        ].join("\n"),
+        { variant: "destructive" },
+      )
+      .catch(() => false);
+    if (confirmed) await act("migrate");
   };
   const preview = async () => {
     if (url === null) return;
@@ -248,6 +268,27 @@ export function useAppBanners(
         ]
       : []),
     ...(buildItem === null ? [] : [buildItem]),
+    ...(status?.migration
+      ? [
+          {
+            id: "ozone-migration",
+            variant: "warning" as const,
+            group: "attention" as const,
+            icon: <DatabaseIcon />,
+            title: "A migration waits for you",
+            description: `It can lose data, so it has not run. ${heldBackSummary(status.migration)}`,
+            actions: (
+              <Button
+                size="xs"
+                variant="ghost"
+                onClick={() => void applyMigration(status.migration ?? "")}
+              >
+                Apply after a snapshot
+              </Button>
+            ),
+          },
+        ]
+      : []),
     {
       id: "ozone-app",
       variant: copy.variant,

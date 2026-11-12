@@ -2,6 +2,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import {
   DEFAULT_OZONE_APP_SETTINGS,
+  OzoneAppError,
   ProjectId,
   type OzoneAppManifest,
   type OzoneRuntimeService,
@@ -37,6 +38,11 @@ const manifest: OzoneAppManifest = {
   },
   gates: [],
   data: { services: [{ service: "db", kind: "postgres", volume: "pgdata" }] },
+  migrations: {
+    directory: "drizzle",
+    generate: "npm run db:generate",
+    apply: "npm run db:migrate",
+  },
 };
 
 const service = (
@@ -107,9 +113,17 @@ const makeHarness = (options: { readonly hostCa?: boolean; readonly docker?: "mi
         }),
     });
     const snapshots = yield* Queue.unbounded<string>();
+    const snapshotFails = yield* Ref.make(false);
     const data = Layer.mock(AppData.AppData)({
       snapshot: (input) =>
         Queue.offer(snapshots, input.reason).pipe(
+          Effect.andThen(
+            Effect.flatMap(Ref.get(snapshotFails), (fails) =>
+              fails
+                ? Effect.fail(new OzoneAppError({ reason: "failed", message: "Could not dump." }))
+                : Effect.void,
+            ),
+          ),
           Effect.as({
             id: "snapshot-1",
             projectId,
@@ -157,6 +171,7 @@ const makeHarness = (options: { readonly hostCa?: boolean; readonly docker?: "mi
       composeCalls,
       outsideExclusive,
       snapshots,
+      snapshotFails,
       workspaceRoot,
       hostCa,
     };
@@ -392,6 +407,47 @@ describe("AppRuntime", () => {
       const error = yield* Effect.flip(harness.runtime.act({ projectId, action: "up" }));
       assert.strictEqual(error.reason, "docker_unavailable");
       assert.strictEqual(yield* Queue.size(harness.composeCalls), 0);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+  // A migration that can lose data waits for a person: the app's own migrate command holds it back
+  // and says so in a report, and accepting runs exactly what the report showed, after a snapshot.
+  it.effect("runs a held-back migration only when a person accepts it, after a snapshot", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness();
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      yield* Deferred.succeed(harness.started, succeeded);
+      yield* Ref.set(harness.containers, UP);
+      const statement = '0001_drop.sql:1 drops a table: DROP TABLE "notes"';
+      yield* fs.makeDirectory(path.join(harness.workspaceRoot, ".ozone"), { recursive: true });
+      yield* fs.writeFileString(
+        path.join(harness.workspaceRoot, ".ozone", "migrations.json"),
+        JSON.stringify({ statements: [statement], accept: ["0001_drop.sql@abc"] }),
+      );
+      assert.strictEqual((yield* harness.runtime.status(projectId)).migration, statement);
+
+      // Nothing runs unless the data it changes was saved first.
+      yield* Ref.set(harness.snapshotFails, true);
+      yield* Effect.flip(harness.runtime.act({ projectId, action: "migrate" }));
+      assert.strictEqual(yield* Queue.size(harness.composeCalls), 0);
+
+      yield* Ref.set(harness.snapshotFails, false);
+      yield* Queue.takeAll(harness.snapshots);
+      yield* harness.runtime.act({ projectId, action: "migrate" });
+      assert.deepStrictEqual(yield* Queue.takeAll(harness.snapshots), ["before-migrate"]);
+      assert.deepStrictEqual((yield* Queue.take(harness.composeCalls)).slice(7), [
+        "exec",
+        "-T",
+        "-e",
+        "OZONE_ACCEPT_MIGRATIONS=0001_drop.sql@abc",
+        "app",
+        "sh",
+        "-lc",
+        "npm run db:migrate",
+      ]);
+      assert.deepStrictEqual(yield* Ref.get(harness.outsideExclusive), []);
+      // Answered, so the banner no longer asks.
+      assert.isNull((yield* harness.runtime.status(projectId)).migration);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 });

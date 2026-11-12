@@ -9,7 +9,16 @@ import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 
 import type { ResolvedApp } from "../apps/AppRegistry.ts";
-import { findDestructiveStatements } from "../data/migrationGuard.ts";
+import {
+  acceptToken,
+  describeStatement,
+  findDestructiveStatements,
+  encodeMigrationReport,
+  formatHeldBack,
+  MIGRATION_REPORT_FILE,
+  parseHeldBack,
+  type MigrationReport,
+} from "../data/migrationGuard.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
 import * as BuildRepo from "./BuildRepo.ts";
 
@@ -84,24 +93,55 @@ const make = Effect.gen(function* () {
       (gate) => command(app, gate.id, gate.command),
     );
 
-  /** New migration files since the task began, checked before anything applies them. */
+  /** New migration files since the task began that can lose data, or null when there are none. */
   const destructiveMigrations = Effect.fn("BuildGates.destructiveMigrations")(function* (
     app: ResolvedApp,
     baseSha: string | null,
   ) {
     const migrations = app.manifest.migrations;
-    if (migrations === undefined || baseSha === null) return [];
+    if (migrations === undefined || baseSha === null) return null;
     yield* repo.stageAll(app.workspaceRoot);
     const added = yield* repo.addedSince(app.workspaceRoot, baseSha, migrations.directory);
     const found = yield* Effect.forEach(
       added.filter((file) => file.endsWith(".sql")),
       (file) =>
         fs.readFileString(path.join(app.workspaceRoot, file)).pipe(
-          Effect.map((sql) => findDestructiveStatements(file, sql)),
+          Effect.map((sql) => {
+            const statements = findDestructiveStatements(file, sql);
+            return statements.length === 0
+              ? []
+              : [{ statements, token: acceptToken(path.basename(file), sql) }];
+          }),
           Effect.orElseSucceed(() => []),
         ),
     );
-    return found.flat();
+    const held = found.flat();
+    if (held.length === 0) return null;
+    return {
+      statements: held.flatMap((entry) => entry.statements.map(describeStatement)),
+      accept: held.map((entry) => entry.token),
+    } satisfies MigrationReport;
+  });
+
+  /**
+   * A decision only the person can make: the app's banner shows the report until they apply the
+   * migration there, after a snapshot. The evidence keeps the tokens.
+   */
+  const heldBackOutcome = Effect.fn("BuildGates.heldBackOutcome")(function* (
+    app: ResolvedApp,
+    headline: string,
+    report: MigrationReport,
+  ) {
+    const reportPath = path.join(app.workspaceRoot, ...MIGRATION_REPORT_FILE.split("/"));
+    yield* fs.makeDirectory(path.dirname(reportPath), { recursive: true }).pipe(
+      Effect.andThen(encodeMigrationReport(report)),
+      Effect.flatMap((json) => fs.writeFileString(reportPath, `${json}\n`)),
+      Effect.ignore,
+    );
+    return {
+      results: [{ id: "migrations", ok: false, detail: formatHeldBack(report) }],
+      needsDecision: `${headline} It runs only when the user applies it from the app's banner in Ozone, which takes a snapshot first. Tell them what it does, and accept this task once they have applied it.\n${report.statements.join("\n")}`,
+    } satisfies TaskGateOutcome;
   });
 
   return BuildGates.of({
@@ -124,20 +164,18 @@ const make = Effect.gen(function* () {
           needsDecision: null,
         };
       }
-      const destructive = yield* destructiveMigrations(app, input.baseSha);
-      if (destructive.length > 0) {
-        const listed = destructive
-          .map((found) => `${found.file}:${found.line} ${found.effect}: ${found.statement}`)
-          .join("\n");
-        return {
-          results: [{ id: "migrations", ok: false, detail: listed }],
-          needsDecision: `A new migration can lose data.\n${listed}`,
-        };
-      }
+      const added = yield* destructiveMigrations(app, input.baseSha);
+      if (added !== null)
+        return yield* heldBackOutcome(app, "A new migration can lose data.", added);
       const migrated =
         app.manifest.migrations === undefined
           ? []
           : [yield* command(app, "migrate", app.manifest.migrations.apply)];
+      // The app's own migrate command also holds back one that was already waiting.
+      const waiting = migrated[0]?.ok === false ? parseHeldBack(migrated[0].detail) : null;
+      if (waiting !== null) {
+        return yield* heldBackOutcome(app, "A migration waiting to run can lose data.", waiting);
+      }
       const checks = yield* manifestGates(app, "task");
       const answers = yield* command(
         app,

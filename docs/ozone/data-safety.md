@@ -26,9 +26,16 @@ that keeps it. Read it before changing `apps/server/src/ozone/runtime` or `apps/
    Once confirmed, a restore or a deletion runs to its end in the server's own fiber: a window
    closed halfway must not leave a database dropped and empty. While one runs, every start and stop
    of the app waits for it, so an agent's restart cannot run the app on a database just dropped.
-5. **A destructive migration is never applied silently.**
-   [`findDestructiveStatements`](../../apps/server/src/ozone/data/migrationGuard.ts) names the
-   statements in a migration that can lose data. A build stops on them and asks.
+5. **A migration that can lose data runs only when a person applies it.** The check lives in each
+   app's own migrate command (`src/db/migration-guard.ts`), because every path runs that command:
+   the container's start, and so every restart, rebuild, settings change and restore; an agent's
+   `./dev npm run db:migrate`; a build's check; and production's `migrate` step. It holds back a
+   pending migration with a statement that
+   [`findDestructiveStatements`](../../apps/server/src/ozone/data/migrationGuard.ts) flags, applies
+   nothing, and writes `.ozone/migrations.json`. The app's banner shows it, and **Apply after a
+   snapshot** takes a snapshot and runs it with a token naming the exact SQL the person saw, once.
+   No MCP tool can apply it, and a build's lead cannot accept such a task until the person has. A
+   test keeps the app's copy of the rules and Ozone's the same.
 
 ## Why a restore drops the database
 
@@ -56,12 +63,17 @@ Ozone reads command output as bounded text. A database dump is binary and can be
 
 ## Agents
 
-An agent has a shell and could run `docker compose down -v` itself. The instructions Ozone writes
-into every app forbid it, and no Ozone tool offers it. If it happens anyway, the newest snapshot is
-the recovery, which is why a snapshot is taken after every task that passes its checks.
+An agent has a shell and could run `docker compose down -v` itself, or edit the migrate command
+to get past its check. The instructions Ozone writes into every app forbid both, and no Ozone tool
+offers either. If it happens anyway, the newest snapshot is the recovery, which is why a snapshot
+is taken after every task that passes its checks.
 
 ## Not covered yet
 
+- Apps made before the migrate command held migrations back still apply them silently. A build
+  stops on a new one, possibly after a worker applied it. Copying `src/db/migration-guard.ts`,
+  `src/db/migrate.ts`, `docker/dev-entrypoint.sh` and the `.gitignore` line from the template
+  upgrades an app.
 - Only `postgres` data services are snapshotted. A manifest may declare a service of kind `volume`,
   and Ozone runs it, but does not archive it.
 - Deleting an app's project from upstream's own project menu, instead of **Delete app**, leaves its

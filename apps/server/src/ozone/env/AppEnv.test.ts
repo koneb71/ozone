@@ -45,6 +45,7 @@ const makeHarness = Effect.gen(function* () {
     url: null,
     services: [],
     message: null,
+    migration: null,
     updatedAt: AT,
   }));
   const { env, config } = yield* Effect.all({

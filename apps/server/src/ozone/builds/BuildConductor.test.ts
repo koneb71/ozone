@@ -28,6 +28,7 @@ import type { McpInvocationScope } from "../../mcp/McpInvocationContext.ts";
 import * as SqlitePersistence from "../../persistence/Sqlite.ts";
 import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as AppData from "../data/AppData.ts";
+import * as AppRuntime from "../runtime/AppRuntime.ts";
 import { NEXT } from "./briefs.ts";
 import * as BuildChecks from "./BuildChecks.ts";
 import * as BuildConductor from "./BuildConductor.ts";
@@ -230,6 +231,23 @@ const makeHarness = (settings: Partial<OzoneAppSettings> = {}) =>
         ),
     });
 
+    // What the app's banner shows as waiting for the user, until they apply it there.
+    const waitingMigration = yield* Ref.make<string | null>(null);
+    const runtime = Layer.mock(AppRuntime.AppRuntime)({
+      status: () =>
+        Ref.get(waitingMigration).pipe(
+          Effect.map((migration) => ({
+            projectId,
+            phase: "running" as const,
+            url: null,
+            services: [],
+            message: null,
+            migration,
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          })),
+        ),
+    });
+
     const wake = Layer.succeed(
       BuildWake.BuildWake,
       BuildWake.BuildWake.of({
@@ -258,7 +276,7 @@ const makeHarness = (settings: Partial<OzoneAppSettings> = {}) =>
         Layer.provideMerge(Layer.mergeAll(BuildChecks.layer, BuildReview.layer)),
         Layer.provideMerge(Layer.mergeAll(BuildStore.layer, wake, registry)),
         Layer.provideMerge(
-          Layer.mergeAll(workers, gates, repo, data, SqlitePersistence.layerMemory),
+          Layer.mergeAll(workers, gates, repo, data, runtime, SqlitePersistence.layerMemory),
         ),
       ),
     );
@@ -290,6 +308,7 @@ const makeHarness = (settings: Partial<OzoneAppSettings> = {}) =>
       restart,
       workerStates,
       statuses,
+      waitingMigration,
       workspaceRoot,
       fs,
       path,
@@ -541,12 +560,19 @@ describe("BuildConductor", () => {
 
   it.effect("stops for a decision on a migration that can lose data", () =>
     Effect.gen(function* () {
-      const { conductor, lead, set, steps, forget, statuses } = yield* makeHarness();
+      const { conductor, lead, set, steps, forget, statuses, waitingMigration } =
+        yield* makeHarness();
       yield* conductor.plan(lead, plan(task("schema"), task("page", { dependsOn: ["schema"] })));
       yield* set({
         taskChecks: [
           {
-            results: [{ id: "migrations", ok: false, detail: "drizzle/0001.sql:3 drops a table" }],
+            results: [
+              {
+                id: "migrations",
+                ok: false,
+                detail: "drizzle/0001.sql:3 drops a table: DROP TABLE x\nozone-accept 0001.sql@abc",
+              },
+            ],
             needsDecision: "A new migration can lose data.\ndrizzle/0001.sql:3 drops a table",
           },
         ],
@@ -559,7 +585,16 @@ describe("BuildConductor", () => {
       assert.include(stopped.next, "A new migration can lose data.");
       assert.include(stopped.next, "Ask the user first only if the choice changes what they get.");
 
+      // The lead cannot run it: only the user does, from the app's banner.
       yield* forget;
+      yield* Ref.set(waitingMigration, "drizzle/0001.sql:3 drops a table: DROP TABLE x");
+      const refused = yield* Effect.flip(
+        conductor.resolve(lead, { taskId: "schema", ruling: "accept" }),
+      );
+      assert.include(refused.message, "apply it from the app's banner");
+      assert.deepStrictEqual(yield* steps, []);
+
+      yield* Ref.set(waitingMigration, null);
       const kept = yield* conductor.resolve(lead, { taskId: "schema", ruling: "accept" });
       assert.deepStrictEqual(yield* steps, ["commit Task schema", "snapshot Task schema"]);
       assert.deepStrictEqual(statuses(kept), { schema: "done", page: "pending" });
