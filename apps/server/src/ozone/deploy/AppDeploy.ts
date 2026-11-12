@@ -1,8 +1,12 @@
 import {
   OzoneAppError,
   OzoneDeployTarget,
+  type OzoneDataRestoreInput,
+  type OzoneDataRestoreResult,
+  type OzoneDataSnapshotInput,
   type OzoneDeployRunInput,
   type OzoneDeployStatus,
+  type OzoneSnapshot,
   type ProjectId,
 } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
@@ -47,6 +51,20 @@ export class AppDeploy extends Context.Service<
     ) => Effect.Effect<OzoneDeployStatus, OzoneAppError>;
     /** Stops the production containers. Their data stays for the next deploy. */
     readonly stop: (projectId: ProjectId) => Effect.Effect<OzoneDeployStatus, OzoneAppError>;
+    /** Production's snapshots, kept apart from development's. */
+    readonly snapshots: (
+      projectId: ProjectId,
+    ) => Effect.Effect<ReadonlyArray<OzoneSnapshot>, OzoneAppError>;
+    readonly snapshot: (
+      input: OzoneDataSnapshotInput,
+    ) => Effect.Effect<OzoneSnapshot, OzoneAppError>;
+    /**
+     * Replaces production's data with a snapshot, after one of the data as it is, then applies the
+     * deployed version's migrations and starts it again. Runs to its end, whoever was waiting.
+     */
+    readonly restore: (
+      input: OzoneDataRestoreInput,
+    ) => Effect.Effect<OzoneDataRestoreResult, OzoneAppError>;
   }
 >()("t3/ozone/deploy/AppDeploy") {}
 
@@ -63,10 +81,13 @@ const DeployRecord = Schema.Struct({
   commitSha: Schema.NullOr(Schema.String),
   deployedAt: Schema.String,
 });
+type DeployRecord = typeof DeployRecord.Type;
 const DeployFile = Schema.fromJsonString(
   Schema.Struct({
     secrets: Schema.Struct({ authSecret: Schema.String, dbPassword: Schema.String }),
     last: Schema.NullOr(DeployRecord),
+    /** Where the app was deployed before, one record per place. Their volumes are still there. */
+    previous: Schema.Array(DeployRecord).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   }),
 );
 type DeployFile = typeof DeployFile.Type;
@@ -266,38 +287,169 @@ const make = Effect.gen(function* () {
     ),
   );
 
-  const deployNow = Effect.fn("AppDeploy.deployNow")(function* (
+  const overridePathOf = (app: ResolvedApp) =>
+    path.join(directoryOf(app), "compose.prod.override.yaml");
+  const appServiceOf = (app: ResolvedApp) => app.manifest.runtime.appService;
+  const placeOf = (target: OzoneDeployTarget) =>
+    target.host === null ? "this machine" : hostName(target.host);
+
+  /** The files of a commit, in a folder that lasts as long as the scope. */
+  const exportCommit = Effect.fn("AppDeploy.exportCommit")(function* (
+    app: ResolvedApp,
+    commitSha: string,
+  ) {
+    const scratch = yield* fs
+      .makeTempDirectoryScoped({ prefix: "ozone-deploy-" })
+      .pipe(Effect.mapError(() => failed("Ozone could not make a folder for the deploy.")));
+    const root = yield* repo.exportTree(app.workspaceRoot, commitSha, scratch);
+    if (root === null) {
+      return yield* failed(`Ozone could not read commit ${commitSha.slice(0, 7)} of the app.`);
+    }
+    const hasProdFile = yield* fs
+      .exists(path.join(root, PROD_COMPOSE_FILE))
+      .pipe(Effect.orElseSucceed(() => false));
+    if (!hasProdFile) {
+      return yield* failed(
+        `Commit ${commitSha.slice(0, 7)} has no ${PROD_COMPOSE_FILE}. Commit it, then deploy again.`,
+      );
+    }
+    return root;
+  });
+
+  /** Docker Compose for the app's production project on `target`, from the files in `root`. */
+  const production = Effect.fn("AppDeploy.production")(function* (
     app: ResolvedApp,
     target: OzoneDeployTarget,
-    acceptMigrations: boolean,
+    root: string,
+  ) {
+    // A remote daemon builds with its own network.
+    const ca = target.host === null ? yield* hostCaPath(hostEnvironment, fs) : null;
+    const args = [...composeArgs(app, target, root), "-f", overridePathOf(app)];
+    const env = {
+      OZONE_PROD_PORT: String(portOf(app)),
+      // On a server it is meant to be reached; here, only from this machine.
+      OZONE_PROD_BIND: target.host === null ? "127.0.0.1" : "0.0.0.0",
+      // Compose builds through buildx bake, which refuses to read a file outside the project
+      // unless allowed, and has no flag for it. The only such file is the bundle Ozone named.
+      ...(ca === null ? {} : { BUILDX_BAKE_ENTITLEMENTS_FS: "0" }),
+    };
+    const compose = (
+      command: ReadonlyArray<string>,
+      options?: { readonly timeout?: Duration.Input },
+    ) =>
+      docker
+        .run({
+          args: [...args, ...command],
+          cwd: root,
+          env,
+          timeout: options?.timeout ?? STEP_TIMEOUT,
+          maxOutputBytes: 2 * 1024 * 1024,
+        })
+        .pipe(Effect.mapError((error) => failed(error.detail)));
+    const run = Effect.fn("AppDeploy.run")(function* (
+      what: string,
+      command: ReadonlyArray<string>,
+      timeout: Duration.Duration,
+    ) {
+      const output = yield* compose(command, { timeout });
+      if (output.code === 0 && !output.timedOut) return;
+      // Compose prints its progress on one stream and the reason on either.
+      const said = `${output.stdout}\n${output.stderr}`.trim().slice(-OUTPUT_TAIL);
+      return yield* failed(
+        output.timedOut ? `${what}: it did not finish in time.` : `${what}:\n${said}`,
+      );
+    });
+    /** Production's data, wherever it runs, with the commit it belongs with. */
+    const dataTarget = (commitSha: string | null): AppData.DataTarget => ({
+      projectId: app.app.projectId,
+      folder: path.join(app.app.slug, "production"),
+      databases: app.manifest.data.services.filter((service) => service.kind === "postgres"),
+      compose,
+      commitSha: Effect.succeed(commitSha),
+    });
+    return { ca, compose, run, dataTarget };
+  });
+  type Production = Effect.Success<ReturnType<typeof production>>;
+
+  /** Runs `use` against a deploy that exists, from the files of the commit it runs. */
+  const withDeployed = Effect.fn("AppDeploy.withDeployed")(function* <A>(
+    app: ResolvedApp,
+    record: DeployRecord,
+    use: (prod: Production) => Effect.Effect<A, OzoneAppError>,
+  ) {
+    if (record.commitSha === null) {
+      return yield* failed(
+        "Ozone does not know which commit production runs. Deploy the app again first.",
+      );
+    }
+    const root = yield* exportCommit(app, record.commitSha);
+    return yield* use(yield* production(app, record.target, root));
+  }, Effect.scoped);
+
+  /** The migrate step. One that can lose data is held back unless its tokens were accepted. */
+  const migrateStep = Effect.fn("AppDeploy.migrateStep")(function* (
+    app: ResolvedApp,
+    prod: Production,
+    accepted: ReadonlyArray<string>,
+    heldBackMeans: string,
+  ) {
+    const output = yield* prod.compose([
+      "run",
+      "--rm",
+      "-T",
+      ...(accepted.length === 0 ? [] : ["-e", `${ACCEPT_MIGRATIONS_ENV}=${accepted.join(" ")}`]),
+      "migrate",
+    ]);
+    const said = `${output.stdout}\n${output.stderr}`.trim();
+    const held = output.code === 0 ? null : parseHeldBack(said);
+    if (held !== null) {
+      heldBack.set(app.app.projectId, held);
+      return yield* failed(`${heldBackMeans}\n${held.statements.join("\n")}`);
+    }
+    if (output.code !== 0 || output.timedOut) {
+      return yield* failed(
+        output.timedOut
+          ? "The migrations could not be applied: they did not finish in time."
+          : `The migrations could not be applied:\n${said.slice(-OUTPUT_TAIL)}`,
+      );
+    }
+    heldBack.delete(app.app.projectId);
+  });
+  const startApp = (app: ResolvedApp, prod: Production) =>
+    prod.run(
+      "The app did not start",
+      ["up", "--detach", "--wait", "--no-deps", appServiceOf(app)],
+      STEP_TIMEOUT,
+    );
+  const migrates = (app: ResolvedApp) =>
+    app.manifest.migrations !== undefined &&
+    app.manifest.data.services.some((service) => service.kind === "postgres");
+
+  const deployNow = Effect.fn("AppDeploy.deployNow")(function* (
+    app: ResolvedApp,
+    input: OzoneDeployRunInput,
   ) {
     const projectId = app.app.projectId;
+    const target = input.target;
     const step = (doing: string) => Effect.sync(() => inFlight.set(projectId, doing));
     const stored = yield* readRecord(app);
     // Production runs the last commit, never a worker's half-done files or the dev `.env`.
     const commitSha = yield* repo.head(app.workspaceRoot);
     if (commitSha === null) return yield* failed("This app has no commit to deploy yet.");
-    const scratch = yield* fs
-      .makeTempDirectoryScoped({ prefix: "ozone-deploy-" })
-      .pipe(Effect.mapError(() => failed("Ozone could not make a folder for the deploy.")));
-    const root = yield* repo.exportTree(app.workspaceRoot, commitSha, scratch);
-    if (root === null) return yield* failed("Ozone could not read the app's last commit.");
-    if (
-      !(yield* fs
-        .exists(path.join(root, PROD_COMPOSE_FILE))
-        .pipe(Effect.orElseSucceed(() => false)))
-    ) {
-      return yield* failed(
-        `The app's last commit has no ${PROD_COMPOSE_FILE}. Commit it, then deploy again.`,
-      );
-    }
+    const root = yield* exportCommit(app, commitSha);
     const secrets = stored?.secrets ?? {
       authSecret: yield* newSecret,
       dbPassword: yield* newSecret,
     };
+    const known = [...(stored?.last == null ? [] : [stored.last]), ...(stored?.previous ?? [])];
     // Kept before anything runs: a database is created with its first password and keeps it.
-    yield* writeRecord(app, { secrets, last: stored?.last ?? null });
+    yield* writeRecord(app, {
+      secrets,
+      last: stored?.last ?? null,
+      previous: stored?.previous ?? [],
+    });
 
+    const prod = yield* production(app, target, root);
     const postgres = app.manifest.data.services.find((service) => service.kind === "postgres");
     // The same defaults as the snapshots use.
     const user = postgres?.user ?? "postgres";
@@ -310,143 +462,89 @@ const make = Effect.gen(function* () {
             database: postgres.database ?? user,
             password: secrets.dbPassword,
           };
-    const migrate = database !== null && app.manifest.migrations !== undefined;
+    const here = known.find((record) => record.target.host === target.host) ?? null;
+    // A first deploy to a new place can start from the data of the place before it.
+    const from =
+      input.bringData === true && here === null && database !== null
+        ? (stored?.last ?? null)
+        : null;
+    const moved =
+      from === null
+        ? null
+        : yield* step(`Saving the data on ${placeOf(from.target)}.`).pipe(
+            Effect.andThen(
+              withDeployed(app, from, (old) =>
+                data.snapshotOf(old.dataTarget(from.commitSha), {
+                  reason: "before-deploy",
+                  label: `Moved from ${placeOf(from.target)}`,
+                }),
+              ),
+            ),
+            Effect.mapError((error) =>
+              failed(
+                `The data on ${placeOf(from.target)} could not be saved, so nothing was deployed. ${error.message}`,
+              ),
+            ),
+          );
+
     const url = urlOf(app, target);
-    // A remote daemon builds with its own network.
-    const ca = target.host === null ? yield* hostCaPath(hostEnvironment, fs) : null;
-    const overridePath = path.join(directoryOf(app), "compose.prod.override.yaml");
     const override = prodOverride({
-      appService: app.manifest.runtime.appService,
+      appService: appServiceOf(app),
       database,
-      migrate,
+      migrate: migrates(app),
       authSecret: secrets.authSecret,
       publicUrl: url,
       variables: yield* readEnvFile(fs, envFilePath(path, config.stateDir, app.app.slug)),
-      hostCaPath: ca,
+      hostCaPath: prod.ca,
     });
     yield* Effect.gen(function* () {
-      yield* fs.writeFileString(overridePath, override, { mode: ENV_FILE_MODE });
-      yield* fs.chmod(overridePath, ENV_FILE_MODE);
+      yield* fs.writeFileString(overridePathOf(app), override, { mode: ENV_FILE_MODE });
+      yield* fs.chmod(overridePathOf(app), ENV_FILE_MODE);
     }).pipe(Effect.mapError(() => failed("Ozone could not write the production settings.")));
 
-    const args = [...composeArgs(app, target, root), "-f", overridePath];
-    const env = {
-      OZONE_PROD_PORT: String(portOf(app)),
-      // On a server it is meant to be reached; here, only from this machine.
-      OZONE_PROD_BIND: target.host === null ? "127.0.0.1" : "0.0.0.0",
-      // Compose builds through buildx bake, which refuses to read a file outside the project
-      // unless allowed, and has no flag for it. The only such file is the bundle Ozone named.
-      ...(ca === null ? {} : { BUILDX_BAKE_ENTITLEMENTS_FS: "0" }),
-    };
-    const run = Effect.fn("AppDeploy.run")(function* (
-      what: string,
-      command: ReadonlyArray<string>,
-      timeout: Duration.Duration,
-    ) {
-      const output = yield* docker
-        .run({
-          args: [...args, ...command],
-          cwd: root,
-          env,
-          timeout,
-          maxOutputBytes: 2 * 1024 * 1024,
-        })
-        .pipe(Effect.mapError((error) => failed(error.detail)));
-      if (output.code === 0 && !output.timedOut) return;
-      // Compose prints its progress on one stream and the reason on either.
-      const said = `${output.stdout}\n${output.stderr}`.trim().slice(-OUTPUT_TAIL);
-      return yield* failed(
-        output.timedOut ? `${what}: it did not finish in time.` : `${what}:\n${said}`,
-      );
-    });
-
     yield* step("Building the production image. The first build takes a few minutes.");
-    yield* run("The production image could not be built", ["build"], BUILD_TIMEOUT);
+    yield* prod.run("The production image could not be built", ["build"], BUILD_TIMEOUT);
     if (database !== null) {
       yield* step("Starting the production database.");
-      yield* run(
+      yield* prod.run(
         "The production database did not start",
         ["up", "--detach", "--wait", database.service],
         STEP_TIMEOUT,
       );
     }
-    const deployedHere = stored?.last != null && stored.last.target.host === target.host;
-    if (database !== null && postgres !== undefined && deployedHere) {
+    if (database !== null && here !== null) {
       yield* step("Taking a snapshot of the production data.");
-      yield* data.snapshotOf(
-        {
-          projectId,
-          folder: path.join(app.app.slug, "production"),
-          databases: [postgres],
-          compose: (command, options) =>
-            docker
-              .run({
-                args: [...args, ...command],
-                cwd: root,
-                env,
-                timeout: options?.timeout ?? STEP_TIMEOUT,
-                maxOutputBytes: 2 * 1024 * 1024,
-              })
-              .pipe(Effect.mapError((error) => failed(error.detail))),
-          // The data is what the last deploy left, before this one's migrations.
-          commitSha: Effect.succeed(stored?.last?.commitSha ?? null),
-        },
-        { reason: "before-deploy" },
+      // The data is what the last deploy here left, before this one's migrations.
+      yield* data.snapshotOf(prod.dataTarget(here.commitSha), { reason: "before-deploy" });
+    }
+    if (moved !== null) {
+      yield* step("Bringing the data over.");
+      yield* data.loadOf(prod.dataTarget(null), {
+        snapshotId: moved.id,
+        appService: appServiceOf(app),
+      });
+    }
+    if (migrates(app)) {
+      yield* step("Applying the migrations.");
+      yield* migrateStep(
+        app,
+        prod,
+        input.acceptMigrations === true ? (heldBack.get(projectId)?.accept ?? []) : [],
+        "A migration that can lose data was held back, and production was not changed:",
       );
     }
-    if (migrate) {
-      yield* step("Applying the migrations.");
-      const accepted = acceptMigrations ? (heldBack.get(projectId)?.accept ?? []) : [];
-      const output = yield* docker
-        .run({
-          args: [
-            ...args,
-            "run",
-            "--rm",
-            "-T",
-            ...(accepted.length === 0
-              ? []
-              : ["-e", `${ACCEPT_MIGRATIONS_ENV}=${accepted.join(" ")}`]),
-            "migrate",
-          ],
-          cwd: root,
-          env,
-          timeout: STEP_TIMEOUT,
-          maxOutputBytes: 2 * 1024 * 1024,
-        })
-        .pipe(Effect.mapError((error) => failed(error.detail)));
-      const said = `${output.stdout}\n${output.stderr}`.trim();
-      const held = output.code === 0 ? null : parseHeldBack(said);
-      if (held !== null) {
-        heldBack.set(projectId, held);
-        return yield* failed(
-          `A migration that can lose data was held back, and production was not changed:\n${held.statements.join("\n")}`,
-        );
-      }
-      if (output.code !== 0 || output.timedOut) {
-        return yield* failed(
-          output.timedOut
-            ? "The migrations could not be applied: they did not finish in time."
-            : `The migrations could not be applied:\n${said.slice(-OUTPUT_TAIL)}`,
-        );
-      }
-      heldBack.delete(projectId);
-    }
     yield* step("Starting the app.");
-    yield* run(
-      "The app did not start",
-      ["up", "--detach", "--wait", "--no-deps", app.manifest.runtime.appService],
-      STEP_TIMEOUT,
-    );
+    yield* startApp(app, prod);
     yield* writeRecord(app, {
       secrets,
-      last: {
-        target,
-        url,
-        commitSha,
-        deployedAt: DateTime.formatIso(yield* DateTime.now),
-      },
+      last: { target, url, commitSha, deployedAt: DateTime.formatIso(yield* DateTime.now) },
+      previous: known.filter((record) => record.target.host !== target.host),
     });
+    if (from !== null) {
+      // Two live copies of the same data would drift apart. The old volume stays where it is.
+      yield* step(`Stopping the deploy on ${placeOf(from.target)}.`);
+      yield* withDeployed(app, from, (old) => old.compose(["stop"])).pipe(Effect.ignore);
+    }
   });
 
   const deploy = Effect.fn("AppDeploy.deploy")(function* (input: OzoneDeployRunInput) {
@@ -463,7 +561,7 @@ const make = Effect.gen(function* () {
     }
     failures.delete(input.projectId);
     inFlight.set(input.projectId, "Starting the deploy.");
-    yield* deployNow(app, input.target, input.acceptMigrations === true).pipe(
+    yield* deployNow(app, input).pipe(
       Effect.scoped,
       Effect.tapError((error) => Effect.sync(() => failures.set(input.projectId, error.message))),
       Effect.ensuring(Effect.sync(() => inFlight.delete(input.projectId))),
@@ -472,18 +570,32 @@ const make = Effect.gen(function* () {
     return yield* statusOf(app);
   });
 
+  /** In the service's own fiber: a window closed halfway must not stop a restore or a deploy. */
+  const toTheEnd = <A, E>(effect: Effect.Effect<A, E>) =>
+    Effect.forkIn(effect, scope).pipe(Effect.flatMap(Fiber.join));
+  /** One piece of work on an app's production at a time; the status says which. */
+  const claim = <A>(projectId: ProjectId, doing: string, work: Effect.Effect<A, OzoneAppError>) =>
+    Effect.suspend(() => {
+      if (inFlight.has(projectId)) {
+        return Effect.fail(failed("Production is busy. Try again when it has finished."));
+      }
+      inFlight.set(projectId, doing);
+      return work.pipe(Effect.ensuring(Effect.sync(() => inFlight.delete(projectId))));
+    });
+  const deployed = Effect.fn("AppDeploy.deployed")(function* (projectId: ProjectId) {
+    const app = yield* registry.resolve(projectId);
+    const last = (yield* readRecord(app))?.last ?? null;
+    if (last === null) return yield* failed("This app has not been deployed.");
+    return { app, last };
+  });
+
   return AppDeploy.of({
     status: Effect.fn("AppDeploy.status")(function* (projectId) {
       return yield* statusOf(yield* registry.resolve(projectId));
     }),
-    // Once started it runs to its end in the service's own fiber; the status says how it went.
-    deploy: Effect.fn("AppDeploy.deployToTheEnd")((input) =>
-      Effect.forkIn(deploy(input), scope).pipe(Effect.flatMap(Fiber.join)),
-    ),
+    deploy: Effect.fn("AppDeploy.deployToTheEnd")((input) => toTheEnd(deploy(input))),
     stop: Effect.fn("AppDeploy.stop")(function* (projectId) {
-      const app = yield* registry.resolve(projectId);
-      const last = (yield* readRecord(app))?.last ?? null;
-      if (last === null) return yield* failed("This app has not been deployed.");
+      const { app, last } = yield* deployed(projectId);
       const output = yield* docker
         .run({
           args: [...composeArgs(app, last.target), "stop"],
@@ -497,6 +609,50 @@ const make = Effect.gen(function* () {
         );
       }
       return yield* statusOf(app);
+    }),
+    snapshots: Effect.fn("AppDeploy.snapshots")(function* (projectId) {
+      const app = yield* registry.resolve(projectId);
+      return yield* data.listOf({ projectId, folder: path.join(app.app.slug, "production") });
+    }),
+    snapshot: Effect.fn("AppDeploy.snapshot")(function* (input) {
+      const { app, last } = yield* deployed(input.projectId);
+      return yield* toTheEnd(
+        claim(
+          input.projectId,
+          "Taking a snapshot of the production data.",
+          withDeployed(app, last, (prod) =>
+            data.snapshotOf(prod.dataTarget(last.commitSha), {
+              reason: "manual",
+              ...(input.label === undefined ? {} : { label: input.label }),
+            }),
+          ),
+        ),
+      );
+    }),
+    restore: Effect.fn("AppDeploy.restore")(function* (input) {
+      const { app, last } = yield* deployed(input.projectId);
+      return yield* toTheEnd(
+        claim(
+          input.projectId,
+          "Restoring the production data.",
+          withDeployed(app, last, (prod) =>
+            data.restoreOf(prod.dataTarget(last.commitSha), {
+              snapshotId: input.snapshotId,
+              appService: appServiceOf(app),
+              // The deployed version expects its own schema, whatever the snapshot's was.
+              restart: (migrates(app)
+                ? migrateStep(
+                    app,
+                    prod,
+                    [],
+                    "The data is restored, but the deployed version needs a migration that can lose data, so the app is stopped. Deploy and apply it to start it:",
+                  )
+                : Effect.void
+              ).pipe(Effect.andThen(startApp(app, prod))),
+            }),
+          ),
+        ),
+      );
     }),
   });
 });

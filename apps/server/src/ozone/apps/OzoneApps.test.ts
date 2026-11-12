@@ -10,19 +10,23 @@ import {
   type OzoneSnapshot,
 } from "@t3tools/contracts";
 import * as NetService from "@t3tools/shared/Net";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
+import * as ServerConfig from "../../config.ts";
 import * as ManagedProjectFolders from "../../project/ManagedProjectFolders.ts";
 import * as ProjectService from "../../project/ProjectService.ts";
 import * as GitVcsDriver from "../../vcs/GitVcsDriver.ts";
 import * as AppData from "../data/AppData.ts";
+import * as AppDeploy from "../deploy/AppDeploy.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
 import { OZONE_APP_INSTRUCTIONS } from "./appInstructions.ts";
 import * as AppRegistry from "./AppRegistry.ts";
@@ -53,6 +57,28 @@ const makeHarness = Effect.gen(function* () {
   // Puts a file where the new app's folder should be, so the template cannot be written.
   const folderIsAFile = yield* Ref.make(false);
   const record = (step: string) => Ref.update(removal, (all) => [...all, step]);
+  // Whether the app's production is running where it was deployed.
+  const deployedState = yield* Ref.make<"none" | "running">("none");
+  /** The app the delete and restore cases work on, as the registry knows it. */
+  const habits: OzoneApp = {
+    projectId: ProjectId.make("a1b2c3-project-1"),
+    slug: "habits-a1b2c3",
+    name: "Habits",
+    templateId: "web-app",
+    port: 41_000,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    settings: DEFAULT_OZONE_APP_SETTINGS,
+  };
+  const habitsRoot = path.join(root, "habits");
+  // Built once, so the test sees the state folder the service writes to.
+  const configContext = yield* Layer.build(
+    ServerConfig.layerTest(root, { prefix: "ozone-apps-home-" }),
+  );
+  const backups = path.join(
+    Context.get(configContext, ServerConfig.ServerConfig).stateDir,
+    "ozone",
+    "backups",
+  );
 
   const apps = yield* OzoneApps.make.pipe(
     Effect.provide(
@@ -62,11 +88,16 @@ const makeHarness = Effect.gen(function* () {
           register: (app) => Ref.update(registered, (all) => [...all, app]),
           resolve: (projectId) =>
             Effect.succeed({
-              app: { ...lastSnapshot, projectId } as never,
-              workspaceRoot: path.join(root, "habits"),
+              app: { ...habits, projectId },
+              workspaceRoot: habitsRoot,
               manifest: {} as never,
             }),
-          unregister: () => record("forget the app"),
+          unregister: (projectId) =>
+            record("forget the app").pipe(
+              Effect.andThen(
+                Ref.update(registered, (all) => all.filter((app) => app.projectId !== projectId)),
+              ),
+            ),
         }),
         Layer.mock(AppData.AppData)({
           remove: Effect.fn("TestData.remove")(function* () {
@@ -76,13 +107,46 @@ const makeHarness = Effect.gen(function* () {
             yield* record("snapshot, then remove containers and volumes");
             return { snapshot: lastSnapshot };
           }),
+          revive: () => record("load its last snapshot").pipe(Effect.as(lastSnapshot)),
+        }),
+        Layer.mock(AppDeploy.AppDeploy)({
+          status: () =>
+            Ref.get(deployedState).pipe(
+              Effect.map((state) => ({
+                state,
+                target: null,
+                url: null,
+                commitSha: null,
+                deployedAt: null,
+                message: null,
+                migration: null,
+              })),
+            ),
         }),
         Layer.mock(ProjectService.ProjectService)({
           delete: (input) =>
             record(`delete the project${input.force === true ? " and its threads" : ""}`).pipe(
               Effect.as({} as never),
             ),
+          bootstrap: (input) =>
+            record("make a project for its folder").pipe(
+              Effect.as({ project: { id: input.projectId } as never, created: true }),
+            ),
+          // The project of an app deleted before Ozone kept a record of deleted apps.
+          getById: (projectId) =>
+            Effect.succeed(
+              projectId === "old-project"
+                ? Option.some({
+                    id: projectId,
+                    title: "Old app",
+                    workspaceRoot: path.join(root, "old-app"),
+                    createdAt: "2025-12-01T00:00:00.000Z",
+                    deletedAt: "2025-12-24T00:00:00.000Z",
+                  } as never)
+                : Option.none(),
+            ),
         }),
+        Layer.succeedContext(configContext),
         Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
           namedProjectsRoot: root,
           createNamedProject: Effect.fn("TestFolders.createNamedProject")(function* (input) {
@@ -113,7 +177,12 @@ const makeHarness = Effect.gen(function* () {
           isPortAvailableOnLoopback: (port) => Effect.succeed(port !== 41_001),
         }),
         Layer.mock(AppRuntime.AppRuntime)({
-          act: (input) => Queue.offer(started, input.projectId).pipe(Effect.andThen(Effect.never)),
+          docker: Effect.succeed({ available: true, version: "29.0.0", message: null }),
+          act: (input) =>
+            record("start it").pipe(
+              Effect.andThen(Queue.offer(started, input.projectId)),
+              Effect.andThen(Effect.never),
+            ),
         }),
       ),
     ),
@@ -130,6 +199,10 @@ const makeHarness = Effect.gen(function* () {
     removal,
     backupFails,
     folderIsAFile,
+    deployedState,
+    habits,
+    habitsRoot,
+    backups,
   };
 });
 
@@ -219,27 +292,100 @@ it.effect("OzoneApps leaves nothing behind when it cannot make an app", () =>
   }).pipe(Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer))),
 );
 
-it.effect("OzoneApps deletes an app's data behind a snapshot, then forgets the app", () =>
+it.effect("OzoneApps deletes an app behind a snapshot, and can bring it back", () =>
   Effect.gen(function* () {
-    const { apps, removal, backupFails, root, path } = yield* makeHarness;
-    const projectId = ProjectId.make("a1b2c3-project-1");
+    const harness = yield* makeHarness;
+    const { apps, removal, backupFails, deployedState, habits, habitsRoot, fs, path, root } =
+      harness;
+    const { projectId } = habits;
+    yield* fs.makeDirectory(habitsRoot);
+    yield* fs.writeFileString(path.join(habitsRoot, "ozone.json"), "{}");
+    yield* fs.writeFileString(path.join(habitsRoot, ".env"), "OZONE_APP_PORT=41000\nA=1\n");
+    yield* Ref.set(harness.registered, [habits]);
 
     // Nothing is forgotten while the data could not be saved.
     yield* Ref.set(backupFails, true);
     const error = yield* Effect.flip(apps.remove({ projectId }));
     assert.strictEqual(error.message, "Could not dump.");
     assert.deepStrictEqual(yield* Ref.get(removal), []);
-
     yield* Ref.set(backupFails, false);
+
+    // Deleted, Ozone could no longer reach its production: that is stopped first.
+    yield* Ref.set(deployedState, "running");
+    const deployed = yield* Effect.flip(apps.remove({ projectId }));
+    assert.include(deployed.message, "Stop it under Deploy first");
+    assert.deepStrictEqual(yield* Ref.get(removal), []);
+    yield* Ref.set(deployedState, "none");
+
     const removed = yield* apps.remove({ projectId });
     assert.deepStrictEqual(yield* Ref.get(removal), [
       "snapshot, then remove containers and volumes",
       "forget the app",
       "delete the project and its threads",
     ]);
-    assert.deepStrictEqual(removed, {
-      snapshot: lastSnapshot,
-      workspaceRoot: path.join(root, "habits"),
-    });
+    assert.deepStrictEqual(removed, { snapshot: lastSnapshot, workspaceRoot: habitsRoot });
+    assert.deepStrictEqual(
+      (yield* apps.list).deleted.map((app) => [app.slug, app.name, app.deletedAt === null]),
+      [["habits-a1b2c3", "Habits", false]],
+    );
+
+    // Back under its own slug, with its data loaded before it first starts.
+    yield* Ref.set(removal, []);
+    const restored = yield* apps.restore({ slug: "habits-a1b2c3" });
+    yield* Queue.take(harness.started);
+    assert.deepStrictEqual(yield* Ref.get(removal), [
+      "make a project for its folder",
+      "load its last snapshot",
+      "start it",
+    ]);
+    assert.include(restored.app, { slug: "habits-a1b2c3", port: 41_000, name: "Habits" });
+    assert.notStrictEqual(restored.app.projectId, projectId);
+    assert.deepStrictEqual(yield* Ref.get(harness.registered), [restored.app]);
+    assert.deepStrictEqual((yield* apps.list).deleted, []);
+    yield* Effect.flip(apps.restore({ slug: "habits-a1b2c3" }));
+
+    // An app deleted before Ozone kept a record is pieced together from what it left, and gets
+    // another port when its own is taken.
+    const oldRoot = path.join(root, "old-app");
+    yield* fs.makeDirectory(oldRoot);
+    yield* fs.writeFileString(
+      path.join(oldRoot, "ozone.json"),
+      JSON.stringify({
+        version: 1,
+        template: "api-service",
+        runtime: {
+          kind: "compose",
+          file: "compose.yaml",
+          appService: "app",
+          appPort: 3000,
+          healthPath: "/health",
+        },
+        gates: [],
+        data: { services: [] },
+      }),
+    );
+    yield* fs.writeFileString(path.join(oldRoot, ".env"), "OZONE_APP_PORT=41000\nOZONE_UID=501\n");
+    const snapshotFolder = path.join(harness.backups, "old-app-9f8e7d", "20251224T000000000Z-aaaa");
+    yield* fs.makeDirectory(snapshotFolder, { recursive: true });
+    yield* fs.writeFileString(
+      path.join(snapshotFolder, "snapshot.json"),
+      JSON.stringify({ snapshot: { ...lastSnapshot, projectId: "old-project" }, files: [] }),
+    );
+    assert.deepStrictEqual((yield* apps.list).deleted, [
+      {
+        slug: "old-app-9f8e7d",
+        name: "Old app",
+        templateId: "api-service",
+        workspaceRoot: oldRoot,
+        deletedAt: "2025-12-24T00:00:00.000Z",
+      },
+    ]);
+    const old = yield* apps.restore({ slug: "old-app-9f8e7d" });
+    // 41000 is the restored Habits' now, and another program holds 41001.
+    assert.strictEqual(old.app.port, 41_002);
+    assert.strictEqual(
+      yield* fs.readFileString(path.join(oldRoot, ".env")),
+      "OZONE_APP_PORT=41002\nOZONE_UID=501\n",
+    );
   }).pipe(Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer))),
 );

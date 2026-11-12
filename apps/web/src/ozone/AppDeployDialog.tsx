@@ -15,7 +15,9 @@ import {
   DialogTitle,
 } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
 import { Spinner } from "~/components/ui/spinner";
+import { Switch } from "~/components/ui/switch";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { ensureLocalApi } from "~/localApi";
 import { useEnvironmentQuery } from "~/state/query";
@@ -75,6 +77,7 @@ function AppDeploy(props: { readonly app: OzoneApp; readonly environmentId: Envi
   const [where, setWhere] = useState<Where>(last?.host == null ? "here" : "server");
   const [host, setHost] = useState(last?.host ?? "");
   const [publicUrl, setPublicUrl] = useState(last?.publicUrl ?? "");
+  const [bringData, setBringData] = useState(true);
   const [working, setWorking] = useState<"deploy" | "stop" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,6 +91,14 @@ function AppDeploy(props: { readonly app: OzoneApp; readonly environmentId: Envi
         : null;
   const current = status.data;
   const busy = working !== null || current?.state === "deploying";
+  // Somewhere other than where it runs now: its data can come along.
+  const chosenHost = where === "server" ? trimmedHost : null;
+  const movesFrom =
+    last !== null && problem === null && chosenHost !== last.host
+      ? last.host === null
+        ? "this machine"
+        : last.host.replace(/^[^@]*@/, "")
+      : null;
 
   const run = async (action: "deploy" | "stop", acceptMigrations = false) => {
     setWorking(action);
@@ -103,6 +114,7 @@ function AppDeploy(props: { readonly app: OzoneApp; readonly environmentId: Envi
                 publicUrl: trimmedUrl.length > 0 ? trimmedUrl : null,
               },
               ...(acceptMigrations ? { acceptMigrations } : {}),
+              ...(movesFrom !== null && bringData ? { bringData } : {}),
             },
           })
         : await stopDeploy(target);
@@ -238,6 +250,23 @@ function AppDeploy(props: { readonly app: OzoneApp; readonly environmentId: Envi
               <p className="text-destructive-foreground text-xs">{problem}</p>
             )}
           </div>
+          {movesFrom === null ? null : (
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="ozone-bring-data">Bring the data from {movesFrom}</Label>
+                <p className="text-muted-foreground text-sm">
+                  On a first deploy there, it starts from a copy of that data, and the deploy on{" "}
+                  {movesFrom} is stopped once it runs. The data there stays where it is.
+                </p>
+              </div>
+              <Switch
+                id="ozone-bring-data"
+                checked={bringData}
+                disabled={busy}
+                onCheckedChange={setBringData}
+              />
+            </div>
+          )}
         </div>
       </DialogPanel>
       <DialogFooter>

@@ -22,7 +22,10 @@ that keeps it. Read it before changing `apps/server/src/ozone/runtime` or `apps/
    They survive the app's containers, its volume, its checkout and the app's own deletion.
 4. **Restoring and deleting are a person's decisions.** They are offered in the app's menu and
    nowhere else. No MCP tool restores or deletes data. A restore first snapshots the data it is
-   about to replace, so it can be undone. A deleted app leaves its last snapshot and its folder.
+   about to replace, so it can be undone. A deleted app leaves its last snapshot, its folder and
+   a record beside the snapshot, and Home brings it back from those: a project for the folder,
+   the same slug, and the snapshot loaded before the app first starts. Volumes still in Docker
+   are newer than any snapshot and are left as they are.
    Once confirmed, a restore or a deletion runs to its end in the server's own fiber: a window
    closed halfway must not leave a database dropped and empty. While one runs, every start and stop
    of the app waits for it, so an agent's restart cannot run the app on a database just dropped.
@@ -56,6 +59,17 @@ the commit before it.
 Build tasks whose commits the restored point lacks go back into their plans, and come back as done
 when a later restore brings their commits back. A restore is refused while a build is working.
 
+## Production
+
+[`AppDeploy`](../../apps/server/src/ozone/deploy/AppDeploy.ts) treats production's data as another
+target of the same snapshot code. Every deploy after the first to a place saves it before its
+migrations run, and the Data dialog takes and restores snapshots of it. A restore runs the deployed
+version's migrations afterwards, because that version expects its own schema whatever the snapshot
+had. A first deploy to a new place can start from the data of the place before: that data is
+saved, loaded into the new database before the app starts, and the old deploy is stopped with its
+volume left in place. Each command runs against an export of the commit that is deployed, never the
+working tree. An app whose production is running cannot be deleted: Ozone could no longer reach it.
+
 ## Why the dump is copied, not streamed
 
 Ozone reads command output as bounded text. A database dump is binary and can be large, so
@@ -78,13 +92,10 @@ is taken after every task that passes its checks.
   and Ozone runs it, but does not archive it.
 - Deleting an app's project from upstream's own project menu, instead of **Delete app**, leaves its
   containers and volumes in Docker until someone removes them by hand.
-- A deleted app's snapshot cannot be restored from the interface yet: there is no app left to
-  restore it into.
+- A deleted app comes back without its threads: upstream deletes them with the project.
 - A deployed app's data lives in a volume of its own (`<slug>-prod_pgdata`) that nothing in Ozone
-  removes. Every deploy after the first to the same place saves it to `backups/<slug>/production/`
-  before its migrations run, and keeps the newest 20; for a server, the dump is copied back to this
-  machine. Ozone does not restore one yet, and a deploy to a new place starts with an empty
-  database. Stop keeps the data; the next deploy uses it again.
+  removes. Its snapshots are kept apart, in `backups/<slug>/production/`, on this machine even when
+  the app runs on a server. Moving to another server was tried with scripted Docker only.
 - Routine snapshots, the one after each task and the one before a rebuild, are pruned to the newest
   20 per app. A person's own snapshots and the undo points of a restore or a delete are kept until
   removed by hand.

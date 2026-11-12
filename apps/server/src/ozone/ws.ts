@@ -3,6 +3,7 @@ import {
   type OzoneAppConfigureInput,
   type OzoneAppCreateInput,
   type OzoneAppDeleteInput,
+  type OzoneAppRestoreInput,
   type OzoneBuild,
   type OzoneBuildApproveInput,
   type OzoneDataRestoreInput,
@@ -49,16 +50,26 @@ const make = Effect.gen(function* () {
     [OZONE_WS_METHODS.appsList]: () => apps.list,
     [OZONE_WS_METHODS.appsCreate]: (input: OzoneAppCreateInput) => apps.create(input),
     [OZONE_WS_METHODS.appsDelete]: (input: OzoneAppDeleteInput) => apps.remove(input),
+    [OZONE_WS_METHODS.appsRestore]: (input: OzoneAppRestoreInput) => apps.restore(input),
     [OZONE_WS_METHODS.appsConfigure]: (input: OzoneAppConfigureInput) => apps.configure(input),
     [OZONE_WS_METHODS.runtimeAct]: (input: OzoneRuntimeActInput) => runtime.act(input),
     [OZONE_WS_METHODS.runtimeLogs]: (input: OzoneRuntimeLogsInput) => runtime.logs(input),
     [OZONE_WS_METHODS.runtimeSubscribe]: (input: OzoneRuntimeSubscribeInput) =>
       runtime.changes(input.projectId),
-    [OZONE_WS_METHODS.dataList]: (input: { readonly projectId: ProjectId }) =>
-      Effect.map(data.list(input.projectId), (snapshots) => ({ snapshots })),
+    [OZONE_WS_METHODS.dataList]: (input: {
+      readonly projectId: ProjectId;
+      readonly production?: boolean;
+    }) =>
+      Effect.map(
+        input.production === true ? deploys.snapshots(input.projectId) : data.list(input.projectId),
+        (snapshots) => ({ snapshots }),
+      ),
     [OZONE_WS_METHODS.dataSnapshot]: (input: OzoneDataSnapshotInput) =>
-      data.snapshot({ ...input, reason: "manual" }),
-    [OZONE_WS_METHODS.dataRestore]: (input: OzoneDataRestoreInput) => data.restore(input),
+      input.production === true
+        ? deploys.snapshot(input)
+        : data.snapshot({ ...input, reason: "manual" }),
+    [OZONE_WS_METHODS.dataRestore]: (input: OzoneDataRestoreInput) =>
+      input.production === true ? deploys.restore(input) : data.restore(input),
     [OZONE_WS_METHODS.buildSubscribe]: (input: { readonly threadId: ThreadId }) =>
       Stream.map(builds.changes(input.threadId), buildSnapshot),
     [OZONE_WS_METHODS.buildApprove]: (input: OzoneBuildApproveInput) =>
@@ -93,6 +104,7 @@ export class OzoneWsHandlers extends Context.Reference<Effect.Success<typeof mak
       [OZONE_WS_METHODS.appsList]: () => notProvided,
       [OZONE_WS_METHODS.appsCreate]: () => notProvided,
       [OZONE_WS_METHODS.appsDelete]: () => notProvided,
+      [OZONE_WS_METHODS.appsRestore]: () => notProvided,
       [OZONE_WS_METHODS.appsConfigure]: () => notProvided,
       [OZONE_WS_METHODS.runtimeAct]: () => notProvided,
       [OZONE_WS_METHODS.runtimeLogs]: () => notProvided,

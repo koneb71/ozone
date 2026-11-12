@@ -38,6 +38,7 @@ import { usePrimaryEnvironmentId } from "~/state/environments";
 import { useEnvironmentQuery } from "~/state/query";
 import { buildThreadRouteParams } from "~/threadRoutes";
 
+import { DeletedAppList } from "./DeletedAppList";
 import { runtimePhaseLabel } from "./home.logic";
 import { OzoneMark } from "./OzoneMark";
 import { ozoneEnvironment } from "./state";
@@ -317,6 +318,12 @@ export function OzoneHome() {
             <section aria-label="Your apps" className="flex flex-col gap-2">
               <h2 className="font-medium text-muted-foreground text-xs">Your apps</h2>
               <AppList apps={apps.data.apps} environmentId={environmentId} />
+            </section>
+          ) : null}
+          {environmentId !== null && apps.data !== null && apps.data.deleted.length > 0 ? (
+            <section aria-label="Deleted apps" className="flex flex-col gap-2">
+              <h2 className="font-medium text-muted-foreground text-xs">Deleted</h2>
+              <DeletedAppList apps={apps.data.deleted} environmentId={environmentId} />
             </section>
           ) : null}
         </div>

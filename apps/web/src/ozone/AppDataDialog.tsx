@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "~/components/ui/dialog";
 import { Spinner } from "~/components/ui/spinner";
+import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { formatBytes } from "~/lib/formatBytes";
 import { ensureLocalApi } from "~/localApi";
 import { useEnvironmentQuery } from "~/state/query";
@@ -49,7 +50,14 @@ export function AppDataDialog(props: {
 }
 
 function AppData(props: { readonly app: OzoneApp; readonly environmentId: EnvironmentId }) {
-  const target = { environmentId: props.environmentId, input: { projectId: props.app.projectId } };
+  const app = { environmentId: props.environmentId, input: { projectId: props.app.projectId } };
+  // Production's data is offered once the app has been deployed.
+  const deployed = useEnvironmentQuery(ozoneEnvironment.deployStatus(app)).data;
+  const hasProduction = deployed !== null && deployed !== undefined && deployed.target !== null;
+  const [production, setProduction] = useState(false);
+  const target = production
+    ? { ...app, input: { projectId: props.app.projectId, production: true } }
+    : app;
   const snapshots = useEnvironmentQuery(ozoneEnvironment.snapshots(target));
   const takeSnapshot = useAtomCommand(ozoneEnvironment.takeSnapshot, { reportFailure: false });
   const restoreSnapshot = useAtomCommand(ozoneEnvironment.restoreSnapshot, {
@@ -78,8 +86,12 @@ function AppData(props: { readonly app: OzoneApp; readonly environmentId: Enviro
     const confirmed = await ensureLocalApi()
       .dialogs.confirm(
         [
-          `Restore ${props.app.name}'s data from ${formatRelativeTimeLabel(snapshot.createdAt)}?`,
-          "The data it has now is backed up first, then replaced. The app restarts.",
+          production
+            ? `Restore the deployed ${props.app.name}'s data from ${formatRelativeTimeLabel(snapshot.createdAt)}?`
+            : `Restore ${props.app.name}'s data from ${formatRelativeTimeLabel(snapshot.createdAt)}?`,
+          production
+            ? "The data people are using now is backed up first, then replaced. The deployed app stops while it happens."
+            : "The data it has now is backed up first, then replaced. The app restarts.",
         ].join("\n"),
         { variant: "destructive" },
       )
@@ -88,7 +100,7 @@ function AppData(props: { readonly app: OzoneApp; readonly environmentId: Enviro
     setWorking(snapshot.id);
     const result = await restoreSnapshot({
       environmentId: props.environmentId,
-      input: { projectId: props.app.projectId, snapshotId: snapshot.id },
+      input: { ...target.input, snapshotId: snapshot.id },
     });
     settle(
       result._tag === "Failure" ? squashAtomCommandFailure(result) : null,
@@ -102,12 +114,28 @@ function AppData(props: { readonly app: OzoneApp; readonly environmentId: Enviro
       <DialogHeader>
         <DialogTitle>{props.app.name} data</DialogTitle>
         <DialogDescription>
-          Snapshots are copies of the database, kept outside the app's folder. Stopping, restarting
-          and rebuilding the app never touch its data.
+          {production
+            ? "Copies of the deployed app's database, kept on this machine. Every deploy takes one before its migrations run."
+            : "Snapshots are copies of the database, kept outside the app's folder. Stopping, restarting and rebuilding the app never touch its data."}
         </DialogDescription>
       </DialogHeader>
       <DialogPanel>
         <div className="flex flex-col gap-3">
+          {hasProduction ? (
+            <ToggleGroup
+              aria-label="Whose data"
+              disabled={working !== null}
+              value={[production ? "production" : "development"]}
+              onValueChange={(next) => {
+                if (next[0] === undefined) return;
+                setProduction(next[0] === "production");
+                setError(null);
+              }}
+            >
+              <Toggle value="development">While building</Toggle>
+              <Toggle value="production">Deployed</Toggle>
+            </ToggleGroup>
+          ) : null}
           {error === null ? null : (
             <Alert variant="error">
               <AlertDescription>{error}</AlertDescription>

@@ -32,12 +32,13 @@ it as read, and see how many are left to read." This is the app it built:
   Each app's Build settings choose the model its workers use, so a large lead can direct cheaper
   workers.
 - **Keeps your data.** An app's database lives in a volume that only a confirmed **Delete app**
-  removes, after a snapshot. Every finished task takes a snapshot, and **History** takes the code
-  and the data back to any task, which you can undo the same way. A migration that can lose data
-  stops the build and asks.
+  removes, after a snapshot, and Home can bring a deleted app back with that data. Every finished
+  task takes a snapshot, and **History** takes the code and the data back to any task, which you
+  can undo the same way. A migration that can lose data waits until you apply it, after a snapshot.
 - **Deploys.** **Deploy** runs the production build with a database of its own, on this machine or
   on a server that runs Docker, reached over SSH. Your development data is never touched, and Stop
-  keeps the production data for the next deploy.
+  keeps the production data for the next deploy. Each deploy saves the production data first, and
+  the Data dialog backs it up and restores it.
 - **Chats.** Ask anything and attach PDFs, Word documents, images and other files. Ask a chat
   for an app and it starts one.
 - **Uses your subscription.** Sign in to Claude from Settings. No API key is involved, and an API

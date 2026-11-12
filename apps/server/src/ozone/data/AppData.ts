@@ -51,6 +51,18 @@ export interface DataTarget {
   readonly commitSha: Effect.Effect<string | null>;
 }
 
+export interface RestoreOfInput {
+  readonly snapshotId: string;
+  /** Stopped while its database is replaced. */
+  readonly appService: string;
+  /** Brings the app back when it was running. Left out, the app stays stopped. */
+  readonly restart?: Effect.Effect<void, OzoneAppError>;
+}
+
+/** An app's folder of snapshots under Ozone's state, which outlives the app itself. */
+export const backupFolder = (path: Path.Path, stateDir: string, slug: string) =>
+  path.join(stateDir, "ozone", "backups", slug);
+
 /**
  * Copies of an app's data, kept in Ozone's home so they outlive the app's containers, its
  * checkout and the app itself. See docs/ozone/data-safety.md.
@@ -81,11 +93,28 @@ export class AppData extends Context.Service<
       projectId: ProjectId,
       effect: Effect.Effect<A, E, R>,
     ) => Effect.Effect<A, E, R>;
-    /** A snapshot of another of the app's projects, such as its production one. */
+    /**
+     * For an app brought back after a delete: loads its newest snapshot into its new, empty
+     * volumes and leaves the app stopped. Volumes still in Docker hold newer data than any
+     * snapshot, so they are left as they are. Returns the snapshot it loaded, if any.
+     */
+    readonly revive: (projectId: ProjectId) => Effect.Effect<OzoneSnapshot | null, OzoneAppError>;
+    /** The same for another of the app's projects, such as its production one. */
+    readonly listOf: (
+      target: Pick<DataTarget, "projectId" | "folder">,
+    ) => Effect.Effect<ReadonlyArray<OzoneSnapshot>>;
     readonly snapshotOf: (
       target: DataTarget,
       input: { readonly reason: OzoneSnapshotReason; readonly label?: string },
     ) => Effect.Effect<OzoneSnapshot, OzoneAppError>;
+    readonly restoreOf: (
+      target: DataTarget,
+      input: RestoreOfInput,
+    ) => Effect.Effect<OzoneDataRestoreResult, OzoneAppError>;
+    readonly loadOf: (
+      target: DataTarget,
+      input: RestoreOfInput,
+    ) => Effect.Effect<void, OzoneAppError>;
   }
 >()("t3/ozone/data/AppData") {}
 
@@ -156,8 +185,8 @@ export const make = Effect.gen(function* () {
   const toTheEnd = <A, E>(effect: Effect.Effect<A, E>) =>
     Effect.forkIn(effect, scope).pipe(Effect.flatMap(Fiber.join));
 
-  const backupsRoot = path.join(config.stateDir, "ozone", "backups");
-  const folderOf = (target: DataTarget) => path.join(backupsRoot, target.folder);
+  const folderOf = (target: Pick<DataTarget, "folder">) =>
+    backupFolder(path, config.stateDir, target.folder);
   // Called once the helpers below exist.
   const devTarget = (app: AppRegistry.ResolvedApp): DataTarget => ({
     projectId: app.app.projectId,
@@ -206,13 +235,22 @@ export const make = Effect.gen(function* () {
       .readFileString(path.join(directory, SNAPSHOT_FILE))
       .pipe(Effect.flatMap(decodeStored), Effect.option);
 
-  const listStored = Effect.fn("AppData.listStored")(function* (target: DataTarget) {
+  const listStored = Effect.fn("AppData.listStored")(function* (
+    target: Pick<DataTarget, "projectId" | "folder">,
+  ) {
     const directory = folderOf(target);
     const names = yield* fs.readDirectory(directory).pipe(Effect.orElseSucceed(() => []));
     const stored = yield* Effect.forEach(names, (name) => readStored(path.join(directory, name)));
-    return stored
-      .flatMap(Option.toArray)
-      .toSorted((left, right) => right.snapshot.id.localeCompare(left.snapshot.id));
+    return (
+      stored
+        .flatMap(Option.toArray)
+        // An app brought back after a delete has a new project; its snapshots are still its own.
+        .map((entry) => ({
+          ...entry,
+          snapshot: { ...entry.snapshot, projectId: target.projectId },
+        }))
+        .toSorted((left, right) => right.snapshot.id.localeCompare(left.snapshot.id))
+    );
   });
 
   const prune = Effect.fn("AppData.prune")(function* (target: DataTarget) {
@@ -319,14 +357,18 @@ export const make = Effect.gen(function* () {
     return snapshot;
   });
 
+  /** Replaces the target's databases with a stored snapshot's, with the app stopped meanwhile. */
   const restoreStored = Effect.fn("AppData.restoreStored")(function* (
-    app: AppRegistry.ResolvedApp,
+    target: DataTarget,
     stored: StoredSnapshot,
+    input: RestoreOfInput,
   ) {
-    const target = devTarget(app);
     const directory = path.join(folderOf(target), stored.snapshot.id);
-    const appService = app.manifest.runtime.appService;
-    const appWasRunning = yield* isRunning(target, appService);
+    const appService = input.appService;
+    const restart =
+      input.restart !== undefined && (yield* isRunning(target, appService))
+        ? input.restart
+        : Effect.void;
     // Nothing may write to the database while it is replaced.
     yield* run(target, "stop the app before restoring", ["stop", appService]);
     yield* Effect.forEach(
@@ -373,12 +415,62 @@ export const make = Effect.gen(function* () {
         ),
       { discard: true },
     ).pipe(
-      Effect.ensuring(
-        appWasRunning
-          ? target.compose(["up", "--detach", appService]).pipe(Effect.ignore)
-          : Effect.void,
-      ),
+      // A restore that failed still brings back the app it stopped.
+      Effect.tapError(() => restart.pipe(Effect.ignore)),
     );
+    yield* restart;
+  });
+
+  const findStored = Effect.fn("AppData.findStored")(function* (
+    target: DataTarget,
+    snapshotId: string,
+  ) {
+    const stored = (yield* listStored(target)).find((entry) => entry.snapshot.id === snapshotId);
+    return stored ?? (yield* failed("That snapshot no longer exists."));
+  });
+  const restoreIn = Effect.fn("AppData.restoreIn")(function* (
+    target: DataTarget,
+    input: RestoreOfInput,
+  ) {
+    const stored = yield* findStored(target, input.snapshotId);
+    const safety = yield* takeSnapshot(target, { reason: "before-restore" });
+    yield* restoreStored(target, stored, input);
+    return { safety };
+  });
+  const loadIn = Effect.fn("AppData.loadIn")(function* (target: DataTarget, input: RestoreOfInput) {
+    yield* restoreStored(target, yield* findStored(target, input.snapshotId), input);
+  });
+  /** The app's volumes in Docker that a snapshot holds: its databases'. */
+  const dataVolumes = Effect.fn("AppData.dataVolumes")(function* (
+    app: AppRegistry.ResolvedApp,
+    orFail: (detail: string) => OzoneAppError,
+  ) {
+    const covered = new Set(databasesOf(app).map((service) => `${app.app.slug}_${service.volume}`));
+    const listed = yield* docker
+      .run({
+        args: [
+          "volume",
+          "ls",
+          "--quiet",
+          "--filter",
+          `label=com.docker.compose.project=${app.app.slug}`,
+        ],
+        timeout: DUMP_TIMEOUT,
+      })
+      .pipe(Effect.mapError((error) => orFail(error.detail)));
+    return listed.stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((name) => covered.has(name));
+  });
+
+  /** Development's app comes back the way it always has: started, and not waited for. */
+  const devRestore = (app: AppRegistry.ResolvedApp, snapshotId: string): RestoreOfInput => ({
+    snapshotId,
+    appService: app.manifest.runtime.appService,
+    restart: devTarget(app)
+      .compose(["up", "--detach", app.manifest.runtime.appService])
+      .pipe(Effect.ignore),
   });
 
   return AppData.of({
@@ -395,17 +487,7 @@ export const make = Effect.gen(function* () {
       return yield* toTheEnd(
         exclusive(
           input.projectId,
-          working.withPermits(1)(
-            Effect.gen(function* () {
-              const stored = (yield* listStored(devTarget(app))).find(
-                (entry) => entry.snapshot.id === input.snapshotId,
-              );
-              if (stored === undefined) return yield* failed("That snapshot no longer exists.");
-              const safety = yield* takeSnapshot(devTarget(app), { reason: "before-restore" });
-              yield* restoreStored(app, stored);
-              return { safety };
-            }),
-          ),
+          working.withPermits(1)(restoreIn(devTarget(app), devRestore(app, input.snapshotId))),
         ),
       );
     }),
@@ -428,33 +510,17 @@ export const make = Effect.gen(function* () {
                 );
               }
               // Only the volumes the snapshot holds go; any other volume stays in Docker.
-              const covered = new Set(
-                databasesOf(app).map((service) => `${app.app.slug}_${service.volume}`),
-              );
-              const dockerRun = (input: DockerCli.DockerRunInput) =>
-                docker
-                  .run({ timeout: DUMP_TIMEOUT, ...input })
-                  .pipe(Effect.mapError((error) => failed(`${saved} ${error.detail}`)));
-              const listed = yield* dockerRun({
-                args: [
-                  "volume",
-                  "ls",
-                  "--quiet",
-                  "--filter",
-                  `label=com.docker.compose.project=${app.app.slug}`,
-                ],
-              });
-              const doomed = listed.stdout
-                .split("\n")
-                .map((line) => line.trim())
-                .filter((name) => covered.has(name));
+              const unsaved = (detail: string) => failed(`${saved} ${detail}`);
               yield* Effect.forEach(
-                doomed,
+                yield* dataVolumes(app, unsaved),
                 Effect.fn("AppData.removeVolume")(function* (name) {
-                  const output = yield* dockerRun({
-                    args: ["volume", "rm", name],
-                    allowDataRemoval: true,
-                  });
+                  const output = yield* docker
+                    .run({
+                      args: ["volume", "rm", name],
+                      timeout: DUMP_TIMEOUT,
+                      allowDataRemoval: true,
+                    })
+                    .pipe(Effect.mapError((error) => unsaved(error.detail)));
                   if (output.code !== 0) {
                     return yield* failed(
                       `${saved} the volume ${name} could not be removed. ${tail(output)}`.trim(),
@@ -470,8 +536,38 @@ export const make = Effect.gen(function* () {
       );
     }),
     exclusive,
+    revive: Effect.fn("AppData.revive")(function* (projectId) {
+      const app = yield* registry.resolve(projectId);
+      const target = devTarget(app);
+      return yield* toTheEnd(
+        exclusive(
+          projectId,
+          working.withPermits(1)(
+            Effect.gen(function* () {
+              const kept = yield* dataVolumes(app, failed);
+              const [newest] = yield* listStored(target);
+              if (kept.length > 0 || newest === undefined) return null;
+              yield* loadIn(target, {
+                snapshotId: newest.snapshot.id,
+                appService: app.manifest.runtime.appService,
+              });
+              return newest.snapshot;
+            }),
+          ),
+        ),
+      );
+    }),
+    listOf: Effect.fn("AppData.listOf")(function* (target) {
+      return (yield* listStored(target)).map((stored) => stored.snapshot);
+    }),
     snapshotOf: Effect.fn("AppData.snapshotOf")((target, input) =>
       working.withPermits(1)(takeSnapshot(target, input)),
+    ),
+    restoreOf: Effect.fn("AppData.restoreOf")((target, input) =>
+      toTheEnd(working.withPermits(1)(restoreIn(target, input))),
+    ),
+    loadOf: Effect.fn("AppData.loadOf")((target, input) =>
+      toTheEnd(working.withPermits(1)(loadIn(target, input))),
     ),
   });
 });

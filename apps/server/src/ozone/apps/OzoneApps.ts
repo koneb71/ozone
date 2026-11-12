@@ -1,15 +1,19 @@
 import {
   CommandId,
   DEFAULT_OZONE_APP_SETTINGS,
+  OZONE_MANIFEST_FILE_NAME,
+  OzoneApp,
   OzoneAppError,
-  type OzoneApp,
+  OzoneAppManifest,
+  ProjectId,
   type OzoneAppConfigureInput,
   type OzoneAppCreateInput,
   type OzoneAppCreateResult,
   type OzoneAppDeleteInput,
   type OzoneAppDeleteResult,
+  type OzoneAppRestoreInput,
   type OzoneAppsListResult,
-  type ProjectId,
+  type OzoneDeletedApp,
 } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as NetService from "@t3tools/shared/Net";
@@ -23,13 +27,16 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 
+import * as ServerConfig from "../../config.ts";
 import * as ManagedProjectFolders from "../../project/ManagedProjectFolders.ts";
 import * as ProjectService from "../../project/ProjectService.ts";
 import * as GitVcsDriver from "../../vcs/GitVcsDriver.ts";
 import * as AppData from "../data/AppData.ts";
+import * as AppDeploy from "../deploy/AppDeploy.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
 import * as AppRegistry from "./AppRegistry.ts";
 import { appSlug, safeAppName, scaffold } from "./AppScaffolder.ts";
@@ -50,6 +57,13 @@ export class OzoneApps extends Context.Service<
     readonly remove: (
       input: OzoneAppDeleteInput,
     ) => Effect.Effect<OzoneAppDeleteResult, OzoneAppError>;
+    /**
+     * Brings a deleted app back under its old name: a project for its folder, its settings, and
+     * its last snapshot loaded before it starts. Its threads are not brought back.
+     */
+    readonly restore: (
+      input: OzoneAppRestoreInput,
+    ) => Effect.Effect<OzoneAppCreateResult, OzoneAppError>;
     readonly configure: (input: OzoneAppConfigureInput) => Effect.Effect<OzoneApp, OzoneAppError>;
   }
 >()("t3/ozone/apps/OzoneApps") {}
@@ -57,6 +71,23 @@ export class OzoneApps extends Context.Service<
 /** Each app keeps one host port for life, so its preview URL and auth callback stay valid. */
 const APP_PORT_RANGE = { first: 41_000, last: 41_999 } as const;
 const FALLBACK_USER_ID = 1_000;
+
+/** Kept beside a deleted app's snapshots: what it takes to register it again. */
+const DELETED_RECORD_FILE = "app.json";
+const DeletedRecord = Schema.Struct({
+  app: OzoneApp,
+  workspaceRoot: Schema.String,
+  deletedAt: Schema.NullOr(Schema.String),
+});
+type DeletedRecord = typeof DeletedRecord.Type;
+const DeletedRecordJson = Schema.fromJsonString(DeletedRecord);
+const decodeDeletedRecord = Schema.decodeUnknownEffect(DeletedRecordJson);
+const encodeDeletedRecord = Schema.encodeEffect(DeletedRecordJson);
+/** Whose data a snapshot holds, which is all an app deleted without a record left of itself. */
+const decodeSnapshotOwner = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(Schema.Struct({ snapshot: Schema.Struct({ projectId: ProjectId }) })),
+);
+const decodeManifest = Schema.decodeUnknownEffect(Schema.fromJsonString(OzoneAppManifest));
 
 const failed = (message: string) => new OzoneAppError({ reason: "failed", message });
 
@@ -71,6 +102,8 @@ export const make = Effect.gen(function* () {
   const runtime = yield* AppRuntime.AppRuntime;
   const data = yield* AppData.AppData;
   const projects = yield* ProjectService.ProjectService;
+  const deploys = yield* AppDeploy.AppDeploy;
+  const config = yield* ServerConfig.ServerConfig;
   const hostUserId = yield* HostProcess.UserId;
   const scope = yield* Scope.Scope;
   // One at a time, so two new apps can never be given the same port.
@@ -190,9 +223,164 @@ export const make = Effect.gen(function* () {
     return { app, workspaceRoot };
   });
 
+  const backupsOf = (slug: string) => AppData.backupFolder(path, config.stateDir, slug);
+  const recordPathOf = (slug: string) => path.join(backupsOf(slug), DELETED_RECORD_FILE);
+
+  /** An app deleted before Ozone kept a record, pieced together from what it left behind. */
+  const legacyRecord = Effect.fn("OzoneApps.legacyRecord")(function* (slug: string) {
+    const names = yield* fs.readDirectory(backupsOf(slug)).pipe(Effect.orElseSucceed(() => []));
+    const owners = yield* Effect.forEach(names.toSorted().toReversed(), (name) =>
+      fs
+        .readFileString(path.join(backupsOf(slug), name, "snapshot.json"))
+        .pipe(Effect.flatMap(decodeSnapshotOwner), Effect.option),
+    );
+    const owner = owners.flatMap(Option.toArray)[0]?.snapshot.projectId;
+    if (owner === undefined) return null;
+    const project = Option.getOrNull(
+      yield* projects
+        .getById(owner, { includeDeleted: true })
+        .pipe(Effect.orElseSucceed(() => Option.none())),
+    );
+    if (project === null) return null;
+    const environment = yield* fs
+      .readFileString(path.join(project.workspaceRoot, ".env"))
+      .pipe(Effect.orElseSucceed(() => ""));
+    const port = Number(/^OZONE_APP_PORT=(\d+)$/m.exec(environment)?.[1]);
+    const manifest = yield* fs
+      .readFileString(path.join(project.workspaceRoot, OZONE_MANIFEST_FILE_NAME))
+      .pipe(Effect.flatMap(decodeManifest), Effect.option);
+    if (!Number.isInteger(port) || Option.isNone(manifest)) return null;
+    return {
+      app: {
+        projectId: owner,
+        slug,
+        name: project.title,
+        templateId: manifest.value.template ?? DEFAULT_TEMPLATE_ID,
+        port,
+        createdAt: project.createdAt,
+        settings: DEFAULT_OZONE_APP_SETTINGS,
+      },
+      workspaceRoot: project.workspaceRoot,
+      deletedAt: project.deletedAt,
+    } satisfies DeletedRecord;
+  });
+
+  /** What is left of a deleted app, when enough is left to bring it back. */
+  const deletedRecord = Effect.fn("OzoneApps.deletedRecord")(function* (slug: string) {
+    const recorded = yield* fs
+      .readFileString(recordPathOf(slug))
+      .pipe(Effect.flatMap(decodeDeletedRecord), Effect.option);
+    const record = Option.isSome(recorded) ? recorded.value : yield* legacyRecord(slug);
+    if (record === null) return null;
+    const hasManifest = yield* fs
+      .exists(path.join(record.workspaceRoot, OZONE_MANIFEST_FILE_NAME))
+      .pipe(Effect.orElseSucceed(() => false));
+    return hasManifest ? record : null;
+  });
+
+  const deletedApps = Effect.fn("OzoneApps.deletedApps")(function* (
+    registered: ReadonlyArray<OzoneApp>,
+  ) {
+    const slugs = yield* fs
+      .readDirectory(path.dirname(backupsOf("any")))
+      .pipe(Effect.orElseSucceed(() => []));
+    const records = yield* Effect.forEach(
+      slugs.filter((slug) => !registered.some((app) => app.slug === slug)),
+      deletedRecord,
+    );
+    return records
+      .flatMap((record): ReadonlyArray<OzoneDeletedApp> =>
+        record === null
+          ? []
+          : [
+              {
+                slug: record.app.slug,
+                name: record.app.name,
+                templateId: record.app.templateId,
+                workspaceRoot: record.workspaceRoot,
+                deletedAt: record.deletedAt,
+              },
+            ],
+      )
+      .toSorted((left, right) => (right.deletedAt ?? "").localeCompare(left.deletedAt ?? ""));
+  });
+
+  const restoreOne = Effect.fn("OzoneApps.restoreOne")(function* (slug: string) {
+    const registered = yield* registry.list;
+    if (registered.some((app) => app.slug === slug)) {
+      return yield* failed("That app is not deleted.");
+    }
+    const record = yield* deletedRecord(slug);
+    if (record === null) {
+      return yield* failed(
+        "Not enough is left of that app to bring it back: its folder or its record is gone.",
+      );
+    }
+    const id = yield* random
+      .uuidV4()
+      .pipe(Effect.mapError(() => failed("Could not name the app's project.")));
+    // A project the person already made for the folder by hand is used as it is.
+    const { project } = yield* projects
+      .bootstrap({
+        commandId: CommandId.make(`ozone-app-restore:${id}`),
+        projectId: ProjectId.make(id),
+        title: record.app.name,
+        workspaceRoot: record.workspaceRoot,
+      })
+      .pipe(Effect.mapError((error) => failed(error.message)));
+    const taken = new Set(registered.map((app) => app.port));
+    const keepsPort =
+      !taken.has(record.app.port) && (yield* net.isPortAvailableOnLoopback(record.app.port));
+    const port = keepsPort ? record.app.port : yield* freePort(taken);
+    if (!keepsPort) {
+      const environmentPath = path.join(record.workspaceRoot, ".env");
+      yield* fs.readFileString(environmentPath).pipe(
+        Effect.flatMap((text) =>
+          fs.writeFileString(
+            environmentPath,
+            text.replace(/^OZONE_APP_PORT=.*$/m, `OZONE_APP_PORT=${port}`),
+          ),
+        ),
+        Effect.mapError(() => failed("Could not give the app a new port in its .env file.")),
+      );
+    }
+    // The same slug, so its settings, its snapshots and its deploy are its own again.
+    const app: OzoneApp = { ...record.app, projectId: project.id, port };
+    yield* registry.register(app);
+    // Before it first starts, so its startup migration runs on the data it had.
+    yield* data
+      .revive(project.id)
+      .pipe(Effect.tapError(() => registry.unregister(project.id).pipe(Effect.ignore)));
+    yield* fs.remove(recordPathOf(slug)).pipe(Effect.ignore);
+    yield* runtime
+      .act({ projectId: project.id, action: "up" })
+      .pipe(Effect.ignore, Effect.forkIn(scope));
+    return { app, workspaceRoot: record.workspaceRoot };
+  });
+
   const remove = Effect.fn("OzoneApps.removeApp")(function* (projectId: ProjectId) {
-    const { workspaceRoot } = yield* registry.resolve(projectId);
+    const { app, workspaceRoot } = yield* registry.resolve(projectId);
+    // Deleted, Ozone could no longer reach what it deployed. Stopped, production waits unharmed.
+    const production = yield* deploys.status(projectId);
+    if (production.state === "running" || production.state === "deploying") {
+      return yield* failed(
+        `${app.name} is deployed and running. Stop it under Deploy first; its production data stays where it is.`,
+      );
+    }
     const { snapshot } = yield* data.remove(projectId);
+    yield* encodeDeletedRecord({
+      app,
+      workspaceRoot,
+      deletedAt: DateTime.formatIso(yield* DateTime.now),
+    }).pipe(
+      Effect.flatMap((json) =>
+        fs
+          .makeDirectory(backupsOf(app.slug), { recursive: true })
+          .pipe(Effect.andThen(fs.writeFileString(recordPathOf(app.slug), json))),
+      ),
+      // Without it the app can still be pieced together from its snapshot.
+      Effect.ignore,
+    );
     yield* registry.unregister(projectId);
     // The data is gone by now, so a project that cannot be removed is said, not undone.
     yield* projects
@@ -213,12 +401,19 @@ export const make = Effect.gen(function* () {
 
   return OzoneApps.of({
     list: Effect.gen(function* () {
+      const apps = yield* registry.list;
       return {
-        apps: yield* registry.list,
+        apps,
         templates: TEMPLATES,
         docker: yield* runtime.docker,
+        deleted: yield* deletedApps(apps),
       };
     }),
+    restore: Effect.fn("OzoneApps.restore")((input) =>
+      Effect.forkIn(creating.withPermits(1)(restoreOne(input.slug)), scope).pipe(
+        Effect.flatMap(Fiber.join),
+      ),
+    ),
     create: Effect.fn("OzoneApps.create")((input) => creating.withPermits(1)(createOne(input))),
     configure: Effect.fn("OzoneApps.configure")((input) =>
       registry.configure(input.projectId, input.settings),

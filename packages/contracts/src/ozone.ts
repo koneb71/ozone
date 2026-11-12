@@ -118,10 +118,22 @@ export const OzoneDockerStatus = Schema.Struct({
 });
 export type OzoneDockerStatus = typeof OzoneDockerStatus.Type;
 
+/** A deleted app whose folder and snapshots are still there, so it can be brought back. */
+export const OzoneDeletedApp = Schema.Struct({
+  slug: ShortText,
+  name: Schema.String,
+  templateId: ShortText,
+  workspaceRoot: Schema.String,
+  /** Null for an app deleted before Ozone recorded the time. */
+  deletedAt: Schema.NullOr(IsoDateTime),
+});
+export type OzoneDeletedApp = typeof OzoneDeletedApp.Type;
+
 export const OzoneAppsListResult = Schema.Struct({
   apps: Schema.Array(OzoneApp),
   templates: Schema.Array(OzoneTemplateSummary),
   docker: OzoneDockerStatus,
+  deleted: Schema.Array(OzoneDeletedApp).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
 });
 export type OzoneAppsListResult = typeof OzoneAppsListResult.Type;
 
@@ -152,6 +164,9 @@ export type OzoneAppCreateResult = typeof OzoneAppCreateResult.Type;
 
 export const OzoneAppDeleteInput = Schema.Struct({ projectId: ProjectId });
 export type OzoneAppDeleteInput = typeof OzoneAppDeleteInput.Type;
+
+export const OzoneAppRestoreInput = Schema.Struct({ slug: ShortText });
+export type OzoneAppRestoreInput = typeof OzoneAppRestoreInput.Type;
 
 export class OzoneAppError extends Schema.TaggedError<OzoneAppError>()("OzoneAppError", {
   /** Clients branch on the named reasons and show the message for `failed`. */
@@ -254,17 +269,25 @@ export const OzoneAppDeleteResult = Schema.Struct({
 });
 export type OzoneAppDeleteResult = typeof OzoneAppDeleteResult.Type;
 
-export const OzoneDataListInput = Schema.Struct({ projectId: ProjectId });
+/** Set on the data methods to mean the deployed app's data, which is kept apart. */
+const Production = Schema.optionalKey(Schema.Boolean);
+
+export const OzoneDataListInput = Schema.Struct({ projectId: ProjectId, production: Production });
 export const OzoneDataListResult = Schema.Struct({ snapshots: Schema.Array(OzoneSnapshot) });
 export type OzoneDataListResult = typeof OzoneDataListResult.Type;
 
 export const OzoneDataSnapshotInput = Schema.Struct({
   projectId: ProjectId,
   label: Schema.optionalKey(TrimmedNonEmptyString.check(Schema.isMaxLength(80))),
+  production: Production,
 });
 export type OzoneDataSnapshotInput = typeof OzoneDataSnapshotInput.Type;
 
-export const OzoneDataRestoreInput = Schema.Struct({ projectId: ProjectId, snapshotId: ShortText });
+export const OzoneDataRestoreInput = Schema.Struct({
+  projectId: ProjectId,
+  snapshotId: ShortText,
+  production: Production,
+});
 export type OzoneDataRestoreInput = typeof OzoneDataRestoreInput.Type;
 
 export const OzoneDataRestoreResult = Schema.Struct({
@@ -375,6 +398,11 @@ export const OzoneDeployRunInput = Schema.Struct({
   target: OzoneDeployTarget,
   /** Runs the migration the last deploy held back, after the snapshot every deploy takes first. */
   acceptMigrations: Schema.optionalKey(Schema.Boolean),
+  /**
+   * On a first deploy to a new place: starts from the data of the place deployed before, and stops
+   * the deploy there once this one runs. The old volume stays.
+   */
+  bringData: Schema.optionalKey(Schema.Boolean),
 });
 export type OzoneDeployRunInput = typeof OzoneDeployRunInput.Type;
 
@@ -382,6 +410,7 @@ export const OZONE_WS_METHODS = {
   appsList: "ozone.apps.list",
   appsCreate: "ozone.apps.create",
   appsDelete: "ozone.apps.delete",
+  appsRestore: "ozone.apps.restore",
   appsConfigure: "ozone.apps.configure",
   runtimeAct: "ozone.runtime.act",
   runtimeLogs: "ozone.runtime.logs",
@@ -414,6 +443,8 @@ export const OZONE_RPC_SCOPES = {
   [OZONE_WS_METHODS.appsCreate]: AuthOrchestrationOperateScope,
   // Removes the app's containers and data, behind a snapshot.
   [OZONE_WS_METHODS.appsDelete]: AuthOrchestrationOperateScope,
+  // Brings a deleted app back from its folder and its last snapshot.
+  [OZONE_WS_METHODS.appsRestore]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.runtimeAct]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.runtimeLogs]: AuthOrchestrationReadScope,
   [OZONE_WS_METHODS.runtimeSubscribe]: AuthOrchestrationReadScope,
@@ -460,6 +491,11 @@ export const OzoneWsRpcs = [
   Rpc.make(OZONE_WS_METHODS.appsDelete, {
     payload: OzoneAppDeleteInput,
     success: OzoneAppDeleteResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.appsRestore, {
+    payload: OzoneAppRestoreInput,
+    success: OzoneAppCreateResult,
     error: OzoneRpcError,
   }),
   Rpc.make(OZONE_WS_METHODS.runtimeAct, {

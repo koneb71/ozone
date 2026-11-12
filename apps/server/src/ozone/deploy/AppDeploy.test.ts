@@ -1,7 +1,12 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import { DEFAULT_OZONE_APP_SETTINGS, ProjectId, type OzoneAppManifest } from "@t3tools/contracts";
+import {
+  DEFAULT_OZONE_APP_SETTINGS,
+  ProjectId,
+  type OzoneAppManifest,
+  type OzoneSnapshot,
+} from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -46,6 +51,16 @@ const HELD_BACK = [
   "ozone-accept 0001_drop.sql@abc",
 ].join("\n");
 
+const snapshotOf = (reason: OzoneSnapshot["reason"]): OzoneSnapshot => ({
+  id: `snapshot-${reason}`,
+  projectId,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  reason,
+  label: null,
+  commitSha: null,
+  sizeBytes: 1,
+});
+
 /** What a Docker call does, after the flags that name the production project. */
 const step = (args: ReadonlyArray<string>) => {
   const afterFiles = args.slice(args.lastIndexOf("-f") + 2);
@@ -63,7 +78,8 @@ const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: bool
     yield* fs.writeFileString(caFile, "-----BEGIN CERTIFICATE-----\n");
     const calls = yield* Ref.make<ReadonlyArray<DockerCli.DockerRunInput>>([]);
     const journal = yield* Ref.make<ReadonlyArray<string>>([]);
-    const running = yield* Ref.make(false);
+    // Where the app runs: this machine ("here") or a server's address.
+    const running = yield* Ref.make<ReadonlySet<string>>(new Set());
     // The files each build saw, where Compose was pointed.
     const builtFrom = yield* Ref.make<ReadonlyArray<ReadonlyArray<string>>>([]);
     // Set, the migrate step holds back a migration that can lose data unless it is accepted.
@@ -88,10 +104,13 @@ const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: bool
             if (what === "run migrate" && (yield* Ref.get(holdMigration)) && !accepted) {
               return { code: 3, stdout: "", stderr: HELD_BACK, timedOut: false };
             }
-            if (what === "up app") yield* Ref.set(running, true);
-            if (what === "stop") yield* Ref.set(running, false);
+            const place = input.args[0] === "-H" ? (input.args[1] ?? "") : "here";
+            if (what === "up app") yield* Ref.update(running, (set) => new Set([...set, place]));
+            if (what === "stop") {
+              yield* Ref.update(running, (set) => new Set([...set].filter((at) => at !== place)));
+            }
             const stdout =
-              what === "ps json app" && (yield* Ref.get(running))
+              what === "ps json app" && (yield* Ref.get(running)).has(place)
                 ? '{"Service":"app","State":"running"}\n'
                 : "";
             return { code: 0, stdout, stderr: "", timedOut: false };
@@ -126,19 +145,32 @@ const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: bool
                   manifest,
                 }),
             }),
+            // Each asks the target's own Docker, which shows where it was aimed.
             Layer.mock(AppData.AppData)({
+              listOf: () => Effect.succeed([snapshotOf("manual")]),
               snapshotOf: (target, input) =>
-                Ref.update(journal, (all) => [...all, `snapshot ${input.reason}`]).pipe(
-                  Effect.as({
-                    id: "snapshot-1",
-                    projectId: target.projectId,
-                    createdAt: "2026-01-01T00:00:00.000Z",
-                    reason: input.reason,
-                    label: null,
-                    commitSha: null,
-                    sizeBytes: 1,
-                  }),
-                ),
+                target
+                  .compose(["exec", "pg_dump"])
+                  .pipe(
+                    Effect.andThen(
+                      Ref.update(journal, (all) => [
+                        ...all,
+                        `snapshot ${input.reason}${input.label === undefined ? "" : ` (${input.label})`}`,
+                      ]),
+                    ),
+                    Effect.as(snapshotOf(input.reason)),
+                  ),
+              restoreOf: (target, input) =>
+                target
+                  .compose(["exec", "pg_restore"])
+                  .pipe(
+                    Effect.andThen(input.restart ?? Effect.void),
+                    Effect.as({ safety: snapshotOf("before-restore") }),
+                  ),
+              loadOf: (target, input) =>
+                target
+                  .compose(["exec", "pg_restore", input.snapshotId])
+                  .pipe(Effect.andThen(input.restart ?? Effect.void)),
             }),
             // Behind a TLS-intercepting proxy, the host names its certificate bundle.
             Layer.succeed(
@@ -216,9 +248,10 @@ it.effect("deploys to this machine: builds, starts its own database, migrates, t
     // Every later deploy saves the production data before its migrations run.
     yield* forget;
     yield* deploy.deploy({ projectId, target: here });
-    assert.deepStrictEqual((yield* steps).slice(0, 5), [
+    assert.deepStrictEqual((yield* steps).slice(0, 6), [
       "build",
       "up db",
+      "exec pg_dump",
       "snapshot before-deploy",
       "run migrate",
       "up app",
@@ -258,6 +291,74 @@ it.effect("runs a migration that can lose data only when the person applies it",
     assert.isNull(applied.migration);
     const migrate = (yield* Ref.get(calls)).find((call) => step(call.args) === "run migrate");
     assert.include(migrate?.args ?? [], "OZONE_ACCEPT_MIGRATIONS=0001_drop.sql@abc");
+  }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect("backs up and restores production from the commit it runs", () =>
+  Effect.gen(function* () {
+    const { deploy, calls, steps, forget, fs, path, workspaceRoot } = yield* makeHarness();
+    yield* Effect.flip(deploy.snapshot({ projectId }));
+    yield* deploy.deploy({ projectId, target: here });
+    // The working tree moves on; production is still the commit that was deployed.
+    yield* fs.remove(path.join(workspaceRoot, AppDeploy.PROD_COMPOSE_FILE));
+    yield* forget;
+    yield* Ref.set(calls, []);
+
+    assert.strictEqual((yield* deploy.snapshot({ projectId })).reason, "manual");
+    assert.deepStrictEqual(yield* deploy.snapshots(projectId), [snapshotOf("manual")]);
+    const { safety } = yield* deploy.restore({ projectId, snapshotId: "snapshot-manual" });
+    assert.strictEqual(safety.reason, "before-restore");
+    // After the data: the deployed version's migrations, then the app again.
+    assert.deepStrictEqual(yield* steps, [
+      "exec pg_dump",
+      "snapshot manual",
+      "exec pg_restore",
+      "run migrate",
+      "up app",
+    ]);
+    for (const call of yield* Ref.get(calls)) {
+      assert.notStrictEqual(call.args[4], workspaceRoot);
+      assert.include(call.args.join(" "), "compose.prod.override.yaml");
+      assert.strictEqual(call.env?.OZONE_PROD_BIND, "127.0.0.1");
+    }
+  }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect("moves to a server with its data, and stops what ran before", () =>
+  Effect.gen(function* () {
+    const { deploy, calls, steps, forget } = yield* makeHarness();
+    const server = { host: "deploy@example.com", publicUrl: null };
+    yield* deploy.deploy({ projectId, target: here });
+    yield* forget;
+    yield* Ref.set(calls, []);
+
+    const moved = yield* deploy.deploy({ projectId, target: server, bringData: true });
+    assert.include(moved, { state: "running", url: "http://example.com:42005" });
+    assert.deepStrictEqual(yield* steps, [
+      "exec pg_dump",
+      "snapshot before-deploy (Moved from this machine)",
+      "build",
+      "up db",
+      "exec pg_restore snapshot-before-deploy",
+      "run migrate",
+      "up app",
+      "stop",
+      "ps json app",
+    ]);
+    // The data is read and the old deploy stopped on this machine; the rest is on the server.
+    const onServer = (yield* Ref.get(calls)).map((call) => call.args[0] === "-H");
+    assert.deepStrictEqual(onServer, [false, true, true, true, true, true, false, true]);
+    assert.isFalse((yield* Ref.get(calls)).some((call) => DockerCli.removesData(call.args)));
+
+    // Coming back finds the data it left here, and saves it before migrating.
+    yield* forget;
+    yield* deploy.deploy({ projectId, target: here, bringData: true });
+    assert.deepStrictEqual((yield* steps).slice(0, 4), [
+      "build",
+      "up db",
+      "exec pg_dump",
+      "snapshot before-deploy",
+    ]);
   }).pipe(Effect.provide(layerTest)),
 );
 
