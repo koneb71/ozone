@@ -75,7 +75,8 @@ const makeHarness = (options: { readonly hostCa?: boolean; readonly docker?: "mi
       DockerCli.DockerCli,
       DockerCli.DockerCli.of({
         run: Effect.fn("TestDocker.run")(function* (input) {
-          if (input.args[0] === "compose") {
+          // The probe for the Compose plugin is not an action on an app.
+          if (input.args[0] === "compose" && input.args[1] !== "version") {
             yield* Queue.offer(composeCalls, input.args);
             const action = input.args.find((arg) => ["up", "stop", "restart"].includes(arg));
             if (action !== undefined && (yield* Ref.get(exclusiveDepth)) === 0) {
@@ -450,4 +451,31 @@ describe("AppRuntime", () => {
       assert.isNull((yield* harness.runtime.status(projectId)).migration);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
+
+  // What Docker prints decides which help a person gets: install it, start it, or fix a permission.
+  it.each([
+    [null, null, "missing"],
+    [
+      { code: 1, stderr: "Cannot connect to the Docker daemon at unix:///var/run/docker.sock." },
+      null,
+      "stopped",
+    ],
+    [
+      { code: 1, stderr: "permission denied while trying to connect to the Docker daemon socket" },
+      null,
+      "denied",
+    ],
+    [
+      { code: 0, stdout: "29.0.0\n" },
+      { code: 1, stderr: "docker: 'compose' is not a docker command." },
+      "no-compose",
+    ],
+    [{ code: 0, stdout: "29.0.0\n" }, { code: 0, stdout: "v5.6.1" }, null],
+  ] as const)("reads Docker's answers %j and %j as %s", (daemon, compose, problem) => {
+    const output = (partial: object | null) =>
+      partial === null ? null : { ...succeeded, ...partial };
+    const status = AppRuntime.readDockerStatus(output(daemon), output(compose));
+    assert.strictEqual(status.problem, problem);
+    assert.strictEqual(status.available, problem === null);
+  });
 });

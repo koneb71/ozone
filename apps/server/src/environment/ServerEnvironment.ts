@@ -272,7 +272,9 @@ export const make = Effect.gen(function* () {
       projectCloneTracking: true,
       projectOrganization: true,
       ignoredFileListing: true,
-      triage: true,
+      // ozone-seam: upstream's triage agent files its reports on upstream's repository, and
+      // Ozone's problems are not for T3 Code's maintainers.
+      triage: false,
       oneTimeSchedules: true,
       freshContext: true,
       scheduledTaskThreadModes: true,

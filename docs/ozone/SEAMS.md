@@ -28,6 +28,7 @@ These files contain a comment with `ozone-seam` at each edit.
 | `apps/server/src/cli/config.ts`                             | no project is made from the working directory by default                                               |
 | `apps/server/src/cloud/npmRelease.ts`                       | keeps upstream's unused release layer exported                                                         |
 | `apps/server/src/config.ts`                                 | default port 3737                                                                                      |
+| `apps/server/src/environment/ServerEnvironment.ts`          | the triage agent, which reports to upstream's repository, is off                                       |
 | `apps/server/src/mcp/McpHttpServer.ts`                      | keeps upstream's unused MCP layer exported                                                             |
 | `apps/server/src/observability/RpcInstrumentation.ts`       | spreads the trace labels of Ozone's RPC methods                                                        |
 | `apps/server/src/os-jank.ts`                                | default data directory `~/.ozone`                                                                      |
@@ -49,7 +50,7 @@ These files contain a comment with `ozone-seam` at each edit.
 | `apps/web/src/components/chat/useComposerSend.ts`           | sending a prompt no longer counts towards upstream's star prompt                                       |
 | `apps/web/src/components/sidebar/SidebarChrome.tsx`         | sidebar brand name                                                                                     |
 | `apps/web/src/routes/_chat.index.tsx`                       | the index route shows Ozone's home                                                                     |
-| `apps/web/vite.config.ts`                                   | `OZONE_TEST_CHROMIUM` names the browser for tests where Playwright's own build is missing              |
+| `apps/web/vite.config.ts`                                   | registers the build-time rename to Ozone, and `OZONE_TEST_CHROMIUM` for tests                          |
 | `knip.jsonc`                                                | finds the scripts upstream's parked workflows still name                                               |
 | `packages/client-runtime/src/rpc/client.ts`                 | lists Ozone's streaming RPC methods beside upstream's                                                  |
 | `packages/client-runtime/src/state/projectGrouping.test.ts` | expects the Chats label                                                                                |

@@ -9,6 +9,8 @@ import { playwright } from "vite-plus/test/browser-playwright";
 import { defineProject, type TestProjectInlineConfiguration } from "vite-plus/test/config";
 import "vite-plus/test/config";
 import { defineConfig, type Connect, type Plugin } from "vite-plus";
+
+import { ozoneNamePlugin } from "./src/ozone/namePlugin.ts";
 import * as Hash from "effect/Hash";
 import pkg from "./package.json" with { type: "json" };
 import pdfjsPkg from "pdfjs-dist/package.json" with { type: "json" };
@@ -294,6 +296,8 @@ export default defineConfig(() => {
     },
     assetsInclude: ["**/*.wasm"],
     plugins: [
+      // ozone-seam: the client says Ozone wherever upstream's source says T3 Code.
+      process.env.VITEST === undefined ? ozoneNamePlugin() : undefined,
       bootstrapTitlePlugin(),
       devCompressionPlugin(),
       chunkCycleGuardPlugin(),

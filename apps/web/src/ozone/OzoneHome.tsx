@@ -304,7 +304,24 @@ export function OzoneHome() {
           {dockerMissing ? (
             <Alert variant="warning">
               <AlertTitle>Ozone needs Docker to build and run apps</AlertTitle>
-              <AlertDescription>{docker.message}</AlertDescription>
+              <AlertDescription>
+                <p>{docker.message}</p>
+                <div className="flex flex-wrap items-center gap-3">
+                  {docker.problem === "missing" || docker.problem === "no-compose" ? (
+                    <a
+                      className="text-sm underline underline-offset-2"
+                      href="https://docs.docker.com/get-started/get-docker/"
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      Get Docker
+                    </a>
+                  ) : null}
+                  <Button size="xs" variant="outline" onClick={() => apps.refresh()}>
+                    Check again
+                  </Button>
+                </div>
+              </AlertDescription>
             </Alert>
           ) : null}
           {error === null ? null : (

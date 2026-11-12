@@ -177,7 +177,12 @@ const makeHarness = Effect.gen(function* () {
           isPortAvailableOnLoopback: (port) => Effect.succeed(port !== 41_001),
         }),
         Layer.mock(AppRuntime.AppRuntime)({
-          docker: Effect.succeed({ available: true, version: "29.0.0", message: null }),
+          docker: Effect.succeed({
+            available: true,
+            version: "29.0.0",
+            message: null,
+            problem: null,
+          }),
           act: (input) =>
             record("start it").pipe(
               Effect.andThen(Queue.offer(started, input.projectId)),
@@ -225,11 +230,21 @@ it.effect("OzoneApps creates an app from the template, registers it and starts i
     );
     assert.deepStrictEqual(yield* Ref.get(registered), [first.app]);
     assert.strictEqual(yield* Queue.take(started), first.app.projectId);
+    // This machine's Git has no identity, so the app's own repository gets one before it commits.
     assert.deepStrictEqual(
       (yield* Ref.get(commits)).map((args) =>
-        args.find((arg) => arg === "add" || arg === "commit"),
+        args
+          .filter((arg) => !arg.startsWith("-") && !arg.includes("="))
+          .slice(0, 2)
+          .join(" "),
       ),
-      ["add", "commit"],
+      [
+        "config user.email",
+        "config user.name",
+        "config user.email",
+        "add",
+        "commit Scaffold from the Ozone web-app template",
+      ],
     );
 
     const read = (file: string) => fs.readFileString(path.join(first.workspaceRoot, file));

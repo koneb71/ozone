@@ -116,6 +116,25 @@ export const make = Effect.gen(function* () {
     return yield* failed("No free port is left for a new app on this machine.");
   });
 
+  /**
+   * Every passed task is a commit, and History and deploys read them. On a machine where Git has
+   * no identity, the app's own repository gets one, and nothing outside it is configured.
+   */
+  const ensureIdentity = Effect.fn("OzoneApps.ensureIdentity")(function* (workspaceRoot: string) {
+    const config = (args: ReadonlyArray<string>) =>
+      git.execute({
+        operation: "OzoneApps.identity",
+        cwd: workspaceRoot,
+        args: ["config", ...args],
+        allowNonZeroExit: true,
+        timeoutMs: 10_000,
+      });
+    const email = yield* config(["user.email"]);
+    if (Number(email.exitCode) === 0 && email.stdout.trim().length > 0) return;
+    yield* config(["--local", "user.name", "Ozone"]);
+    yield* config(["--local", "user.email", "ozone@localhost"]);
+  });
+
   const commitScaffold = (workspaceRoot: string, templateId: string) =>
     git
       .execute({
@@ -134,7 +153,7 @@ export const make = Effect.gen(function* () {
             timeoutMs: 30_000,
           }),
         ),
-        // A machine without a Git identity still gets a working app; the files stay uncommitted.
+        // A failed commit still leaves a working app; the first passed task commits everything.
         Effect.ignore,
       );
 
@@ -204,6 +223,7 @@ export const make = Effect.gen(function* () {
         Effect.provideService(Path.Path, path),
         Effect.mapError(() => failed("Could not write the template into the new app.")),
       );
+      yield* ensureIdentity(workspaceRoot).pipe(Effect.ignore);
       yield* commitScaffold(workspaceRoot, templateId);
 
       const app: OzoneApp = {

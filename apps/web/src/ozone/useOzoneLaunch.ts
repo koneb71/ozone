@@ -72,7 +72,7 @@ export function useOzoneLaunch() {
   ): Promise<LaunchOutcome> => {
     const defaults = newThreadDefaults(environmentId, projectId);
     if (defaults === null) {
-      return "No model is ready yet. Sign in to a provider in Settings, then try again.";
+      return "No model is ready yet. Open Settings, choose Providers and sign in to Claude, then try again. Claude Code must be installed on this machine first.";
     }
     const threadId = newThreadId();
     const createdAt = new Date().toISOString();

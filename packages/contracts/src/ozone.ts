@@ -115,6 +115,10 @@ export const OzoneDockerStatus = Schema.Struct({
   version: Schema.NullOr(Schema.String),
   /** What to do when Docker is not available. */
   message: Schema.NullOr(Schema.String),
+  /** Why it is not available, so a client can offer the right help. */
+  problem: Schema.NullOr(Schema.Literals(["missing", "stopped", "denied", "no-compose"])).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+  ),
 });
 export type OzoneDockerStatus = typeof OzoneDockerStatus.Type;
 

@@ -146,6 +146,45 @@ export const derivePhase = (input: {
   return { phase: "running", message: null };
 };
 
+const unavailableBecause = (
+  problem: NonNullable<OzoneDockerStatus["problem"]>,
+  message: string,
+): OzoneDockerStatus => ({ available: false, version: null, message, problem });
+
+/**
+ * What the two probes say about Docker: its daemon's version, then its Compose plugin. Null is a
+ * probe that could not run at all.
+ */
+export const readDockerStatus = (
+  daemon: DockerCli.DockerRunOutput | null,
+  compose: DockerCli.DockerRunOutput | null,
+): OzoneDockerStatus => {
+  if (daemon === null) {
+    return unavailableBecause(
+      "missing",
+      "Docker is not installed on this machine. Ozone runs every app with Docker Compose.",
+    );
+  }
+  if (daemon.code !== 0 || daemon.stdout.trim().length === 0) {
+    return /permission denied/i.test(daemon.stderr)
+      ? unavailableBecause(
+          "denied",
+          "Docker is running, but this user may not use it. Add the user to the docker group with `sudo usermod -aG docker $USER`, then sign out and in again.",
+        )
+      : unavailableBecause(
+          "stopped",
+          "Docker is installed but not running. Start Docker, then check again.",
+        );
+  }
+  if (compose === null || compose.code !== 0) {
+    return unavailableBecause(
+      "no-compose",
+      "Docker is running, but its Compose plugin is missing. Ozone needs Docker Compose v2.",
+    );
+  }
+  return { available: true, version: daemon.stdout.trim(), message: null, problem: null };
+};
+
 const tail = (text: string, limit: number) =>
   text.length <= limit ? text : text.slice(text.length - limit);
 
@@ -178,26 +217,14 @@ export const make = Effect.gen(function* () {
   const changed = yield* PubSub.sliding<ProjectId>(64);
 
   const dockerStatus = yield* Effect.cachedWithTTL(
-    docker
-      .run({ args: ["version", "--format", "{{.Server.Version}}"], timeout: Duration.seconds(10) })
-      .pipe(
-        Effect.map((output): OzoneDockerStatus =>
-          output.code === 0 && output.stdout.trim().length > 0
-            ? { available: true, version: output.stdout.trim(), message: null }
-            : {
-                available: false,
-                version: null,
-                message: "Docker is installed but not running. Start Docker, then try again.",
-              },
-        ),
-        Effect.catch((error) =>
-          Effect.succeed<OzoneDockerStatus>({
-            available: false,
-            version: null,
-            message: `${error.detail} Ozone runs every app with Docker Compose.`,
-          }),
-        ),
-      ),
+    Effect.gen(function* () {
+      const probe = (args: ReadonlyArray<string>) =>
+        docker.run({ args, timeout: Duration.seconds(10) }).pipe(Effect.option);
+      const daemon = yield* probe(["version", "--format", "{{.Server.Version}}"]);
+      // Compose is a plugin of the CLI: a daemon can run without it.
+      const compose = Option.isNone(daemon) ? daemon : yield* probe(["compose", "version"]);
+      return readDockerStatus(Option.getOrNull(daemon), Option.getOrNull(compose));
+    }),
     DOCKER_CHECK_TTL,
   );
 

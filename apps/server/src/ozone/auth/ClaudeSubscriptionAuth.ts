@@ -5,6 +5,7 @@ import {
   type ServerProvider,
 } from "@t3tools/contracts";
 import * as ProviderAuthFlow from "@t3tools/provider-core/server/providerAuthFlow";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as PtyAdapter from "@t3tools/shared/PtyAdapter";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -26,6 +27,17 @@ const SUBSCRIPTION_METHOD: ProviderAuthMethod = {
   description: "Sign in with your Claude plan. No API key is needed.",
   type: "terminal",
 };
+
+/**
+ * How to get Claude Code onto the machine, in Anthropic's own words for its installer
+ * (https://code.claude.com/docs/en/setup). Said when sign-in cannot find the `claude` command.
+ */
+const claudeInstallHelp = (platform: NodeJS.Platform) =>
+  `Claude Code is not installed on this machine. Install it by running ${
+    platform === "win32"
+      ? "`irm https://claude.ai/install.ps1 | iex` in PowerShell"
+      : "`curl -fsSL https://claude.ai/install.sh | bash` in a terminal"
+  }, then sign in again. Its setup guide is at https://code.claude.com/docs/en/setup.`;
 
 const AuthStatus = Schema.Struct({ loggedIn: Schema.Boolean });
 const decodeAuthStatus = Schema.decodeUnknownOption(Schema.fromJsonString(AuthStatus));
@@ -64,6 +76,7 @@ export const makeClaudeSubscriptionAuth = Effect.fn("makeClaudeSubscriptionAuth"
 ) {
   const pty = yield* Effect.serviceOption(PtyAdapter.PtyAdapter);
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const platform = yield* HostProcess.Platform;
 
   const failure = (operation: string, detail: string) =>
     new ProviderSetupError({ instanceId: options.instanceId, operation, detail });
@@ -104,11 +117,7 @@ export const makeClaudeSubscriptionAuth = Effect.fn("makeClaudeSubscriptionAuth"
         rows: 24,
         env: options.environment,
       })
-      .pipe(
-        Effect.mapError(() =>
-          failure("start", "Could not start Claude Code. Check that `claude` is installed."),
-        ),
-      );
+      .pipe(Effect.mapError(() => failure("start", claudeInstallHelp(platform))));
     const detachData = process.onData((data) => {
       Queue.offerUnsafe(output, data.slice(-TERMINAL_OUTPUT_LIMIT));
     });
