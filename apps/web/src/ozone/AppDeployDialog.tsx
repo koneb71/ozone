@@ -17,6 +17,7 @@ import {
 import { Input } from "~/components/ui/input";
 import { Spinner } from "~/components/ui/spinner";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
+import { ensureLocalApi } from "~/localApi";
 import { useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
@@ -29,6 +30,12 @@ const HOST = /^(?:[A-Za-z0-9._-]+@)?[A-Za-z0-9][A-Za-z0-9.-]*(?::\d{1,5})?$/;
 const URL = /^https?:\/\/\S+$/;
 
 function statusLine(status: OzoneDeployStatus): string {
+  // Held back before anything changed, so what was deployed before is still what runs.
+  if (status.migration !== null && status.state === "failed") {
+    return status.deployedAt === null
+      ? "Not deployed yet."
+      : `Still on the version deployed ${formatRelativeTimeLabel(status.deployedAt)}.`;
+  }
   switch (status.state) {
     case "none":
       return "Not deployed yet.";
@@ -82,7 +89,7 @@ function AppDeploy(props: { readonly app: OzoneApp; readonly environmentId: Envi
   const current = status.data;
   const busy = working !== null || current?.state === "deploying";
 
-  const run = async (action: "deploy" | "stop") => {
+  const run = async (action: "deploy" | "stop", acceptMigrations = false) => {
     setWorking(action);
     setError(null);
     const result =
@@ -95,6 +102,7 @@ function AppDeploy(props: { readonly app: OzoneApp; readonly environmentId: Envi
                 host: where === "server" ? trimmedHost : null,
                 publicUrl: trimmedUrl.length > 0 ? trimmedUrl : null,
               },
+              ...(acceptMigrations ? { acceptMigrations } : {}),
             },
           })
         : await stopDeploy(target);
@@ -105,14 +113,29 @@ function AppDeploy(props: { readonly app: OzoneApp; readonly environmentId: Envi
     }
     status.refresh();
   };
+  // A migration that can lose data runs in production only when the person says so.
+  const applyMigration = async (statements: string) => {
+    const confirmed = await ensureLocalApi()
+      .dialogs.confirm(
+        [
+          `Deploy ${props.app.name} and run the migration it held back?`,
+          statements,
+          "A snapshot of the production data is taken first, unless this is the first deploy here.",
+        ].join("\n"),
+        { variant: "destructive" },
+      )
+      .catch(() => false);
+    if (confirmed) await run("deploy", true);
+  };
 
   return (
     <>
       <DialogHeader>
         <DialogTitle>Deploy {props.app.name}</DialogTitle>
         <DialogDescription>
-          Builds the production version and runs it with a database of its own, after applying the
-          migrations. The app you are building, and its data, are not touched.
+          Builds the last commit for production and runs it with a database of its own. Each later
+          deploy saves the production data before its migrations run. The app you are building, and
+          its data, are not touched.
         </DialogDescription>
       </DialogHeader>
       <DialogPanel>
@@ -136,7 +159,24 @@ function AppDeploy(props: { readonly app: OzoneApp; readonly environmentId: Envi
               ) : null}
             </div>
           )}
-          {current?.state === "failed" && current.message !== null ? (
+          {current?.migration ? (
+            <Alert variant="warning">
+              <AlertDescription>
+                <p>A migration that can lose data was held back. Production was not changed.</p>
+                <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-xs">
+                  {current.migration}
+                </pre>
+                <Button
+                  disabled={busy || problem !== null}
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void applyMigration(current.migration ?? "")}
+                >
+                  Deploy and apply it
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : current?.state === "failed" && current.message !== null ? (
             <Alert variant="error">
               <AlertDescription>
                 <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-xs">

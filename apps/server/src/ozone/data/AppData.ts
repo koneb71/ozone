@@ -3,6 +3,7 @@ import {
   OzoneSnapshot,
   type OzoneDataRestoreInput,
   type OzoneDataRestoreResult,
+  type OzoneDataService,
   type OzoneSnapshotReason,
   type ProjectId,
 } from "@t3tools/contracts";
@@ -30,6 +31,24 @@ export interface SnapshotInput {
   readonly projectId: ProjectId;
   readonly reason: OzoneSnapshotReason;
   readonly label?: string;
+}
+
+/**
+ * Where a project's data lives and how Docker reaches it: an app's development project, or its
+ * production one on this machine or a server.
+ */
+export interface DataTarget {
+  readonly projectId: ProjectId;
+  /** The snapshots' folder, under Ozone's backups. */
+  readonly folder: string;
+  /** The Postgres services whose databases a snapshot holds. */
+  readonly databases: ReadonlyArray<OzoneDataService>;
+  readonly compose: (
+    args: ReadonlyArray<string>,
+    options?: { readonly timeout?: Duration.Input },
+  ) => Effect.Effect<DockerCli.DockerRunOutput, OzoneAppError>;
+  /** The commit the data belongs with. */
+  readonly commitSha: Effect.Effect<string | null>;
 }
 
 /**
@@ -62,6 +81,11 @@ export class AppData extends Context.Service<
       projectId: ProjectId,
       effect: Effect.Effect<A, E, R>,
     ) => Effect.Effect<A, E, R>;
+    /** A snapshot of another of the app's projects, such as its production one. */
+    readonly snapshotOf: (
+      target: DataTarget,
+      input: { readonly reason: OzoneSnapshotReason; readonly label?: string },
+    ) => Effect.Effect<OzoneSnapshot, OzoneAppError>;
   }
 >()("t3/ozone/data/AppData") {}
 
@@ -72,7 +96,11 @@ const CONTAINER_DUMP = "/tmp/ozone-snapshot.dump";
  * undo point of a restore or a delete. Pruning only after a routine one also means a restore's safety
  * snapshot can never prune the snapshot being restored.
  */
-const PRUNED_REASONS: ReadonlySet<OzoneSnapshotReason> = new Set(["task", "before-rebuild"]);
+const PRUNED_REASONS: ReadonlySet<OzoneSnapshotReason> = new Set([
+  "task",
+  "before-rebuild",
+  "before-deploy",
+]);
 const ROUTINE_SNAPSHOTS_KEPT = 20;
 const DUMP_TIMEOUT = Duration.minutes(15);
 
@@ -129,15 +157,23 @@ export const make = Effect.gen(function* () {
     Effect.forkIn(effect, scope).pipe(Effect.flatMap(Fiber.join));
 
   const backupsRoot = path.join(config.stateDir, "ozone", "backups");
-  const appDirectory = (app: AppRegistry.ResolvedApp) => path.join(backupsRoot, app.app.slug);
+  const folderOf = (target: DataTarget) => path.join(backupsRoot, target.folder);
+  // Called once the helpers below exist.
+  const devTarget = (app: AppRegistry.ResolvedApp): DataTarget => ({
+    projectId: app.app.projectId,
+    folder: app.app.slug,
+    databases: databasesOf(app),
+    compose: (args, options) => compose.run(app, args, options),
+    commitSha: headCommit(app.workspaceRoot),
+  });
 
   /** Runs a Compose command and turns a non-zero exit into a failure that says what was tried. */
   const run = Effect.fn("AppData.run")(function* (
-    app: AppRegistry.ResolvedApp,
+    target: DataTarget,
     doing: string,
     args: ReadonlyArray<string>,
   ) {
-    const output = yield* compose.run(app, args, { timeout: DUMP_TIMEOUT });
+    const output = yield* target.compose(args, { timeout: DUMP_TIMEOUT });
     if (output.code !== 0) {
       const detail = tail(output);
       return yield* failed(`Could not ${doing}.${detail.length === 0 ? "" : ` ${detail}`}`);
@@ -145,22 +181,22 @@ export const make = Effect.gen(function* () {
     return output;
   });
 
-  const isRunning = (app: AppRegistry.ResolvedApp, service: string) =>
-    compose
-      .run(app, ["ps", "--status", "running", "--quiet", service])
+  const isRunning = (target: DataTarget, service: string) =>
+    target
+      .compose(["ps", "--status", "running", "--quiet", service])
       .pipe(Effect.map((output) => output.code === 0 && output.stdout.trim().length > 0));
 
   /** Runs `use` with the service up, and puts a service that was stopped back to stopped. */
   const withServiceUp = Effect.fn("AppData.withServiceUp")(function* <A>(
-    app: AppRegistry.ResolvedApp,
+    target: DataTarget,
     service: string,
     use: Effect.Effect<A, OzoneAppError>,
   ) {
-    const wasRunning = yield* isRunning(app, service);
-    yield* run(app, `start the ${service} service`, ["up", "--detach", "--wait", service]);
+    const wasRunning = yield* isRunning(target, service);
+    yield* run(target, `start the ${service} service`, ["up", "--detach", "--wait", service]);
     return yield* use.pipe(
       Effect.ensuring(
-        wasRunning ? Effect.void : compose.run(app, ["stop", service]).pipe(Effect.ignore),
+        wasRunning ? Effect.void : target.compose(["stop", service]).pipe(Effect.ignore),
       ),
     );
   });
@@ -170,8 +206,8 @@ export const make = Effect.gen(function* () {
       .readFileString(path.join(directory, SNAPSHOT_FILE))
       .pipe(Effect.flatMap(decodeStored), Effect.option);
 
-  const listStored = Effect.fn("AppData.listStored")(function* (app: AppRegistry.ResolvedApp) {
-    const directory = appDirectory(app);
+  const listStored = Effect.fn("AppData.listStored")(function* (target: DataTarget) {
+    const directory = folderOf(target);
     const names = yield* fs.readDirectory(directory).pipe(Effect.orElseSucceed(() => []));
     const stored = yield* Effect.forEach(names, (name) => readStored(path.join(directory, name)));
     return stored
@@ -179,15 +215,15 @@ export const make = Effect.gen(function* () {
       .toSorted((left, right) => right.snapshot.id.localeCompare(left.snapshot.id));
   });
 
-  const prune = Effect.fn("AppData.prune")(function* (app: AppRegistry.ResolvedApp) {
-    const routine = (yield* listStored(app)).filter((stored) =>
+  const prune = Effect.fn("AppData.prune")(function* (target: DataTarget) {
+    const routine = (yield* listStored(target)).filter((stored) =>
       PRUNED_REASONS.has(stored.snapshot.reason),
     );
     yield* Effect.forEach(
       routine.slice(ROUTINE_SNAPSHOTS_KEPT),
       (stored) =>
         fs
-          .remove(path.join(appDirectory(app), stored.snapshot.id), { recursive: true })
+          .remove(path.join(folderOf(target), stored.snapshot.id), { recursive: true })
           .pipe(Effect.ignore),
       { discard: true },
     );
@@ -211,8 +247,8 @@ export const make = Effect.gen(function* () {
       );
 
   const takeSnapshot = Effect.fn("AppData.takeSnapshot")(function* (
-    app: AppRegistry.ResolvedApp,
-    input: SnapshotInput,
+    target: DataTarget,
+    input: { readonly reason: OzoneSnapshotReason; readonly label?: string },
   ) {
     const now = yield* DateTime.now;
     const suffix = yield* random.uuidV4().pipe(
@@ -221,20 +257,20 @@ export const make = Effect.gen(function* () {
     );
     // Sorts by time, so the newest snapshot is the last folder name.
     const id = `${DateTime.formatIso(now).replace(/[-:.]/g, "")}-${suffix}`;
-    const directory = path.join(appDirectory(app), id);
+    const directory = path.join(folderOf(target), id);
     yield* fs
       .makeDirectory(directory, { recursive: true })
       .pipe(Effect.mapError(() => failed("Could not create the snapshot folder.")));
 
-    const files = yield* Effect.forEach(databasesOf(app), (service) => {
+    const files = yield* Effect.forEach(target.databases, (service) => {
       const user = service.user ?? "postgres";
       const database = service.database ?? user;
       const file = `${service.service}.dump`;
       return withServiceUp(
-        app,
+        target,
         service.service,
         Effect.gen(function* () {
-          yield* run(app, `dump the ${service.service} database`, [
+          yield* run(target, `dump the ${service.service} database`, [
             "exec",
             "-T",
             service.service,
@@ -244,13 +280,13 @@ export const make = Effect.gen(function* () {
             `--dbname=${database}`,
             `--file=${CONTAINER_DUMP}`,
           ]);
-          yield* run(app, "copy the snapshot out of the container", [
+          yield* run(target, "copy the snapshot out of the container", [
             "cp",
             `${service.service}:${CONTAINER_DUMP}`,
             path.join(directory, file),
           ]);
-          yield* compose
-            .run(app, ["exec", "-T", service.service, "rm", "-f", CONTAINER_DUMP])
+          yield* target
+            .compose(["exec", "-T", service.service, "rm", "-f", CONTAINER_DUMP])
             .pipe(Effect.ignore);
           return { service: service.service, file, database, user };
         }),
@@ -268,18 +304,18 @@ export const make = Effect.gen(function* () {
     );
     const snapshot: OzoneSnapshot = {
       id,
-      projectId: app.app.projectId,
+      projectId: target.projectId,
       createdAt: DateTime.formatIso(now),
       reason: input.reason,
       label: input.label ?? null,
-      commitSha: yield* headCommit(app.workspaceRoot),
+      commitSha: yield* target.commitSha,
       sizeBytes: sizes.reduce((total, size) => total + size, 0),
     };
     yield* encodeStored({ snapshot, files }).pipe(
       Effect.flatMap((json) => fs.writeFileString(path.join(directory, SNAPSHOT_FILE), json)),
       Effect.mapError(() => failed("Could not record the snapshot.")),
     );
-    if (PRUNED_REASONS.has(input.reason)) yield* prune(app);
+    if (PRUNED_REASONS.has(input.reason)) yield* prune(target);
     return snapshot;
   });
 
@@ -287,26 +323,27 @@ export const make = Effect.gen(function* () {
     app: AppRegistry.ResolvedApp,
     stored: StoredSnapshot,
   ) {
-    const directory = path.join(appDirectory(app), stored.snapshot.id);
+    const target = devTarget(app);
+    const directory = path.join(folderOf(target), stored.snapshot.id);
     const appService = app.manifest.runtime.appService;
-    const appWasRunning = yield* isRunning(app, appService);
+    const appWasRunning = yield* isRunning(target, appService);
     // Nothing may write to the database while it is replaced.
-    yield* run(app, "stop the app before restoring", ["stop", appService]);
+    yield* run(target, "stop the app before restoring", ["stop", appService]);
     yield* Effect.forEach(
       stored.files,
       (entry) =>
         withServiceUp(
-          app,
+          target,
           entry.service,
           Effect.gen(function* () {
-            yield* run(app, "copy the snapshot into the container", [
+            yield* run(target, "copy the snapshot into the container", [
               "cp",
               path.join(directory, entry.file),
               `${entry.service}:${CONTAINER_DUMP}`,
             ]);
             // A fresh database, so nothing made after the snapshot is left behind in it.
             const sql = (statement: string) =>
-              run(app, `prepare the ${entry.service} database`, [
+              run(target, `prepare the ${entry.service} database`, [
                 "exec",
                 "-T",
                 entry.service,
@@ -318,7 +355,7 @@ export const make = Effect.gen(function* () {
               ]);
             yield* sql(`DROP DATABASE IF EXISTS "${entry.database}" WITH (FORCE)`);
             yield* sql(`CREATE DATABASE "${entry.database}" OWNER "${entry.user}"`);
-            yield* run(app, `restore the ${entry.service} database`, [
+            yield* run(target, `restore the ${entry.service} database`, [
               "exec",
               "-T",
               entry.service,
@@ -329,8 +366,8 @@ export const make = Effect.gen(function* () {
               `--dbname=${entry.database}`,
               CONTAINER_DUMP,
             ]);
-            yield* compose
-              .run(app, ["exec", "-T", entry.service, "rm", "-f", CONTAINER_DUMP])
+            yield* target
+              .compose(["exec", "-T", entry.service, "rm", "-f", CONTAINER_DUMP])
               .pipe(Effect.ignore);
           }),
         ),
@@ -338,7 +375,7 @@ export const make = Effect.gen(function* () {
     ).pipe(
       Effect.ensuring(
         appWasRunning
-          ? compose.run(app, ["up", "--detach", appService]).pipe(Effect.ignore)
+          ? target.compose(["up", "--detach", appService]).pipe(Effect.ignore)
           : Effect.void,
       ),
     );
@@ -347,11 +384,11 @@ export const make = Effect.gen(function* () {
   return AppData.of({
     list: Effect.fn("AppData.list")(function* (projectId) {
       const app = yield* registry.resolve(projectId);
-      return (yield* listStored(app)).map((stored) => stored.snapshot);
+      return (yield* listStored(devTarget(app))).map((stored) => stored.snapshot);
     }),
     snapshot: Effect.fn("AppData.snapshot")(function* (input) {
       const app = yield* registry.resolve(input.projectId);
-      return yield* working.withPermits(1)(takeSnapshot(app, input));
+      return yield* working.withPermits(1)(takeSnapshot(devTarget(app), input));
     }),
     restore: Effect.fn("AppData.restore")(function* (input) {
       const app = yield* registry.resolve(input.projectId);
@@ -360,14 +397,11 @@ export const make = Effect.gen(function* () {
           input.projectId,
           working.withPermits(1)(
             Effect.gen(function* () {
-              const stored = (yield* listStored(app)).find(
+              const stored = (yield* listStored(devTarget(app))).find(
                 (entry) => entry.snapshot.id === input.snapshotId,
               );
               if (stored === undefined) return yield* failed("That snapshot no longer exists.");
-              const safety = yield* takeSnapshot(app, {
-                projectId: input.projectId,
-                reason: "before-restore",
-              });
+              const safety = yield* takeSnapshot(devTarget(app), { reason: "before-restore" });
               yield* restoreStored(app, stored);
               return { safety };
             }),
@@ -383,7 +417,7 @@ export const make = Effect.gen(function* () {
           working.withPermits(1)(
             Effect.gen(function* () {
               // First, and nothing is removed unless it worked.
-              const snapshot = yield* takeSnapshot(app, { projectId, reason: "before-delete" });
+              const snapshot = yield* takeSnapshot(devTarget(app), { reason: "before-delete" });
               const saved = `The data is saved as snapshot ${snapshot.id}, but`;
               const down = yield* compose.run(app, ["down", "--remove-orphans"], {
                 timeout: DUMP_TIMEOUT,
@@ -436,6 +470,9 @@ export const make = Effect.gen(function* () {
       );
     }),
     exclusive,
+    snapshotOf: Effect.fn("AppData.snapshotOf")((target, input) =>
+      working.withPermits(1)(takeSnapshot(target, input)),
+    ),
   });
 });
 

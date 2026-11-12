@@ -72,11 +72,15 @@ try {
     rmSync(REPORT_FILE, { force: true });
     console.log("Database migrations are up to date.");
   } else {
-    mkdirSync(dirname(REPORT_FILE), { recursive: true });
-    const report = { statements: held.statements.map(describeStatement), accept: held.accept };
-    writeFileSync(REPORT_FILE, `${JSON.stringify(report, null, 2)}\n`);
     console.error(formatHeldBack(held));
     process.exitCode = HELD_BACK_EXIT_CODE;
+    try {
+      mkdirSync(dirname(REPORT_FILE), { recursive: true });
+      const report = { statements: held.statements.map(describeStatement), accept: held.accept };
+      writeFileSync(REPORT_FILE, `${JSON.stringify(report, null, 2)}\n`);
+    } catch {
+      // A production image may not be writable; what was printed is enough there.
+    }
   }
 } finally {
   await client.end();

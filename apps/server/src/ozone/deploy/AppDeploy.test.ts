@@ -11,12 +11,16 @@ import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 
 import * as ServerConfig from "../../config.ts";
+import * as GitVcsDriver from "../../vcs/GitVcsDriver.ts";
+import * as VcsProcess from "../../vcs/VcsProcess.ts";
 import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as BuildRepo from "../builds/BuildRepo.ts";
+import * as AppData from "../data/AppData.ts";
 import * as DockerCli from "../runtime/DockerCli.ts";
 import * as AppDeploy from "./AppDeploy.ts";
 
 const projectId = ProjectId.make("project-notes");
+const here = { host: null, publicUrl: null };
 const manifest: OzoneAppManifest = {
   version: 1,
   runtime: {
@@ -36,11 +40,16 @@ const manifest: OzoneAppManifest = {
     apply: "npm run db:migrate",
   },
 };
+const HELD_BACK = [
+  "Ozone held back a migration that can lose data.",
+  '0001_drop.sql:1 drops a table: DROP TABLE "notes"',
+  "ozone-accept 0001_drop.sql@abc",
+].join("\n");
 
 /** What a Docker call does, after the flags that name the production project. */
 const step = (args: ReadonlyArray<string>) => {
   const afterFiles = args.slice(args.lastIndexOf("-f") + 2);
-  return afterFiles.filter((arg) => !arg.startsWith("-")).join(" ");
+  return afterFiles.filter((arg) => !arg.startsWith("-") && !/^[A-Z_]+=/.test(arg)).join(" ");
 };
 
 const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: boolean } = {}) =>
@@ -50,14 +59,15 @@ const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: bool
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "ozone-deploy-" });
     const workspaceRoot = path.join(root, "notes");
     yield* fs.makeDirectory(workspaceRoot);
-    yield* fs.writeFileString(
-      path.join(workspaceRoot, AppDeploy.PROD_COMPOSE_FILE),
-      "services: {}\n",
-    );
     const caFile = path.join(root, "proxy-ca.crt");
     yield* fs.writeFileString(caFile, "-----BEGIN CERTIFICATE-----\n");
     const calls = yield* Ref.make<ReadonlyArray<DockerCli.DockerRunInput>>([]);
+    const journal = yield* Ref.make<ReadonlyArray<string>>([]);
     const running = yield* Ref.make(false);
+    // The files each build saw, where Compose was pointed.
+    const builtFrom = yield* Ref.make<ReadonlyArray<ReadonlyArray<string>>>([]);
+    // Set, the migrate step holds back a migration that can lose data unless it is accepted.
+    const holdMigration = yield* Ref.make(false);
     const docker = Layer.succeed(
       DockerCli.DockerCli,
       DockerCli.DockerCli.of({
@@ -65,8 +75,18 @@ const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: bool
           Effect.gen(function* () {
             yield* Ref.update(calls, (all) => [...all, input]);
             const what = step(input.args);
+            yield* Ref.update(journal, (all) => [...all, what]);
             if (what === options.failAt) {
               return { code: 1, stdout: "", stderr: "npm ERR! build failed", timedOut: false };
+            }
+            if (what === "build") {
+              const directory = input.args[input.args.indexOf("--project-directory") + 1] ?? "";
+              const files = yield* fs.readDirectory(directory).pipe(Effect.orElseSucceed(() => []));
+              yield* Ref.update(builtFrom, (all) => [...all, files.toSorted()]);
+            }
+            const accepted = input.args.some((arg) => arg.startsWith("OZONE_ACCEPT_MIGRATIONS="));
+            if (what === "run migrate" && (yield* Ref.get(holdMigration)) && !accepted) {
+              return { code: 3, stdout: "", stderr: HELD_BACK, timedOut: false };
             }
             if (what === "up app") yield* Ref.set(running, true);
             if (what === "stop") yield* Ref.set(running, false);
@@ -78,10 +98,15 @@ const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: bool
           }),
       }),
     );
+    const git = GitVcsDriver.layer.pipe(
+      Layer.provide(ServerConfig.layerTest(root, { prefix: "ozone-deploy-git-" })),
+      Layer.provideMerge(VcsProcess.layer),
+    );
     // Built into the test's scope: a deploy runs in the service's own fiber, which lives there.
     const context = yield* Layer.build(
       AppDeploy.layer.pipe(
         Layer.provideMerge(ServerConfig.layerTest(root, { prefix: "ozone-deploy-home-" })),
+        Layer.provideMerge(BuildRepo.layer.pipe(Layer.provideMerge(git))),
         Layer.provide(
           Layer.mergeAll(
             docker,
@@ -101,7 +126,20 @@ const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: bool
                   manifest,
                 }),
             }),
-            Layer.mock(BuildRepo.BuildRepo)({ head: () => Effect.succeed("c0ffee") }),
+            Layer.mock(AppData.AppData)({
+              snapshotOf: (target, input) =>
+                Ref.update(journal, (all) => [...all, `snapshot ${input.reason}`]).pipe(
+                  Effect.as({
+                    id: "snapshot-1",
+                    projectId: target.projectId,
+                    createdAt: "2026-01-01T00:00:00.000Z",
+                    reason: input.reason,
+                    label: null,
+                    commitSha: null,
+                    sizeBytes: 1,
+                  }),
+                ),
+            }),
             // Behind a TLS-intercepting proxy, the host names its certificate bundle.
             Layer.succeed(
               HostProcess.Environment,
@@ -113,25 +151,53 @@ const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: bool
     );
     const deploy = Context.get(context, AppDeploy.AppDeploy);
     const config = Context.get(context, ServerConfig.ServerConfig);
+    const repo = Context.get(context, BuildRepo.BuildRepo);
+    const driver = Context.get(context, GitVcsDriver.GitVcsDriver);
+
+    // A repository whose last commit has the production compose file.
+    const gitRun = (args: ReadonlyArray<string>) =>
+      driver.execute({ operation: "test", cwd: workspaceRoot, args, timeoutMs: 30_000 });
+    yield* gitRun(["init", "--initial-branch=main"]);
+    yield* gitRun(["config", "user.name", "Ozone test"]);
+    yield* gitRun(["config", "user.email", "test@example.com"]);
+    yield* fs.writeFileString(
+      path.join(workspaceRoot, AppDeploy.PROD_COMPOSE_FILE),
+      "services: {}\n",
+    );
+    const head = (yield* repo.commitAll(workspaceRoot, "Scaffold")) ?? "";
+
     const directory = path.join(config.stateDir, "ozone", "apps", "notes-a1b2c3");
-    const steps = Ref.get(calls).pipe(Effect.map((all) => all.map((call) => step(call.args))));
-    return { deploy, calls, steps, fs, path, directory, workspaceRoot };
+    const steps = Ref.get(journal);
+    const forget = Ref.set(journal, []);
+    return {
+      deploy,
+      calls,
+      steps,
+      forget,
+      builtFrom,
+      holdMigration,
+      head,
+      fs,
+      path,
+      directory,
+      workspaceRoot,
+    };
   });
 
 const layerTest = Layer.mergeAll(NodeServices.layer, NodeCrypto.layer);
 
 it.effect("deploys to this machine: builds, starts its own database, migrates, then the app", () =>
   Effect.gen(function* () {
-    const { deploy, calls, steps, fs, path, directory } = yield* makeHarness();
+    const { deploy, calls, steps, forget, builtFrom, head, fs, path, directory, workspaceRoot } =
+      yield* makeHarness();
     assert.strictEqual((yield* deploy.status(projectId)).state, "none");
 
-    const deployed = yield* deploy.deploy({ projectId, target: { host: null, publicUrl: null } });
+    // Production gets the last commit, never what a worker left uncommitted.
+    yield* fs.writeFileString(path.join(workspaceRoot, "half-done.ts"), "export {};\n");
+    const deployed = yield* deploy.deploy({ projectId, target: here });
     assert.deepStrictEqual((yield* steps).slice(0, 4), ["build", "up db", "run migrate", "up app"]);
-    assert.include(deployed, {
-      state: "running",
-      url: "http://localhost:42005",
-      commitSha: "c0ffee",
-    });
+    assert.include(deployed, { state: "running", url: "http://localhost:42005", commitSha: head });
+    assert.deepStrictEqual(yield* Ref.get(builtFrom), [[AppDeploy.PROD_COMPOSE_FILE]]);
     const [build] = yield* Ref.get(calls);
     // A project of its own, reachable only from this machine.
     assert.deepStrictEqual(build?.args.slice(0, 3), [
@@ -139,6 +205,7 @@ it.effect("deploys to this machine: builds, starts its own database, migrates, t
       "--project-name",
       "notes-a1b2c3-prod",
     ]);
+    assert.notStrictEqual(build?.args[4], workspaceRoot);
     assert.deepStrictEqual(build?.env, { OZONE_PROD_PORT: "42005", OZONE_PROD_BIND: "127.0.0.1" });
 
     // The secrets are made once: a database keeps the password it was created with.
@@ -146,7 +213,16 @@ it.effect("deploys to this machine: builds, starts its own database, migrates, t
     const first = yield* fs.readFileString(overridePath);
     assert.match(first, /POSTGRES_PASSWORD: "[0-9a-f]{64}"/);
     assert.strictEqual(((yield* fs.stat(overridePath)).mode & 0o777).toString(8), "600");
-    yield* deploy.deploy({ projectId, target: { host: null, publicUrl: null } });
+    // Every later deploy saves the production data before its migrations run.
+    yield* forget;
+    yield* deploy.deploy({ projectId, target: here });
+    assert.deepStrictEqual((yield* steps).slice(0, 5), [
+      "build",
+      "up db",
+      "snapshot before-deploy",
+      "run migrate",
+      "up app",
+    ]);
     assert.strictEqual(yield* fs.readFileString(overridePath), first);
 
     // Stopping keeps the data; nothing in a deploy asks Docker to remove any.
@@ -158,7 +234,7 @@ it.effect("deploys to this machine: builds, starts its own database, migrates, t
     const settingsPath = path.join(directory, "deploy.json");
     yield* fs.writeFileString(settingsPath, "{ not json");
     yield* Ref.set(calls, []);
-    const refused = yield* deploy.deploy({ projectId, target: { host: null, publicUrl: null } });
+    const refused = yield* deploy.deploy({ projectId, target: here });
     assert.strictEqual(refused.state, "failed");
     assert.include(refused.message ?? "", "deploy.json");
     assert.strictEqual(yield* fs.readFileString(settingsPath), "{ not json");
@@ -166,11 +242,30 @@ it.effect("deploys to this machine: builds, starts its own database, migrates, t
   }).pipe(Effect.provide(layerTest)),
 );
 
+it.effect("runs a migration that can lose data only when the person applies it", () =>
+  Effect.gen(function* () {
+    const { deploy, calls, steps, holdMigration } = yield* makeHarness();
+    yield* Ref.set(holdMigration, true);
+    const held = yield* deploy.deploy({ projectId, target: here });
+    assert.strictEqual(held.state, "failed");
+    assert.include(held.migration ?? "", "drops a table");
+    // Production keeps running the old version.
+    assert.notInclude(yield* steps, "up app");
+
+    yield* Ref.set(calls, []);
+    const applied = yield* deploy.deploy({ projectId, target: here, acceptMigrations: true });
+    assert.strictEqual(applied.state, "running");
+    assert.isNull(applied.migration);
+    const migrate = (yield* Ref.get(calls)).find((call) => step(call.args) === "run migrate");
+    assert.include(migrate?.args ?? [], "OZONE_ACCEPT_MIGRATIONS=0001_drop.sql@abc");
+  }).pipe(Effect.provide(layerTest)),
+);
+
 // Found on a real deploy: Compose's bake refuses the bundle unless its file check is off.
 it.effect("gives the image build the host's certificate bundle behind a proxy", () =>
   Effect.gen(function* () {
     const { deploy, calls, fs, path, directory } = yield* makeHarness({ hostCa: true });
-    yield* deploy.deploy({ projectId, target: { host: null, publicUrl: null } });
+    yield* deploy.deploy({ projectId, target: here });
     const [build] = yield* Ref.get(calls);
     assert.strictEqual(build?.env?.BUILDX_BAKE_ENTITLEMENTS_FS, "0");
     const override = yield* fs.readFileString(path.join(directory, "compose.prod.override.yaml"));

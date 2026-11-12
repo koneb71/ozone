@@ -81,7 +81,10 @@ is taken after every task that passes its checks.
 - A deleted app's snapshot cannot be restored from the interface yet: there is no app left to
   restore it into.
 - A deployed app's data lives in a volume of its own (`<slug>-prod_pgdata`) that nothing in Ozone
-  removes, but Ozone does not snapshot it yet. Stop keeps it; the next deploy uses it again.
+  removes. Every deploy after the first to the same place saves it to `backups/<slug>/production/`
+  before its migrations run, and keeps the newest 20; for a server, the dump is copied back to this
+  machine. Ozone does not restore one yet, and a deploy to a new place starts with an empty
+  database. Stop keeps the data; the next deploy uses it again.
 - Routine snapshots, the one after each task and the one before a rebuild, are pruned to the newest
   20 per app. A person's own snapshots and the undo points of a restore or a delete are kept until
   removed by hand.

@@ -1,6 +1,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 
 import * as GitVcsDriver from "../../vcs/GitVcsDriver.ts";
 
@@ -51,6 +52,15 @@ export class BuildRepo extends Context.Service<
     readonly commitAll: (workspaceRoot: string, message: string) => Effect.Effect<string | null>;
     /** Moves uncommitted changes out of the tree without deleting them. */
     readonly setAside: (workspaceRoot: string, label: string) => Effect.Effect<void>;
+    /**
+     * Writes the files of `commitSha` into `<scratch>/tree`, through an index of its own in
+     * `scratch`, so the repository's index and worktree are never touched. Null when git could not.
+     */
+    readonly exportTree: (
+      workspaceRoot: string,
+      commitSha: string,
+      scratch: string,
+    ) => Effect.Effect<string | null>;
   }
 >()("t3/ozone/builds/BuildRepo") {}
 
@@ -60,8 +70,14 @@ const RECORD = "\x1e";
 
 const make = Effect.gen(function* () {
   const git = yield* GitVcsDriver.GitVcsDriver;
+  const path = yield* Path.Path;
 
-  const run = (workspaceRoot: string, operation: string, args: ReadonlyArray<string>) =>
+  const run = (
+    workspaceRoot: string,
+    operation: string,
+    args: ReadonlyArray<string>,
+    env?: NodeJS.ProcessEnv,
+  ) =>
     git
       .execute({
         operation: `BuildRepo.${operation}`,
@@ -69,6 +85,7 @@ const make = Effect.gen(function* () {
         args,
         allowNonZeroExit: true,
         timeoutMs: 60_000,
+        ...(env === undefined ? {} : { env }),
       })
       .pipe(
         Effect.map((result) => ({ code: Number(result.exitCode), stdout: result.stdout })),
@@ -90,6 +107,19 @@ const make = Effect.gen(function* () {
   return BuildRepo.of({
     head,
     stageAll,
+    exportTree: Effect.fn("BuildRepo.exportTree")(function* (workspaceRoot, commitSha, scratch) {
+      const env = { GIT_INDEX_FILE: path.join(scratch, "index") };
+      const tree = path.join(scratch, "tree");
+      const read = yield* run(workspaceRoot, "exportTree", ["read-tree", commitSha], env);
+      if (read.code !== 0) return null;
+      const written = yield* run(
+        workspaceRoot,
+        "exportTree",
+        ["checkout-index", "--all", `--prefix=${tree}${path.sep}`],
+        env,
+      );
+      return written.code === 0 ? tree : null;
+    }),
     isInHistory: Effect.fn("BuildRepo.isInHistory")((workspaceRoot, commitSha, of) =>
       run(workspaceRoot, "isInHistory", [
         "merge-base",

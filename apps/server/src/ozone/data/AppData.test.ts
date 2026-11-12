@@ -206,6 +206,31 @@ describe("AppData", () => {
         },
       );
       assert.deepStrictEqual(yield* data.list(projectId), [snapshot]);
+
+      // Another of the app's projects, such as production, keeps its snapshots apart.
+      const fs = yield* FileSystem.FileSystem;
+      const copies = yield* Ref.make<ReadonlyArray<string>>([]);
+      const production: AppData.DataTarget = {
+        projectId,
+        folder: "habits-a1b2c3/production",
+        databases: manifest.data.services,
+        compose: (args) =>
+          Effect.gen(function* () {
+            if (args[0] === "cp" && args[1]?.startsWith("db:")) {
+              yield* Ref.update(copies, (all) => [...all, args[2] ?? ""]);
+              yield* fs.writeFileString(args[2] ?? "", "PGDMP prod").pipe(Effect.orDie);
+            }
+            return { ...ok, stdout: args[0] === "ps" ? "container-id\n" : "" };
+          }),
+        commitSha: Effect.succeed("c0ffee"),
+      };
+      const kept = yield* data.snapshotOf(production, { reason: "before-deploy" });
+      assert.strictEqual(kept.commitSha, "c0ffee");
+      assert.match(
+        (yield* Ref.get(copies))[0] ?? "",
+        /\/ozone\/backups\/habits-a1b2c3\/production\/[^/]+\/db\.dump$/,
+      );
+      assert.deepStrictEqual(yield* data.list(projectId), [snapshot]);
     }).pipe(Effect.provide(layerTest)),
   );
 

@@ -29,6 +29,8 @@ starts its lead thread.
   hosting an app later means another environment that runs Docker, not a second runtime.
 - **A deploy is a second Compose project.** `compose.prod.yaml` runs the production image as
   `<slug>-prod`, with a database volume of its own, so development data is never what people use.
+  It is built from a clean copy of the last commit, made with a throwaway git index, so production
+  never gets a worker's half-done files or the development `.env`.
   Ozone generates the database password and auth secret once and keeps them in its state: a
   Postgres volume keeps the password it was created with, so a settings file Ozone cannot read
   stops a deploy instead of being replaced. Migrations run from the build stage,

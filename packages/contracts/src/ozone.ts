@@ -364,6 +364,8 @@ export const OzoneDeployStatus = Schema.Struct({
   deployedAt: Schema.NullOr(IsoDateTime),
   /** What went wrong, or what is happening. */
   message: Schema.NullOr(Schema.String),
+  /** The statements of a migration the last deploy held back because it can lose data. */
+  migration: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
 });
 export type OzoneDeployStatus = typeof OzoneDeployStatus.Type;
 
@@ -371,6 +373,8 @@ export const OzoneDeployStatusInput = Schema.Struct({ projectId: ProjectId });
 export const OzoneDeployRunInput = Schema.Struct({
   projectId: ProjectId,
   target: OzoneDeployTarget,
+  /** Runs the migration the last deploy held back, after the snapshot every deploy takes first. */
+  acceptMigrations: Schema.optionalKey(Schema.Boolean),
 });
 export type OzoneDeployRunInput = typeof OzoneDeployRunInput.Type;
 
