@@ -48,6 +48,9 @@ starts its lead thread.
 - **What an app is given stays out of its repository.** Its environment variables, Ozone's secrets
   and the host's certificate bundle reach Compose through override files in Ozone's state, which
   only their owner can read. A value is escaped for Compose, which would otherwise interpolate it.
+- **An app's controls are one page, opened like Settings.** The route `/apps/…/<section>` renders
+  in upstream's `AppRouteModal` with Settings' layout parts, so it looks native and needs no entry
+  in upstream's Settings registry. Notifications sit there too, under "All apps", for that reason.
 - **Home hands files to the composer.** Upstream's composer owns attachment intake: conversion,
   compression and upload. Home opens a new chat and gives its files to that composer instead of
   preparing them a second way.

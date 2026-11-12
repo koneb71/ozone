@@ -5,7 +5,13 @@ import { withoutAssistantCitationHash } from "../../lib/assistantCitationNavigat
 
 /** Settings and Usage open as modals over the last main-app view. */
 export function isAppModalPage(pathname: string) {
-  return pathname === "/settings" || pathname.startsWith("/settings/") || pathname === "/usage";
+  return (
+    pathname === "/settings" ||
+    pathname.startsWith("/settings/") ||
+    pathname === "/usage" ||
+    // ozone-seam: an Ozone app's page opens the same way.
+    pathname.startsWith("/apps/")
+  );
 }
 
 export function isSidebarUtilityPage(pathname: string) {

@@ -28,9 +28,11 @@ it as read, and see how many are left to read." This is the app it built:
   app's container. A failed check goes to a fresh worker with the evidence. Every task that passes
   is a commit. When every check passes, a tester uses the app in a browser against what you asked
   for.
-- **Lets you steer.** Turn on "Show me the plan first" and the build starts only when you say so.
-  Each app's Build settings choose the model its workers use, so a large lead can direct cheaper
-  workers.
+- **Gives each app a page.** Open it from Home or from the app's thread: Overview, Data, History,
+  Environment, Build and Logs while you build, then Deploy, Deployments and Monitoring for
+  production. It is laid out like Settings.
+- **Lets you steer.** Turn on "Plan first" and the build starts only when you say so. Each app's
+  Build page chooses the model its workers use, so a large lead can direct cheaper workers.
 - **Keeps your data.** An app's database lives in a volume that only a confirmed **Delete app**
   removes, after a snapshot, and Home can bring a deleted app back with that data. Every finished
   task takes a snapshot, and **History** takes the code and the data back to any task, which you
@@ -38,15 +40,16 @@ it as read, and see how many are left to read." This is the app it built:
 - **Deploys.** **Deploy** runs the production build with a database of its own, on this machine or
   on a server that runs Docker, reached over SSH. Your development data is never touched, and Stop
   keeps the production data for the next deploy. Each deploy saves the production data first, and
-  the Data dialog backs it up and restores it.
+  **Data** backs it up and restores it.
   - Give it a **domain** and it is served over HTTPS with a certificate from Let's Encrypt, and
     each new version takes over without the app going down.
-  - **History** lists every deploy with its output, and rolls back to any of them, with the data
-    from then if you ask.
-  - **Monitor** shows each container's CPU, memory and network, and its logs. **Set up** checks a
-    server, installs Docker there if it has none, and starts the proxy.
-  - **Settings** deploys by itself when a build completes, gives the app a deploy URL to call from
-    a script, and tells Slack, Discord, Telegram or any webhook how each deploy went.
+  - **Deployments** lists every deploy with its output, and rolls back to any of them, with the
+    data from then if you ask.
+  - **Monitoring** shows each container's CPU, memory and network, and its logs. **Set up** checks
+    a server, installs Docker there if it has none, and starts the proxy.
+  - **Build** deploys by itself when a build completes if you ask, **Deploy** gives the app a URL
+    to call from a script, and **Notifications** tells Slack, Discord, Telegram or any webhook how
+    each deploy went.
 - **Chats.** Ask anything and attach PDFs, Word documents, images and other files. Ask a chat
   for an app and it starts one.
 - **Uses your subscription.** Sign in to Claude from Settings. No API key is involved, and an API

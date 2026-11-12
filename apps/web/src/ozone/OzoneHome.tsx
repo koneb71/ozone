@@ -1,22 +1,9 @@
-import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { latestThreadByProject, runtimePhaseLabel } from "@t3tools/client-runtime/state/ozone";
-import type { EnvironmentId, OzoneApp } from "@t3tools/contracts";
-import { useNavigate } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
-import {
-  ArrowUpIcon,
-  BoxIcon,
-  HammerIcon,
-  MessageCircleIcon,
-  PaperclipIcon,
-  XIcon,
-} from "lucide-react";
+import { ArrowUpIcon, HammerIcon, MessageCircleIcon, PaperclipIcon, XIcon } from "lucide-react";
 import { type DragEvent, type KeyboardEvent, useRef, useState } from "react";
 
-import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
-import { Badge } from "~/components/ui/badge";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
-import { DiscoveryList, DiscoveryListRow } from "~/components/ui/discovery-list";
 import {
   Select,
   SelectItem,
@@ -31,15 +18,12 @@ import { Textarea } from "~/components/ui/textarea";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { WorkspacePageHeader } from "~/components/WorkspacePageHeader";
 import { isElectron } from "~/env";
-import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { workspaceAreaProps } from "~/lib/workspaceFocus";
-import { useThreadShells } from "~/state/entities";
 import { usePrimaryEnvironmentId } from "~/state/environments";
 import { useEnvironmentQuery } from "~/state/query";
-import { buildThreadRouteParams } from "~/threadRoutes";
 
-import { DeletedAppList } from "./DeletedAppList";
+import { DeletedApps, HomeApps } from "./HomeApps";
 import { OzoneMark } from "./OzoneMark";
 import { ozoneEnvironment } from "./state";
 import { useOzoneLaunch } from "./useOzoneLaunch";
@@ -50,13 +34,13 @@ const MODE_COPY = {
   build: {
     title: "What do you want to build?",
     description:
-      "Describe an app, or attach a sketch of it. Ozone builds it, runs it and keeps its data safe.",
+      "Describe an app or attach a sketch. Ozone builds it, runs it, and keeps its data safe.",
     placeholder: "A habit tracker with streaks and a weekly chart",
     action: "Build the app",
   },
   chat: {
     title: "What is on your mind?",
-    description: "Ask anything. Attach files to talk about them.",
+    description: "Ask anything, or attach files to talk about them.",
     placeholder: "Ask a question, or think something through",
     action: "Start the chat",
   },
@@ -163,8 +147,8 @@ export function OzoneHome() {
         {isElectron ? <WorkspacePageHeader electron /> : null}
         <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center gap-8 px-6 py-12">
           <header className="flex flex-col items-center gap-3 text-center">
-            <OzoneMark aria-hidden="true" className="size-9 text-foreground" />
-            <h1 className="text-balance font-semibold text-3xl text-foreground tracking-tight">
+            <OzoneMark aria-hidden="true" className="size-8 text-foreground" />
+            <h1 className="text-balance font-semibold text-2xl text-foreground tracking-tight sm:text-3xl">
               {copy.title}
             </h1>
             <p className="text-pretty text-muted-foreground text-sm">{copy.description}</p>
@@ -218,7 +202,7 @@ export function OzoneHome() {
                 ))}
               </ul>
             )}
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <ToggleGroup
                 aria-label="What to start"
                 disabled={launching}
@@ -238,7 +222,7 @@ export function OzoneHome() {
                   Chat
                 </Toggle>
               </ToggleGroup>
-              <div className="flex items-center gap-1">
+              <div className="ms-auto flex items-center gap-1">
                 {mode === "build" && templates.length > 1 ? (
                   <Select
                     value={templateId}
@@ -263,14 +247,14 @@ export function OzoneHome() {
                   </Select>
                 ) : null}
                 {mode === "build" ? (
-                  <label className="mr-2 flex cursor-pointer items-center gap-1.5 text-muted-foreground text-xs">
+                  <label className="me-2 flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-muted-foreground text-xs">
                     <Switch
                       size="sm"
                       checked={reviewPlans}
                       disabled={launching}
                       onCheckedChange={setReviewPlans}
                     />
-                    Show me the plan first
+                    Plan first
                   </label>
                 ) : null}
                 <input
@@ -304,24 +288,27 @@ export function OzoneHome() {
           {dockerMissing ? (
             <Alert variant="warning">
               <AlertTitle>Ozone needs Docker to build and run apps</AlertTitle>
-              <AlertDescription>
-                <p>{docker.message}</p>
-                <div className="flex flex-wrap items-center gap-3">
-                  {docker.problem === "missing" || docker.problem === "no-compose" ? (
-                    <a
-                      className="text-sm underline underline-offset-2"
-                      href="https://docs.docker.com/get-started/get-docker/"
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      Get Docker
-                    </a>
-                  ) : null}
-                  <Button size="xs" variant="outline" onClick={() => apps.refresh()}>
-                    Check again
+              <AlertDescription>{docker.message}</AlertDescription>
+              <AlertAction>
+                {docker.problem === "missing" || docker.problem === "no-compose" ? (
+                  <Button
+                    render={
+                      <a
+                        href="https://docs.docker.com/get-started/get-docker/"
+                        rel="noreferrer"
+                        target="_blank"
+                      />
+                    }
+                    size="xs"
+                    variant="outline"
+                  >
+                    Get Docker
                   </Button>
-                </div>
-              </AlertDescription>
+                ) : null}
+                <Button size="xs" variant="ghost" onClick={() => apps.refresh()}>
+                  Check again
+                </Button>
+              </AlertAction>
             </Alert>
           ) : null}
           {error === null ? null : (
@@ -331,79 +318,14 @@ export function OzoneHome() {
             </Alert>
           )}
 
-          {environmentId !== null && apps.data !== null && apps.data.apps.length > 0 ? (
-            <section aria-label="Your apps" className="flex flex-col gap-2">
-              <h2 className="font-medium text-muted-foreground text-xs">Your apps</h2>
-              <AppList apps={apps.data.apps} environmentId={environmentId} />
-            </section>
-          ) : null}
-          {environmentId !== null && apps.data !== null && apps.data.deleted.length > 0 ? (
-            <section aria-label="Deleted apps" className="flex flex-col gap-2">
-              <h2 className="font-medium text-muted-foreground text-xs">Deleted</h2>
-              <DeletedAppList apps={apps.data.deleted} environmentId={environmentId} />
-            </section>
-          ) : null}
+          {environmentId === null ? null : (
+            <div className="flex flex-col gap-8">
+              <HomeApps apps={apps.data?.apps ?? null} environmentId={environmentId} />
+              <DeletedApps apps={apps.data?.deleted ?? []} environmentId={environmentId} />
+            </div>
+          )}
         </div>
       </div>
     </SidebarInset>
-  );
-}
-
-function AppList(props: {
-  readonly apps: ReadonlyArray<OzoneApp>;
-  readonly environmentId: EnvironmentId;
-}) {
-  const navigate = useNavigate();
-  const handleNewThread = useNewThreadHandler();
-  const threads = useThreadShells();
-
-  const latestThreads = latestThreadByProject(threads, props.environmentId);
-
-  const open = (app: OzoneApp) => {
-    const latest = latestThreads.get(app.projectId);
-    if (latest === undefined) {
-      void handleNewThread(scopeProjectRef(props.environmentId, app.projectId));
-      return;
-    }
-    void navigate({
-      to: "/$environmentId/$threadId",
-      params: buildThreadRouteParams(scopeThreadRef(props.environmentId, latest.id)),
-    });
-  };
-
-  return (
-    <DiscoveryList>
-      {props.apps.map((app) => (
-        <AppRow
-          key={app.projectId}
-          app={app}
-          environmentId={props.environmentId}
-          onOpen={() => open(app)}
-        />
-      ))}
-    </DiscoveryList>
-  );
-}
-
-function AppRow(props: {
-  readonly app: OzoneApp;
-  readonly environmentId: EnvironmentId;
-  readonly onOpen: () => void;
-}) {
-  const status = useEnvironmentQuery(
-    ozoneEnvironment.runtimeStatus({
-      environmentId: props.environmentId,
-      input: { projectId: props.app.projectId },
-    }),
-  );
-  const phase = runtimePhaseLabel(status.data?.phase);
-  return (
-    <DiscoveryListRow
-      icon={<BoxIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />}
-      title={props.app.name}
-      description={`localhost:${props.app.port}`}
-      action={<Badge variant={phase.tone}>{phase.label}</Badge>}
-      onClick={props.onOpen}
-    />
   );
 }

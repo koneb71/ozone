@@ -20,8 +20,8 @@ that keeps it. Read it before changing `apps/server/src/ozone/runtime` or `apps/
 3. **Snapshots live outside the app.** [`AppData`](../../apps/server/src/ozone/data/AppData.ts)
    writes them under the server's state directory, in `ozone/backups/<app slug>/<snapshot id>/`.
    They survive the app's containers, its volume, its checkout and the app's own deletion.
-4. **Restoring and deleting are a person's decisions.** They are offered in the app's menu and
-   nowhere else. No MCP tool restores or deletes data. A restore first snapshots the data it is
+4. **Restoring and deleting are a person's decisions.** They are offered on the app's page and in
+   its menus, and nowhere else. No MCP tool restores or deletes data. A restore first snapshots the data it is
    about to replace, so it can be undone. A deleted app leaves its last snapshot, its folder and
    a record beside the snapshot, and Home brings it back from those: a project for the folder,
    the same slug, and the snapshot loaded before the app first starts. Volumes still in Docker
@@ -63,7 +63,7 @@ when a later restore brings their commits back. A restore is refused while a bui
 
 [`AppDeploy`](../../apps/server/src/ozone/deploy/AppDeploy.ts) treats production's data as another
 target of the same snapshot code. Every deploy after the first to a place saves it before its
-migrations run, and the Data dialog takes and restores snapshots of it. A restore runs the deployed
+migrations run, and the app's Data page takes and restores snapshots of it. A restore runs the deployed
 version's migrations afterwards, because that version expects its own schema whatever the snapshot
 had. A first deploy to a new place can start from the data of the place before: that data is
 saved, loaded into the new database before the app starts, and the old deploy is stopped with its

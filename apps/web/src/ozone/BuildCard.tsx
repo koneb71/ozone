@@ -58,8 +58,9 @@ function CriterionIcon({ result }: { readonly result: OzoneCriterionResult }) {
 function BuildDetail({ build }: { readonly build: OzoneBuild }) {
   const results = build.verification.results;
   return (
-    <div className="flex max-h-48 flex-col gap-2 overflow-y-auto">
-      <ol aria-label="Tasks" className="m-0 flex list-none flex-col gap-1 p-0">
+    <div className="flex max-h-48 flex-col gap-2.5 overflow-y-auto">
+      <h4 className="font-medium text-2xs text-muted-foreground uppercase tracking-wide">Tasks</h4>
+      <ol aria-label="Tasks" className="m-0 -mt-1.5 flex list-none flex-col gap-1 p-0">
         {build.tasks.map((task) => (
           <li key={task.id} className="flex min-w-0 items-center gap-2 text-xs">
             <TaskIcon task={task} />
@@ -69,22 +70,27 @@ function BuildDetail({ build }: { readonly build: OzoneBuild }) {
         ))}
       </ol>
       {results.length === 0 ? null : (
-        <ul aria-label="Browser test" className="m-0 flex list-none flex-col gap-1 p-0">
-          {results.map((result) => (
-            <li key={result.criterion} className="flex min-w-0 items-start gap-2 text-xs">
-              <CriterionIcon result={result} />
-              <span className="min-w-0 flex-1 text-foreground">
-                {result.criterion}
-                {result.verdict === "fail" && result.note.length > 0 ? (
-                  <span className="block text-muted-foreground">{result.note}</span>
-                ) : null}
-              </span>
-              <span className="shrink-0 text-muted-foreground">
-                {CRITERION_LABEL[result.verdict]}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <>
+          <h4 className="font-medium text-2xs text-muted-foreground uppercase tracking-wide">
+            Browser test
+          </h4>
+          <ul aria-label="Browser test" className="m-0 -mt-1.5 flex list-none flex-col gap-1 p-0">
+            {results.map((result) => (
+              <li key={result.criterion} className="flex min-w-0 items-start gap-2 text-xs">
+                <CriterionIcon result={result} />
+                <span className="min-w-0 flex-1 text-foreground">
+                  {result.criterion}
+                  {result.verdict === "fail" && result.note.length > 0 ? (
+                    <span className="block text-muted-foreground">{result.note}</span>
+                  ) : null}
+                </span>
+                <span className="shrink-0 text-muted-foreground">
+                  {CRITERION_LABEL[result.verdict]}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </div>
   );
