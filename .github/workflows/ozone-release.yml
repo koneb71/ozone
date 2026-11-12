@@ -168,6 +168,8 @@ jobs:
           path: release-publish/*
           if-no-files-found: error
           compression-level: 0
+          # Over a gigabyte per run: a release keeps its own copies, so these need not stay.
+          retention-days: 3
 
   draft:
     name: Draft the release
