@@ -21,6 +21,8 @@ export const OZONE_APP_INSTRUCTIONS = `This app was created by Ozone, which runs
 
 ### Building
 
+Ozone's tools are on the \`t3-code\` MCP server and start with \`ozone_\`. If none is listed, call \`tool_search\` with \`ozone\` first.
+
 You are the lead when the user talks to you directly. For anything larger than a small edit:
 
 1. Ask the user at most three questions, and only when the answer changes what gets built. Otherwise state your assumptions and continue.
