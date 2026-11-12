@@ -635,6 +635,11 @@ const buildCliArchive = Effect.fn("buildCliArchive")(function* (input: {
   yield* Effect.log(`[cli-archive] Staging ${stem}...`);
   yield* fs.copyFile(builtExecutable, path.join(contentDir, executableName));
   yield* stageWebClient(webClient, path.join(contentDir, "client"));
+  // ozone-seam: the templates new apps are made from, read from beside the executable.
+  yield* fs.copyFile(
+    path.join(serverDir, "dist/ozone-templates.json"),
+    path.join(contentDir, "ozone-templates.json"),
+  );
   yield* fs.copy(resourceMonitorDir, path.join(contentDir, "resource-monitor"));
   yield* stageRuntimeExternals({
     repoRoot,

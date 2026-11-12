@@ -13,6 +13,11 @@ import { DEVELOPMENT_ICON_OVERRIDES } from "../../../scripts/lib/brand-assets.ts
 import { findEsmImportsOfExternalPackages } from "../../../scripts/lib/cli-executable-imports.ts";
 import { injectLinuxArm64Sea } from "../../../scripts/lib/linux-arm64-sea.ts";
 import rootPackageJson from "../../../package.json" with { type: "json" };
+import {
+  SOURCE_TEMPLATES_ROOT,
+  TEMPLATE_BUNDLE_FILE,
+  writeTemplateBundle,
+} from "../src/ozone/apps/templates.ts"; // ozone-seam
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import {
@@ -99,6 +104,11 @@ const buildCmd = Command.make(
       } else {
         yield* Effect.logWarning("[cli] Web dist not found. Skipping client bundle.");
       }
+      // ozone-seam: an installed Ozone makes apps from templates bundled beside the server.
+      yield* writeTemplateBundle(
+        path.join(repoRoot, SOURCE_TEMPLATES_ROOT),
+        path.join(serverDir, "dist", TEMPLATE_BUNDLE_FILE),
+      );
     }),
 ).pipe(Command.withDescription("Build the server package (tsdown + bundle web client)."));
 

@@ -6,6 +6,7 @@ import * as Path from "effect/Path";
 
 import { OZONE_APP_INSTRUCTIONS } from "./appInstructions.ts";
 import { appSlug, safeAppName, scaffold } from "./AppScaffolder.ts";
+import { readTemplateTree } from "./templates.ts";
 
 describe("AppScaffolder", () => {
   it.each([
@@ -54,7 +55,7 @@ describe("AppScaffolder", () => {
       yield* fs.writeFile(path.join(template, "logo.bin"), binary);
 
       const written = yield* scaffold({
-        templateDirectory: template,
+        files: yield* readTemplateTree(template),
         workspaceRoot,
         name: "Habit tracker",
         slug: "habit-tracker-a1b2c3",

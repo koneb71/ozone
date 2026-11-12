@@ -97,7 +97,9 @@ git merge upstream/main
   `apps/server/src/ozone/apps/templates.test.ts`. A template's lockfile, `src/routeTree.gen.ts` and
   formatting are produced by its own tools: change one in a copy with its placeholders filled in,
   run `npm install`, `npm run build` and `npm run format` there in a `node:26-alpine` container,
-  and copy the results back with the placeholders restored.
+  and copy the results back with the placeholders restored. An installed Ozone reads them from
+  `ozone-templates.json`, which the server build writes into `dist`: packagers drop dotfiles and
+  file modes, and an app without its `.gitignore` would commit its `.env`.
 - Text that agents read is code: the instructions in `apps/server/src/ozone/apps/appInstructions.ts`
   and `chat/chatPersona.ts`, the briefs in `builds/briefs.ts`, the tool descriptions in
   `mcp/tools.ts` and the template's `AGENTS.md`. An agent follows it literally. It has no eval

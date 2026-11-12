@@ -50,6 +50,8 @@ const makeHarness = Effect.gen(function* () {
   const started = yield* Queue.unbounded<ProjectId>();
   const removal = yield* Ref.make<ReadonlyArray<string>>([]);
   const backupFails = yield* Ref.make(false);
+  // Puts a file where the new app's folder should be, so the template cannot be written.
+  const folderIsAFile = yield* Ref.make(false);
   const record = (step: string) => Ref.update(removal, (all) => [...all, step]);
 
   const apps = yield* OzoneApps.make.pipe(
@@ -86,7 +88,11 @@ const makeHarness = Effect.gen(function* () {
           createNamedProject: Effect.fn("TestFolders.createNamedProject")(function* (input) {
             const index = yield* Ref.updateAndGet(created, (count) => count + 1);
             const workspaceRoot = path.join(root, input.name.toLowerCase().replaceAll(" ", "-"));
-            yield* fs.makeDirectory(workspaceRoot).pipe(Effect.orDie);
+            yield* (
+              (yield* Ref.get(folderIsAFile))
+                ? fs.writeFileString(workspaceRoot, "in the way")
+                : fs.makeDirectory(workspaceRoot)
+            ).pipe(Effect.orDie);
             return { projectId: ProjectId.make(`a1b2c3-project-${index}`), workspaceRoot };
           }),
         }),
@@ -112,7 +118,19 @@ const makeHarness = Effect.gen(function* () {
       ),
     ),
   );
-  return { apps, root, registered, created, commits, started, fs, path, removal, backupFails };
+  return {
+    apps,
+    root,
+    registered,
+    created,
+    commits,
+    started,
+    fs,
+    path,
+    removal,
+    backupFails,
+    folderIsAFile,
+  };
 });
 
 it.effect("OzoneApps creates an app from the template, registers it and starts it", () =>
@@ -184,12 +202,20 @@ it.effect("OzoneApps creates an app from the template, registers it and starts i
   }).pipe(Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer))),
 );
 
-it.effect("OzoneApps refuses an unknown template before creating anything", () =>
+it.effect("OzoneApps leaves nothing behind when it cannot make an app", () =>
   Effect.gen(function* () {
-    const { apps, created } = yield* makeHarness;
+    const { apps, created, registered, removal, folderIsAFile, fs, path, root } =
+      yield* makeHarness;
     const error = yield* Effect.flip(apps.create({ name: "Habits", templateId: "mobile-app" }));
     assert.strictEqual(error.reason, "unknown_template");
     assert.strictEqual(yield* Ref.get(created), 0);
+
+    // Once its project exists, a failure takes back the project and the folder made for it.
+    yield* Ref.set(folderIsAFile, true);
+    yield* Effect.flip(apps.create({ name: "Habits" }));
+    assert.deepStrictEqual(yield* Ref.get(removal), ["delete the project and its threads"]);
+    assert.deepStrictEqual(yield* Ref.get(registered), []);
+    assert.isFalse(yield* fs.exists(path.join(root, "habits")));
   }).pipe(Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer))),
 );
 

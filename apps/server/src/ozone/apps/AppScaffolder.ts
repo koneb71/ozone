@@ -3,13 +3,14 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
 import { OZONE_APP_INSTRUCTIONS } from "./appInstructions.ts";
+import type { TemplateFile } from "./templates.ts";
 
 const APP_NAME_TOKEN = "__OZONE_APP_NAME__";
 const APP_SLUG_TOKEN = "__OZONE_APP_SLUG__";
 const INSTRUCTIONS_TOKEN = "<!-- ozone:instructions -->";
 
 export interface ScaffoldInput {
-  readonly templateDirectory: string;
+  readonly files: ReadonlyArray<TemplateFile>;
   readonly workspaceRoot: string;
   readonly name: string;
   readonly slug: string;
@@ -74,23 +75,18 @@ export const scaffold = Effect.fn("AppScaffolder.scaffold")(function* (input: Sc
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
 
-  const entries = yield* fs.readDirectory(input.templateDirectory, { recursive: true });
   const written: Array<string> = [];
-  for (const relativePath of entries.toSorted()) {
-    const source = path.join(input.templateDirectory, relativePath);
-    const info = yield* fs.stat(source);
-    if (info.type !== "File") continue;
-    const target = path.join(input.workspaceRoot, relativePath);
+  for (const file of input.files) {
+    const target = path.join(input.workspaceRoot, ...file.path.split("/"));
     yield* fs.makeDirectory(path.dirname(target), { recursive: true });
-    const bytes = yield* fs.readFile(source);
-    const text = decodeText(bytes);
+    const text = decodeText(file.bytes);
     yield* fs.writeFile(
       target,
-      text === null ? bytes : encoder.encode(renderTemplateText(text, input)),
+      text === null ? file.bytes : encoder.encode(renderTemplateText(text, input)),
     );
     // Entry points such as `dev` must stay executable.
-    yield* fs.chmod(target, info.mode & 0o777);
-    written.push(relativePath);
+    yield* fs.chmod(target, file.mode);
+    written.push(file.path);
   }
   yield* fs.writeFileString(path.join(input.workspaceRoot, ".env"), environmentFile(input));
   return written;

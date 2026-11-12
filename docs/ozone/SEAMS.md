@@ -9,6 +9,7 @@ These files contain a comment with `ozone-seam` at each edit.
 
 | File                                                        | Why                                                                                                    |
 | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `apps/server/scripts/cli.ts`                                | the server build writes the template bundle into `dist`                                                |
 | `apps/server/src/auth/RpcAuthorization.ts`                  | spreads the scopes of Ozone's RPC methods into the scope map                                           |
 | `apps/server/src/cli/app.test.ts`                           | expects Ozone's default data directory name                                                            |
 | `apps/server/src/cli/browser.ts`                            | browser setup under sudo uses the Ozone data directory                                                 |
@@ -45,6 +46,7 @@ These files contain a comment with `ozone-seam` at each edit.
 | `packages/contracts/src/index.ts`                           | exports Ozone's contracts                                                                              |
 | `packages/contracts/src/rpc.ts`                             | adds Ozone's RPC methods to the WebSocket group                                                        |
 | `packages/shared/src/cliRelease.ts`                         | release archives come from Ozone's repository                                                          |
+| `scripts/build-cli-archive.ts`                              | the CLI archive carries the template bundle beside the executable                                      |
 | `scripts/notify-discord-release.test.ts`                    | reads upstream's release workflow from its parked location                                             |
 | `vite.config.ts`                                            | keeps formatter, linter and test runner out of template sources                                        |
 
