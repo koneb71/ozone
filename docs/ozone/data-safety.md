@@ -70,6 +70,11 @@ saved, loaded into the new database before the app starts, and the old deploy is
 volume left in place. Each command runs against an export of the commit that is deployed, never the
 working tree. An app whose production is running cannot be deleted: Ozone could no longer reach it.
 
+A rollback deploys an earlier commit and keeps today's data unless asked for the data from then.
+That data is the snapshot the next successful deploy on the same host took just before replacing
+the version, so it is the data as that version left it. It is loaded after a snapshot of today's
+data, so the rollback can be undone the same way.
+
 ## Why the dump is copied, not streamed
 
 Ozone reads command output as bounded text. A database dump is binary and can be large, so
@@ -95,7 +100,8 @@ is taken after every task that passes its checks.
 - A deleted app comes back without its threads: upstream deletes them with the project.
 - A deployed app's data lives in a volume of its own (`<slug>-prod_pgdata`) that nothing in Ozone
   removes. Its snapshots are kept apart, in `backups/<slug>/production/`, on this machine even when
-  the app runs on a server. Moving to another server was tried with scripted Docker only.
+  the app runs on a server. Checking a server and starting its proxy were tried over real SSH; a
+  deploy to a server, and moving to one, with scripted Docker only.
 - Routine snapshots, the one after each task and the one before a rebuild, are pruned to the newest
   20 per app. A person's own snapshots and the undo points of a restore or a delete are kept until
   removed by hand.

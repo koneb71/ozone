@@ -1,7 +1,7 @@
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId, OzoneApp, OzoneDeployStatus } from "@t3tools/contracts";
 import { ExternalLinkIcon, RocketIcon, ServerIcon, SquareIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
@@ -24,12 +24,16 @@ import { useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
 
+import { DOMAIN, HOST } from "./deploy.logic";
+import { DeployHistory } from "./DeployHistory";
+import { DeployMonitor, ServerCheck } from "./DeployMonitor";
+import { DeploySettings } from "./DeploySettings";
 import { ozoneEnvironment } from "./state";
 
 type Where = "here" | "server";
+type Pane = "deploy" | "history" | "monitor" | "settings";
 
-const HOST = /^(?:[A-Za-z0-9._-]+@)?[A-Za-z0-9][A-Za-z0-9.-]*(?::\d{1,5})?$/;
-const URL = /^https?:\/\/\S+$/;
+const URL_PATTERN = /^https?:\/\/\S+$/;
 
 function statusLine(status: OzoneDeployStatus): string {
   // Held back before anything changed, so what was deployed before is still what runs.
@@ -61,7 +65,7 @@ export function AppDeployDialog(props: {
 }) {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogPopup className="sm:max-w-lg">
+      <DialogPopup className="sm:max-w-2xl">
         {props.open ? <AppDeploy app={props.app} environmentId={props.environmentId} /> : null}
       </DialogPopup>
     </Dialog>
@@ -77,20 +81,32 @@ function AppDeploy(props: { readonly app: OzoneApp; readonly environmentId: Envi
   const [where, setWhere] = useState<Where>(last?.host == null ? "here" : "server");
   const [host, setHost] = useState(last?.host ?? "");
   const [publicUrl, setPublicUrl] = useState(last?.publicUrl ?? "");
+  const [domain, setDomain] = useState(last?.domain ?? "");
+  const [pane, setPane] = useState<Pane>("deploy");
   const [bringData, setBringData] = useState(true);
   const [working, setWorking] = useState<"deploy" | "stop" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const trimmedHost = host.trim();
   const trimmedUrl = publicUrl.trim();
+  const trimmedDomain = domain.trim().toLowerCase();
   const problem =
     where === "server" && !HOST.test(trimmedHost)
       ? "Name the server as user@host, the way ssh reaches it."
-      : trimmedUrl.length > 0 && !URL.test(trimmedUrl)
-        ? "The public address starts with http:// or https://."
-        : null;
+      : trimmedDomain.length > 0 && !DOMAIN.test(trimmedDomain)
+        ? "Name the domain without https://, such as notes.example.com."
+        : trimmedUrl.length > 0 && !URL_PATTERN.test(trimmedUrl)
+          ? "The public address starts with http:// or https://."
+          : null;
   const current = status.data;
   const busy = working !== null || current?.state === "deploying";
+  const refreshStatus = status.refresh;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- polls the server's deploy status, which says which step runs, while a deploy is under way
+  useEffect(() => {
+    if (!busy) return;
+    const timer = window.setInterval(refreshStatus, 2_000);
+    return () => window.clearInterval(timer);
+  }, [busy, refreshStatus]);
   // Somewhere other than where it runs now: its data can come along.
   const chosenHost = where === "server" ? trimmedHost : null;
   const movesFrom =
@@ -111,7 +127,8 @@ function AppDeploy(props: { readonly app: OzoneApp; readonly environmentId: Envi
               projectId: props.app.projectId,
               target: {
                 host: where === "server" ? trimmedHost : null,
-                publicUrl: trimmedUrl.length > 0 ? trimmedUrl : null,
+                publicUrl: trimmedDomain.length === 0 && trimmedUrl.length > 0 ? trimmedUrl : null,
+                domain: trimmedDomain.length > 0 ? trimmedDomain : null,
               },
               ...(acceptMigrations ? { acceptMigrations } : {}),
               ...(movesFrom !== null && bringData ? { bringData } : {}),
@@ -152,6 +169,27 @@ function AppDeploy(props: { readonly app: OzoneApp; readonly environmentId: Envi
       </DialogHeader>
       <DialogPanel>
         <div className="flex flex-col gap-4">
+          <ToggleGroup
+            aria-label="Deploy pages"
+            value={[pane]}
+            onValueChange={(next) => {
+              const value = next[0];
+              if (
+                value === "deploy" ||
+                value === "history" ||
+                value === "monitor" ||
+                value === "settings"
+              )
+                setPane(value);
+            }}
+          >
+            <Toggle value="deploy">Deploy</Toggle>
+            <Toggle value="history">History</Toggle>
+            <Toggle disabled={last === null} value="monitor">
+              Monitor
+            </Toggle>
+            <Toggle value="settings">Settings</Toggle>
+          </ToggleGroup>
           {current === null || current === undefined ? null : (
             <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 px-3 py-2.5 text-sm">
               <span className="flex min-w-0 items-center gap-2 text-foreground">
@@ -202,70 +240,105 @@ function AppDeploy(props: { readonly app: OzoneApp; readonly environmentId: Envi
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          <ToggleGroup
-            aria-label="Where to deploy"
-            disabled={busy}
-            value={[where]}
-            onValueChange={(next) => {
-              const value = next[0];
-              if (value === "here" || value === "server") setWhere(value);
-            }}
-          >
-            <Toggle value="here">This machine</Toggle>
-            <Toggle value="server">
-              <ServerIcon />A server
-            </Toggle>
-          </ToggleGroup>
-          {where === "server" ? (
-            <div className="flex flex-col gap-2">
-              <Input
-                aria-label="Server"
-                autoComplete="off"
-                disabled={busy}
-                placeholder="deploy@example.com"
-                spellCheck={false}
-                value={host}
-                onChange={(event) => setHost(event.target.value)}
-              />
-              <p className="text-muted-foreground text-xs">
-                Ozone runs Docker on it over SSH, with the keys this machine already uses for it.
-              </p>
-            </div>
-          ) : null}
-          <div className="flex flex-col gap-2">
-            <Input
-              aria-label="Public address"
-              autoComplete="off"
-              disabled={busy}
-              placeholder={
-                where === "server"
-                  ? `Public address, such as https://${props.app.slug}.example.com`
-                  : "Public address, if a proxy serves it under one"
-              }
-              spellCheck={false}
-              value={publicUrl}
-              onChange={(event) => setPublicUrl(event.target.value)}
+          {pane === "history" ? (
+            <DeployHistory
+              app={props.app}
+              busy={busy}
+              environmentId={props.environmentId}
+              onDeployed={status.refresh}
             />
-            {problem === null ? null : (
-              <p className="text-destructive-foreground text-xs">{problem}</p>
-            )}
-          </div>
-          {movesFrom === null ? null : (
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex flex-col gap-1">
-                <Label htmlFor="ozone-bring-data">Bring the data from {movesFrom}</Label>
-                <p className="text-muted-foreground text-sm">
-                  On a first deploy there, it starts from a copy of that data, and the deploy on{" "}
-                  {movesFrom} is stopped once it runs. The data there stays where it is.
-                </p>
-              </div>
-              <Switch
-                id="ozone-bring-data"
-                checked={bringData}
+          ) : pane === "monitor" && last !== null ? (
+            <DeployMonitor app={props.app} environmentId={props.environmentId} host={last.host} />
+          ) : pane === "settings" ? (
+            <DeploySettings
+              app={props.app}
+              deployed={last !== null}
+              environmentId={props.environmentId}
+            />
+          ) : (
+            <>
+              <ToggleGroup
+                aria-label="Where to deploy"
                 disabled={busy}
-                onCheckedChange={setBringData}
-              />
-            </div>
+                value={[where]}
+                onValueChange={(next) => {
+                  const value = next[0];
+                  if (value === "here" || value === "server") setWhere(value);
+                }}
+              >
+                <Toggle value="here">This machine</Toggle>
+                <Toggle value="server">
+                  <ServerIcon />A server
+                </Toggle>
+              </ToggleGroup>
+              {where === "server" ? (
+                <div className="flex flex-col gap-2">
+                  <Input
+                    aria-label="Server"
+                    autoComplete="off"
+                    disabled={busy}
+                    placeholder="deploy@example.com"
+                    spellCheck={false}
+                    value={host}
+                    onChange={(event) => setHost(event.target.value)}
+                  />
+                  <p className="text-muted-foreground text-xs">
+                    Ozone runs Docker on it over SSH, with the keys this machine already uses for
+                    it.
+                  </p>
+                </div>
+              ) : null}
+              <div className="flex flex-col gap-2">
+                <Input
+                  aria-label="Domain"
+                  autoComplete="off"
+                  disabled={busy}
+                  placeholder={`Domain, such as ${props.app.slug.replace(/-[0-9a-f]{6}$/, "")}.example.com (optional)`}
+                  spellCheck={false}
+                  value={domain}
+                  onChange={(event) => setDomain(event.target.value)}
+                />
+                <p className="text-muted-foreground text-xs">
+                  {trimmedDomain.length > 0
+                    ? `Point ${trimmedDomain} at ${where === "server" ? "the server" : "this machine"} in your DNS first. Ozone serves it over HTTPS with a certificate from Let's Encrypt, and each new version takes over without the app going down.`
+                    : "Without a domain, the app answers on its own port."}
+                </p>
+                {trimmedDomain.length === 0 && (last?.publicUrl ?? null) !== null ? (
+                  <Input
+                    aria-label="Public address"
+                    autoComplete="off"
+                    disabled={busy}
+                    placeholder="Public address, if a proxy of your own serves it"
+                    spellCheck={false}
+                    value={publicUrl}
+                    onChange={(event) => setPublicUrl(event.target.value)}
+                  />
+                ) : null}
+                {problem === null ? null : (
+                  <p className="text-destructive-foreground text-xs">{problem}</p>
+                )}
+              </div>
+              {where === "server" && HOST.test(trimmedHost) ? (
+                <ServerCheck environmentId={props.environmentId} host={trimmedHost} />
+              ) : null}
+              {movesFrom === null ? null : (
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex flex-col gap-1">
+                    <Label htmlFor="ozone-bring-data">Bring the data from {movesFrom}</Label>
+                    <p className="text-muted-foreground text-sm">
+                      On a first deploy there, it starts from a copy of that data, and the deploy on{" "}
+                      {movesFrom} is stopped once it runs. The data there stays where it is.
+                    </p>
+                  </div>
+                  <Switch
+                    id="ozone-bring-data"
+                    checked={bringData}
+                    disabled={busy}
+                    onCheckedChange={setBringData}
+                  />
+                </div>
+              )}
+            </>
           )}
         </div>
       </DialogPanel>

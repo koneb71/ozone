@@ -41,7 +41,7 @@ These files contain a comment with `ozone-seam` at each edit.
 | `apps/server/src/project/ManagedProjectFolders.ts`                      | the project of project-less threads is titled Chats, and a chat's new folder gets Ozone's instructions |
 | `apps/server/src/provider/Drivers/ClaudeDriver.ts`                      | attaches Claude subscription sign-in and advertises it in snapshots                                    |
 | `apps/server/src/provider/Drivers/ClaudeHome.ts`                        | drops ambient Anthropic API-key variables from the host environment                                    |
-| `apps/server/src/server.ts`                                             | provides `Ozone.layer` and registers Ozone's MCP tools                                                 |
+| `apps/server/src/server.ts`                                             | provides `Ozone.layer`, registers Ozone's MCP tools and its deploy URL                                 |
 | `apps/server/src/telemetry/AnalyticsService.ts`                         | telemetry off, with no upstream key or host                                                            |
 | `apps/server/src/ws.ts`                                                 | Ozone's release lookup and WebSocket handlers                                                          |
 | `apps/web/index.html`                                                   | product name on the splash screen                                                                      |

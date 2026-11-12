@@ -36,6 +36,15 @@ starts its lead thread.
   stops a deploy instead of being replaced. Migrations run from the build stage,
   which has the tools the production image leaves out. A server is reached with `docker -H ssh://`,
   so Ozone needs no agent there, only Docker and this machine's SSH access.
+- **A domain goes through one proxy per host.** Ozone runs Traefik there as its own Compose
+  project, `ozone-proxy`, on ports 80 and 443; an app with a domain drops its published port, joins
+  the proxy's network and is routed by its labels. Without a port of its own, a second copy can
+  start beside the first: a deploy waits until the proxy routes to the new copy, then stops the old
+  one, and the proxy retries a request that reached the stopped copy within a second. Swarm and a
+  registry, which other hosts use for this, would be machinery Ozone does not otherwise need.
+- **A deploy URL is a token in a path.** It deploys the last commit where the app runs, with no
+  session, as a Git host's deploy hook does. Notification channels and the token live in Ozone's
+  state, readable only by its owner, and clients see neither again.
 - **What an app is given stays out of its repository.** Its environment variables, Ozone's secrets
   and the host's certificate bundle reach Compose through override files in Ozone's state, which
   only their owner can read. A value is escaped for Compose, which would otherwise interpolate it.

@@ -23,9 +23,11 @@ import * as BuildRepo from "../builds/BuildRepo.ts";
 import * as AppData from "../data/AppData.ts";
 import * as DockerCli from "../runtime/DockerCli.ts";
 import * as AppDeploy from "./AppDeploy.ts";
+import * as AppServers from "./AppServers.ts";
+import * as Notifier from "./Notifier.ts";
 
 const projectId = ProjectId.make("project-notes");
-const here = { host: null, publicUrl: null };
+const here = { host: null, publicUrl: null, domain: null };
 const manifest: OzoneAppManifest = {
   version: 1,
   runtime: {
@@ -105,7 +107,14 @@ const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: bool
               return { code: 3, stdout: "", stderr: HELD_BACK, timedOut: false };
             }
             const place = input.args[0] === "-H" ? (input.args[1] ?? "") : "here";
-            if (what === "up app") yield* Ref.update(running, (set) => new Set([...set, place]));
+            if (what === "up app" || what === "up app=2 app") {
+              yield* Ref.update(running, (set) => new Set([...set, place]));
+            }
+            // Behind the proxy, the copy that ran before is found by id and removed.
+            if (what === "ps app") {
+              const up = (yield* Ref.get(running)).has(place);
+              return { code: 0, stdout: up ? "old-1\n" : "", stderr: "", timedOut: false };
+            }
             if (what === "stop") {
               yield* Ref.update(running, (set) => new Set([...set].filter((at) => at !== place)));
             }
@@ -121,6 +130,18 @@ const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: bool
       Layer.provide(ServerConfig.layerTest(root, { prefix: "ozone-deploy-git-" })),
       Layer.provideMerge(VcsProcess.layer),
     );
+    const notices = yield* Ref.make<ReadonlyArray<Notifier.Notice>>([]);
+    // The snapshots taken so far, each reason once: the fake names a snapshot by its reason.
+    const taken = yield* Ref.make<ReadonlyArray<OzoneSnapshot>>([]);
+    const app = {
+      projectId,
+      slug: "notes-a1b2c3",
+      name: "Notes",
+      templateId: "web-app",
+      port: 41_005,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      settings: DEFAULT_OZONE_APP_SETTINGS,
+    };
     // Built into the test's scope: a deploy runs in the service's own fiber, which lives there.
     const context = yield* Layer.build(
       AppDeploy.layer.pipe(
@@ -130,24 +151,12 @@ const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: bool
           Layer.mergeAll(
             docker,
             Layer.mock(AppRegistry.AppRegistry)({
-              resolve: () =>
-                Effect.succeed({
-                  app: {
-                    projectId,
-                    slug: "notes-a1b2c3",
-                    name: "Notes",
-                    templateId: "web-app",
-                    port: 41_005,
-                    createdAt: "2026-01-01T00:00:00.000Z",
-                    settings: DEFAULT_OZONE_APP_SETTINGS,
-                  },
-                  workspaceRoot,
-                  manifest,
-                }),
+              list: Effect.succeed([app]),
+              resolve: () => Effect.succeed({ app, workspaceRoot, manifest }),
             }),
             // Each asks the target's own Docker, which shows where it was aimed.
             Layer.mock(AppData.AppData)({
-              listOf: () => Effect.succeed([snapshotOf("manual")]),
+              listOf: () => Ref.get(taken),
               snapshotOf: (target, input) =>
                 target
                   .compose(["exec", "pg_dump"])
@@ -157,6 +166,13 @@ const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: bool
                         ...all,
                         `snapshot ${input.reason}${input.label === undefined ? "" : ` (${input.label})`}`,
                       ]),
+                    ),
+                    Effect.andThen(
+                      Ref.update(taken, (all) =>
+                        all.some((entry) => entry.reason === input.reason)
+                          ? all
+                          : [...all, snapshotOf(input.reason)],
+                      ),
                     ),
                     Effect.as(snapshotOf(input.reason)),
                   ),
@@ -171,6 +187,16 @@ const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: bool
                 target
                   .compose(["exec", "pg_restore", input.snapshotId])
                   .pipe(Effect.andThen(input.restart ?? Effect.void)),
+            }),
+            Layer.mock(AppServers.AppServers)({
+              ensureProxy: (host) =>
+                Ref.update(journal, (all) => [...all, `proxy on ${host ?? "here"}`]),
+              routes: () => Effect.succeed(1),
+              awaitRoutes: (_host, _slug, count) =>
+                Ref.update(journal, (all) => [...all, `routes ${count}`]).pipe(Effect.as(true)),
+            }),
+            Layer.mock(Notifier.Notifier)({
+              notify: (notice) => Ref.update(notices, (all) => [...all, notice]),
             }),
             // Behind a TLS-intercepting proxy, the host names its certificate bundle.
             Layer.succeed(
@@ -201,9 +227,16 @@ const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: bool
     const directory = path.join(config.stateDir, "ozone", "apps", "notes-a1b2c3");
     const steps = Ref.get(journal);
     const forget = Ref.set(journal, []);
+    const commit = Effect.fn("test.commit")(function* (file: string, message: string) {
+      yield* fs.writeFileString(path.join(workspaceRoot, file), `${message}\n`);
+      return (yield* repo.commitAll(workspaceRoot, message)) ?? "";
+    });
     return {
       deploy,
       calls,
+      notices,
+      commit,
+      running,
       steps,
       forget,
       builtFrom,
@@ -327,7 +360,7 @@ it.effect("backs up and restores production from the commit it runs", () =>
 it.effect("moves to a server with its data, and stops what ran before", () =>
   Effect.gen(function* () {
     const { deploy, calls, steps, forget } = yield* makeHarness();
-    const server = { host: "deploy@example.com", publicUrl: null };
+    const server = { host: "deploy@example.com", publicUrl: null, domain: null };
     yield* deploy.deploy({ projectId, target: here });
     yield* forget;
     yield* Ref.set(calls, []);
@@ -378,7 +411,7 @@ it.effect("gives the image build the host's certificate bundle behind a proxy", 
 it.effect("reaches a Docker host over SSH, and says which step failed", () =>
   Effect.gen(function* () {
     const { deploy, calls } = yield* makeHarness({ failAt: "build" });
-    const target = { host: "deploy@example.com:2222", publicUrl: null };
+    const target = { host: "deploy@example.com:2222", publicUrl: null, domain: null };
     const failed = yield* deploy.deploy({ projectId, target });
     assert.strictEqual(failed.state, "failed");
     assert.include(failed.message ?? "", "The production image could not be built");
@@ -395,5 +428,118 @@ it.effect("reaches a Docker host over SSH, and says which step failed", () =>
     yield* fs.remove(path.join(workspaceRoot, AppDeploy.PROD_COMPOSE_FILE));
     const refused = yield* Effect.flip(other.deploy({ projectId, target }));
     assert.include(refused.message, "has no compose.prod.yaml");
+  }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect("serves a domain through the proxy, and switches versions without going down", () =>
+  Effect.gen(function* () {
+    const { deploy, steps, forget, fs, path, directory } = yield* makeHarness();
+    const domain = { host: "deploy@example.com", publicUrl: null, domain: "notes.example.com" };
+    const first = yield* deploy.deploy({ projectId, target: domain });
+    assert.include(first, { state: "running", url: "https://notes.example.com" });
+    assert.deepStrictEqual((yield* steps).slice(0, 2), ["proxy on deploy@example.com", "build"]);
+    // Nothing ran before, so it simply starts.
+    assert.include(yield* steps, "up app");
+
+    const override = yield* fs.readFileString(path.join(directory, "compose.prod.override.yaml"));
+    assert.include(override, "ports: !reset []");
+    assert.include(
+      override,
+      'traefik.http.routers.ozone-notes-a1b2c3.rule: "Host(`notes.example.com`)"',
+    );
+    assert.include(override, 'BETTER_AUTH_URL: "https://notes.example.com"');
+    assert.match(override, /networks:\n {2}ozone-proxy:\n {4}external: true/);
+
+    // The next version starts beside the running one, and that one goes once the proxy has both.
+    yield* forget;
+    yield* deploy.deploy({ projectId, target: domain });
+    const switched = yield* steps;
+    const from = switched.indexOf("rm app");
+    assert.deepStrictEqual(switched.slice(from, from + 6), [
+      "rm app",
+      "ps app",
+      "up app=2 app",
+      "routes 2",
+      // The old copy is stopped by id on the server itself.
+      "ssh://deploy@example.com container stop 20 old-1",
+      "ssh://deploy@example.com container rm old-1",
+    ]);
+  }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect("keeps each deploy with its output, and rolls back code alone or with its data", () =>
+  Effect.gen(function* () {
+    const { deploy, steps, forget, commit, notices, head } = yield* makeHarness();
+    yield* deploy.deploy({ projectId, target: here });
+    const second = yield* commit("notes.ts", "Add notes");
+    yield* deploy.deploy({ projectId, target: here });
+
+    const { deployments } = yield* deploy.history(projectId);
+    assert.deepStrictEqual(
+      deployments.map((entry) => [entry.commitSha, entry.title, entry.outcome, entry.current]),
+      [
+        [second, "Add notes", "succeeded", true],
+        [head, "Scaffold", "succeeded", false],
+      ],
+    );
+    const [newest, oldest] = deployments;
+    // The second deploy saved the data as the first version left it.
+    assert.strictEqual(oldest?.dataSnapshotId, newest?.snapshotId);
+    assert.include(yield* deploy.output(projectId, oldest?.id ?? ""), "$ docker compose build");
+    assert.deepStrictEqual(
+      (yield* Ref.get(notices)).map((notice) => notice.event),
+      ["deploy.succeeded", "deploy.succeeded"],
+    );
+
+    // Code only: the data stays as it is.
+    yield* forget;
+    const back = yield* deploy.rollback({ projectId, deploymentId: oldest?.id ?? "" });
+    assert.include(back, { state: "running", commitSha: head });
+    assert.notInclude((yield* steps).join("|"), "pg_restore");
+
+    // With its data: loaded after a snapshot of what is there now, before the migrations.
+    yield* forget;
+    yield* deploy.rollback({ projectId, deploymentId: oldest?.id ?? "", restoreData: true });
+    const withData = yield* steps;
+    assert.deepStrictEqual(withData.slice(1, 7), [
+      "up db",
+      "exec pg_dump",
+      "snapshot before-deploy",
+      "exec pg_restore snapshot-before-deploy",
+      "run migrate",
+      "up app",
+    ]);
+    const latest = (yield* deploy.history(projectId)).deployments[0];
+    assert.include(latest, { trigger: "rollback", commitSha: head, current: true });
+
+    // A version that never ran cannot be gone back to.
+    const refused = yield* Effect.flip(deploy.rollback({ projectId, deploymentId: "nope" }));
+    assert.include(refused.message, "succeeded");
+  }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect("reports a failed deploy, and a webhook URL redeploys where the app runs", () =>
+  Effect.gen(function* () {
+    const { deploy, notices } = yield* makeHarness({ failAt: "build" });
+    yield* Effect.flip(deploy.webhook({ projectId, action: "show" }));
+    yield* deploy.deploy({ projectId, target: here });
+    const [failure] = yield* Ref.get(notices);
+    assert.strictEqual(failure?.event, "deploy.failed");
+    assert.include(failure?.detail ?? "", "npm ERR! build failed");
+    assert.strictEqual((yield* deploy.history(projectId)).deployments[0]?.outcome, "failed");
+
+    const { deploy: other } = yield* makeHarness();
+    yield* other.deploy({ projectId, target: here });
+    const shown = yield* other.webhook({ projectId, action: "show" });
+    assert.match(shown.path ?? "", /^\/api\/ozone\/deploy\/[0-9a-f]{64}$/);
+    assert.deepStrictEqual(yield* other.webhook({ projectId, action: "show" }), shown);
+    const token = (shown.path ?? "").split("/").at(-1) ?? "";
+    assert.strictEqual(yield* other.redeployByToken("0".repeat(64)), "unknown");
+    assert.strictEqual(yield* other.redeployByToken(token), "started");
+
+    const rotated = yield* other.webhook({ projectId, action: "rotate" });
+    assert.notStrictEqual(rotated.path, shown.path);
+    assert.deepStrictEqual(yield* other.webhook({ projectId, action: "disable" }), { path: null });
+    assert.strictEqual(yield* other.redeployByToken(token), "unknown");
   }).pipe(Effect.provide(layerTest)),
 );

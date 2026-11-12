@@ -17,6 +17,10 @@ import * as BuildWake from "./builds/BuildWake.ts";
 import * as BuildWorkers from "./builds/BuildWorkers.ts";
 import * as AppData from "./data/AppData.ts";
 import * as AppDeploy from "./deploy/AppDeploy.ts";
+import * as AppServers from "./deploy/AppServers.ts";
+import * as AutoDeploy from "./deploy/AutoDeploy.ts";
+import * as Notifier from "./deploy/Notifier.ts";
+import * as OzoneDeployWebhook from "./deploy/webhook.ts";
 import * as AppEnv from "./env/AppEnv.ts";
 import * as AppHistory from "./history/AppHistory.ts";
 import * as OzoneMcpHandlers from "./mcp/handlers.ts";
@@ -30,7 +34,7 @@ import * as OzoneWs from "./ws.ts";
  * Ozone's services, shared by its WebSocket handlers and its MCP tools. The checks are here and
  * not with the conductor: they run as jobs of the server, whoever asked for them.
  */
-export const layer = OzoneWs.layer.pipe(
+export const layer = Layer.mergeAll(OzoneWs.layer, AutoDeploy.layer).pipe(
   Layer.provideMerge(OzoneApps.layer),
   Layer.provideMerge(
     Layer.mergeAll(
@@ -42,6 +46,7 @@ export const layer = OzoneWs.layer.pipe(
       BuildPreview.layer,
     ),
   ),
+  Layer.provideMerge(Layer.mergeAll(AppServers.layer, Notifier.layer)),
   Layer.provideMerge(BuildGates.layer),
   Layer.provideMerge(AppRuntime.layer),
   Layer.provideMerge(AppData.layer),
@@ -53,6 +58,7 @@ export const layer = OzoneWs.layer.pipe(
       BuildStore.layer,
       BuildRepo.layer,
       BuildWake.layer,
+      AppServers.layerServerShell,
     ),
   ),
   Layer.provide(Layer.mergeAll(GitVcsDriver.layer, NetService.layer)),
@@ -70,3 +76,6 @@ export const layerMcpTools = McpHttpServer.toolkitRegistration(
   Layer.provide(BuildWorkers.layer),
   Layer.provide(OrchestratorMcpService.layer),
 );
+
+/** The URL that deploys an app, among the server's HTTP routes. */
+export const layerRoutes = OzoneDeployWebhook.routeLayer;

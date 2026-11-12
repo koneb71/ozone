@@ -39,6 +39,14 @@ it as read, and see how many are left to read." This is the app it built:
   on a server that runs Docker, reached over SSH. Your development data is never touched, and Stop
   keeps the production data for the next deploy. Each deploy saves the production data first, and
   the Data dialog backs it up and restores it.
+  - Give it a **domain** and it is served over HTTPS with a certificate from Let's Encrypt, and
+    each new version takes over without the app going down.
+  - **History** lists every deploy with its output, and rolls back to any of them, with the data
+    from then if you ask.
+  - **Monitor** shows each container's CPU, memory and network, and its logs. **Set up** checks a
+    server, installs Docker there if it has none, and starts the proxy.
+  - **Settings** deploys by itself when a build completes, gives the app a deploy URL to call from
+    a script, and tells Slack, Discord, Telegram or any webhook how each deploy went.
 - **Chats.** Ask anything and attach PDFs, Word documents, images and other files. Ask a chat
   for an app and it starts one.
 - **Uses your subscription.** Sign in to Claude from Settings. No API key is involved, and an API
@@ -106,6 +114,7 @@ Everything else under [docs](docs/) is T3 Code's documentation, and it still app
 - The command-line tool is still called `t3`, and messages that come from the server can still say
   T3 Code.
 - There is no Windows build, and Ozone is untested on Windows.
+- Deploy is on the desktop and web apps only, and notifications cannot go to email yet.
 - Ozone collects no usage data. The privacy policy and a few help links still lead to T3 Code's
   site.
 

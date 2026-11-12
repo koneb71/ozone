@@ -1,11 +1,20 @@
 import {
+  OZONE_DEPLOY_WEBHOOK_PATH,
   OzoneAppError,
   OzoneDeployTarget,
+  OzoneDeployment,
   type OzoneDataRestoreInput,
   type OzoneDataRestoreResult,
   type OzoneDataSnapshotInput,
+  type OzoneDeployHistoryResult,
+  type OzoneDeployLogsInput,
+  type OzoneDeployMetrics,
+  type OzoneDeployRollbackInput,
   type OzoneDeployRunInput,
   type OzoneDeployStatus,
+  type OzoneDeployTrigger,
+  type OzoneDeployWebhookInput,
+  type OzoneDeployWebhookResult,
   type OzoneSnapshot,
   type ProjectId,
 } from "@t3tools/contracts";
@@ -35,6 +44,11 @@ import {
 import { composeValue, ENV_FILE_MODE, envFilePath, readEnvFile } from "../env/envFile.ts";
 import * as DockerCli from "../runtime/DockerCli.ts";
 import { hostCaPath } from "../runtime/hostCa.ts";
+import * as AppServers from "./AppServers.ts";
+import { historyEntries, withDeployment } from "./deployments.ts";
+import { containerMetrics, parseComposePs } from "./metrics.ts";
+import * as Notifier from "./Notifier.ts";
+import { proxyNetworkDeclaration, routeOverride } from "./proxy.ts";
 
 /**
  * Runs an app's production image where people can reach it: on this machine, or on a Docker host
@@ -65,6 +79,36 @@ export class AppDeploy extends Context.Service<
     readonly restore: (
       input: OzoneDataRestoreInput,
     ) => Effect.Effect<OzoneDataRestoreResult, OzoneAppError>;
+    readonly history: (
+      projectId: ProjectId,
+    ) => Effect.Effect<OzoneDeployHistoryResult, OzoneAppError>;
+    /** What a deploy did, step by step, with what Docker said. */
+    readonly output: (
+      projectId: ProjectId,
+      deploymentId: string,
+    ) => Effect.Effect<string, OzoneAppError>;
+    /**
+     * Deploys an earlier version again where the app runs now. Its data stays, unless asked to
+     * come back too; then what was written since is kept in a snapshot first.
+     */
+    readonly rollback: (
+      input: OzoneDeployRollbackInput,
+    ) => Effect.Effect<OzoneDeployStatus, OzoneAppError>;
+    /** Deploys the last commit where the app was last deployed. */
+    readonly redeploy: (
+      projectId: ProjectId,
+      trigger: OzoneDeployTrigger,
+    ) => Effect.Effect<OzoneDeployStatus, OzoneAppError>;
+    /** Starts a redeploy for the app whose webhook token this is, without waiting for it. */
+    readonly redeployByToken: (
+      token: string,
+    ) => Effect.Effect<"started" | "busy" | "unknown", OzoneAppError>;
+    readonly webhook: (
+      input: OzoneDeployWebhookInput,
+    ) => Effect.Effect<OzoneDeployWebhookResult, OzoneAppError>;
+    /** The production containers' logs. */
+    readonly logs: (input: OzoneDeployLogsInput) => Effect.Effect<string, OzoneAppError>;
+    readonly metrics: (projectId: ProjectId) => Effect.Effect<OzoneDeployMetrics, OzoneAppError>;
   }
 >()("t3/ozone/deploy/AppDeploy") {}
 
@@ -74,6 +118,8 @@ const PROD_PORT_OFFSET = 1_000;
 const BUILD_TIMEOUT = Duration.minutes(20);
 const STEP_TIMEOUT = Duration.minutes(5);
 const OUTPUT_TAIL = 1_500;
+/** How much of each step's output a deploy's log keeps. */
+const NOTE_TAIL = 6_000;
 
 const DeployRecord = Schema.Struct({
   target: OzoneDeployTarget,
@@ -88,6 +134,12 @@ const DeployFile = Schema.fromJsonString(
     last: Schema.NullOr(DeployRecord),
     /** Where the app was deployed before, one record per place. Their volumes are still there. */
     previous: Schema.Array(DeployRecord).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+    /** Oldest first. */
+    history: Schema.Array(OzoneDeployment).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+    /** The secret part of the URL that redeploys the app. Null: no such URL. */
+    webhookToken: Schema.NullOr(Schema.String).pipe(
+      Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    ),
   }),
 );
 type DeployFile = typeof DeployFile.Type;
@@ -124,6 +176,8 @@ const prodOverride = (input: {
   readonly publicUrl: string;
   readonly variables: ReadonlyArray<{ readonly name: string; readonly value: string }>;
   readonly hostCaPath: string | null;
+  /** Served by the host's proxy at a domain instead of on a port. */
+  readonly route: Parameters<typeof routeOverride>[0] | null;
 }): string => {
   const { database } = input;
   const databaseUrl =
@@ -147,6 +201,7 @@ const prodOverride = (input: {
     `  ${JSON.stringify(input.appService)}:`,
     ...environment(appEnvironment),
     ...buildSecret,
+    ...(input.route === null ? [] : routeOverride(input.route)),
     ...(database === null || databaseUrl === null
       ? []
       : [
@@ -163,6 +218,7 @@ const prodOverride = (input: {
     ...(input.hostCaPath === null
       ? []
       : ["secrets:", "  host_ca:", `    file: ${composeValue(input.hostCaPath)}`]),
+    ...(input.route === null ? [] : proxyNetworkDeclaration),
     "",
   ].join("\n");
 };
@@ -175,6 +231,8 @@ const make = Effect.gen(function* () {
   const registry = yield* AppRegistry.AppRegistry;
   const repo = yield* BuildRepo.BuildRepo;
   const data = yield* AppData.AppData;
+  const servers = yield* AppServers.AppServers;
+  const notifier = yield* Notifier.Notifier;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const config = yield* ServerConfig.ServerConfig;
@@ -191,10 +249,14 @@ const make = Effect.gen(function* () {
   const directoryOf = (app: ResolvedApp) =>
     path.join(config.stateDir, "ozone", "apps", app.app.slug);
   const fileOf = (app: ResolvedApp) => path.join(directoryOf(app), "deploy.json");
+  const outputOf = (app: ResolvedApp, deploymentId: string) =>
+    path.join(directoryOf(app), "deploys", `${deploymentId.replace(/[^\w-]/g, "")}.log`);
   const portOf = (app: ResolvedApp) => app.app.port + PROD_PORT_OFFSET;
   const urlOf = (app: ResolvedApp, target: OzoneDeployTarget) =>
-    target.publicUrl ??
-    `http://${target.host === null ? "localhost" : hostName(target.host)}:${portOf(app)}`;
+    target.domain !== null
+      ? `https://${target.domain}`
+      : (target.publicUrl ??
+        `http://${target.host === null ? "localhost" : hostName(target.host)}:${portOf(app)}`);
 
   /**
    * The saved settings, or null before the first deploy. A file that exists but cannot be read
@@ -223,6 +285,14 @@ const make = Effect.gen(function* () {
     },
     Effect.mapError(() => failed("Ozone could not save the deploy's settings.")),
   );
+  /** Changes the saved settings of an app that has them. */
+  const updateRecord = Effect.fn("AppDeploy.updateRecord")(function* (
+    app: ResolvedApp,
+    change: (file: DeployFile) => DeployFile,
+  ) {
+    const stored = yield* readRecord(app);
+    if (stored !== null) yield* writeRecord(app, change(stored));
+  });
   const newSecret = Effect.map(Effect.all([random.uuidV4(), random.uuidV4()]), (parts) =>
     parts.join("").replaceAll("-", ""),
   );
@@ -316,11 +386,24 @@ const make = Effect.gen(function* () {
     return root;
   });
 
+  /** Writes a line to a deploy's output; losing it must not stop the deploy. */
+  type Note = (text: string) => Effect.Effect<void>;
+  const noteTo =
+    (file: string | null): Note =>
+    (text) =>
+      file === null
+        ? Effect.void
+        : fs
+            .writeFileString(file, `${text}\n`, { flag: "a", mode: ENV_FILE_MODE })
+            .pipe(Effect.ignore);
+  const silent: Note = () => Effect.void;
+
   /** Docker Compose for the app's production project on `target`, from the files in `root`. */
   const production = Effect.fn("AppDeploy.production")(function* (
     app: ResolvedApp,
     target: OzoneDeployTarget,
     root: string,
+    note: Note = silent,
   ) {
     // A remote daemon builds with its own network.
     const ca = target.host === null ? yield* hostCaPath(hostEnvironment, fs) : null;
@@ -351,12 +434,16 @@ const make = Effect.gen(function* () {
       command: ReadonlyArray<string>,
       timeout: Duration.Duration,
     ) {
+      yield* note(`$ docker compose ${command.join(" ")}`);
       const output = yield* compose(command, { timeout });
-      if (output.code === 0 && !output.timedOut) return;
       // Compose prints its progress on one stream and the reason on either.
-      const said = `${output.stdout}\n${output.stderr}`.trim().slice(-OUTPUT_TAIL);
+      const said = `${output.stdout}\n${output.stderr}`.trim();
+      yield* note(said.slice(-NOTE_TAIL));
+      if (output.code === 0 && !output.timedOut) return;
       return yield* failed(
-        output.timedOut ? `${what}: it did not finish in time.` : `${what}:\n${said}`,
+        output.timedOut
+          ? `${what}: it did not finish in time.`
+          : `${what}:\n${said.slice(-OUTPUT_TAIL)}`,
       );
     });
     /** Production's data, wherever it runs, with the commit it belongs with. */
@@ -367,7 +454,7 @@ const make = Effect.gen(function* () {
       compose,
       commitSha: Effect.succeed(commitSha),
     });
-    return { ca, compose, run, dataTarget };
+    return { ca, compose, run, dataTarget, target, note };
   });
   type Production = Effect.Success<ReturnType<typeof production>>;
 
@@ -393,6 +480,7 @@ const make = Effect.gen(function* () {
     accepted: ReadonlyArray<string>,
     heldBackMeans: string,
   ) {
+    yield* prod.note("$ docker compose run --rm migrate");
     const output = yield* prod.compose([
       "run",
       "--rm",
@@ -401,6 +489,7 @@ const make = Effect.gen(function* () {
       "migrate",
     ]);
     const said = `${output.stdout}\n${output.stderr}`.trim();
+    yield* prod.note(said.slice(-NOTE_TAIL));
     const held = output.code === 0 ? null : parseHeldBack(said);
     if (held !== null) {
       heldBack.set(app.app.projectId, held);
@@ -415,41 +504,120 @@ const make = Effect.gen(function* () {
     }
     heldBack.delete(app.app.projectId);
   });
-  const startApp = (app: ResolvedApp, prod: Production) =>
-    prod.run(
+
+  /**
+   * Starts the app's new version. Behind the proxy it starts beside the old one, and the old one
+   * stops once the proxy sends requests to the new one, so the app never goes down. On a port of
+   * its own the old one has to stop first.
+   */
+  const startApp = Effect.fn("AppDeploy.startApp")(function* (app: ResolvedApp, prod: Production) {
+    const service = appServiceOf(app);
+    const plainStart = prod.run(
       "The app did not start",
-      ["up", "--detach", "--wait", "--no-deps", appServiceOf(app)],
+      ["up", "--detach", "--wait", "--no-deps", service],
       STEP_TIMEOUT,
     );
+    if (prod.target.domain === null) return yield* plainStart;
+    // Stopped copies would be counted, and started with their old settings.
+    yield* prod.compose(["rm", "--force", service]).pipe(Effect.ignore);
+    const listed = yield* prod.compose(["ps", "--quiet", service]);
+    const old = listed.stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    if (old.length === 0) return yield* plainStart;
+    // A copy deployed without the domain is not behind the proxy yet, so count, don't assume.
+    const routedBefore = yield* servers.routes(prod.target.host, app.app.slug);
+    yield* prod.run(
+      "The new version did not start",
+      [
+        "up",
+        "--detach",
+        "--wait",
+        "--no-deps",
+        "--no-recreate",
+        "--scale",
+        `${service}=${old.length + 1}`,
+        service,
+      ],
+      STEP_TIMEOUT,
+    );
+    const routed = yield* servers.awaitRoutes(prod.target.host, app.app.slug, routedBefore + 1);
+    if (!routed) {
+      yield* prod.note("The proxy did not report the new version in time; switching anyway.");
+    }
+    const hostArgs = prod.target.host === null ? [] : ["-H", `ssh://${prod.target.host}`];
+    yield* prod.note(`Stopping the version before: ${old.join(", ")}`);
+    for (const command of [["stop", "--time", "20"], ["rm"]]) {
+      yield* docker
+        .run({ args: [...hostArgs, "container", ...command, ...old], timeout: STEP_TIMEOUT })
+        .pipe(Effect.ignore);
+    }
+  });
   const migrates = (app: ResolvedApp) =>
     app.manifest.migrations !== undefined &&
     app.manifest.data.services.some((service) => service.kind === "postgres");
 
+  interface DeployOptions {
+    readonly trigger: OzoneDeployTrigger;
+    /** Deploys this commit instead of the last one. */
+    readonly commitSha?: string;
+    /** Loads this production snapshot before the migrations run. */
+    readonly restoreSnapshotId?: string;
+    readonly deploymentId: string;
+    readonly note: Note;
+  }
+
   const deployNow = Effect.fn("AppDeploy.deployNow")(function* (
     app: ResolvedApp,
     input: OzoneDeployRunInput,
+    options: DeployOptions,
   ) {
     const projectId = app.app.projectId;
     const target = input.target;
-    const step = (doing: string) => Effect.sync(() => inFlight.set(projectId, doing));
+    const step = (doing: string) =>
+      Effect.sync(() => inFlight.set(projectId, doing)).pipe(
+        Effect.andThen(options.note(`# ${doing}`)),
+      );
     const stored = yield* readRecord(app);
-    // Production runs the last commit, never a worker's half-done files or the dev `.env`.
-    const commitSha = yield* repo.head(app.workspaceRoot);
+    // Production runs a commit, never a worker's half-done files or the dev `.env`.
+    const commitSha = options.commitSha ?? (yield* repo.head(app.workspaceRoot));
     if (commitSha === null) return yield* failed("This app has no commit to deploy yet.");
-    const root = yield* exportCommit(app, commitSha);
+    const [commit] = yield* repo.log(app.workspaceRoot, { limit: 1, from: commitSha });
+    const startedAt = DateTime.formatIso(yield* DateTime.now);
+    const deployment: OzoneDeployment = {
+      id: options.deploymentId,
+      trigger: options.trigger,
+      target,
+      commitSha,
+      title: commit?.subject ?? null,
+      startedAt,
+      finishedAt: null,
+      outcome: "running",
+      message: null,
+      snapshotId: null,
+    };
     const secrets = stored?.secrets ?? {
       authSecret: yield* newSecret,
       dbPassword: yield* newSecret,
     };
     const known = [...(stored?.last == null ? [] : [stored.last]), ...(stored?.previous ?? [])];
+    const history = withDeployment(stored?.history ?? [], deployment);
     // Kept before anything runs: a database is created with its first password and keeps it.
     yield* writeRecord(app, {
       secrets,
       last: stored?.last ?? null,
       previous: stored?.previous ?? [],
+      history,
+      webhookToken: stored?.webhookToken ?? null,
     });
+    yield* dropOldOutput(app, history);
+    yield* options.note(
+      `Deploying ${commitSha.slice(0, 7)}${commit === undefined ? "" : ` "${commit.subject}"`} to ${placeOf(target)}${target.domain === null ? "" : ` as ${target.domain}`}.`,
+    );
+    const root = yield* exportCommit(app, commitSha);
 
-    const prod = yield* production(app, target, root);
+    const prod = yield* production(app, target, root, options.note);
     const postgres = app.manifest.data.services.find((service) => service.kind === "postgres");
     // The same defaults as the snapshots use.
     const user = postgres?.user ?? "postgres";
@@ -487,6 +655,10 @@ const make = Effect.gen(function* () {
             ),
           );
 
+    if (target.domain !== null) {
+      yield* step(`Starting the proxy on ${placeOf(target)}.`);
+      yield* servers.ensureProxy(target.host);
+    }
     const url = urlOf(app, target);
     const override = prodOverride({
       appService: appServiceOf(app),
@@ -496,6 +668,14 @@ const make = Effect.gen(function* () {
       publicUrl: url,
       variables: yield* readEnvFile(fs, envFilePath(path, config.stateDir, app.app.slug)),
       hostCaPath: prod.ca,
+      route:
+        target.domain === null
+          ? null
+          : {
+              slug: app.app.slug,
+              domain: target.domain,
+              appPort: app.manifest.runtime.appPort,
+            },
     });
     yield* Effect.gen(function* () {
       yield* fs.writeFileString(overridePathOf(app), override, { mode: ENV_FILE_MODE });
@@ -512,15 +692,20 @@ const make = Effect.gen(function* () {
         STEP_TIMEOUT,
       );
     }
+    let snapshotId: string | null = moved?.id ?? null;
     if (database !== null && here !== null) {
       yield* step("Taking a snapshot of the production data.");
       // The data is what the last deploy here left, before this one's migrations.
-      yield* data.snapshotOf(prod.dataTarget(here.commitSha), { reason: "before-deploy" });
+      const taken = yield* data.snapshotOf(prod.dataTarget(here.commitSha), {
+        reason: "before-deploy",
+      });
+      snapshotId = taken.id;
     }
-    if (moved !== null) {
-      yield* step("Bringing the data over.");
+    const load = moved?.id ?? options.restoreSnapshotId ?? null;
+    if (load !== null) {
+      yield* step(moved === null ? "Bringing back the data from then." : "Bringing the data over.");
       yield* data.loadOf(prod.dataTarget(null), {
-        snapshotId: moved.id,
+        snapshotId: load,
         appService: appServiceOf(app),
       });
     }
@@ -535,19 +720,45 @@ const make = Effect.gen(function* () {
     }
     yield* step("Starting the app.");
     yield* startApp(app, prod);
-    yield* writeRecord(app, {
-      secrets,
-      last: { target, url, commitSha, deployedAt: DateTime.formatIso(yield* DateTime.now) },
+    const finishedAt = DateTime.formatIso(yield* DateTime.now);
+    yield* updateRecord(app, (file) => ({
+      ...file,
+      last: { target, url, commitSha, deployedAt: finishedAt },
       previous: known.filter((record) => record.target.host !== target.host),
-    });
+      history: withDeployment(file.history, {
+        ...deployment,
+        outcome: "succeeded",
+        finishedAt,
+        snapshotId,
+      }),
+    }));
     if (from !== null) {
       // Two live copies of the same data would drift apart. The old volume stays where it is.
       yield* step(`Stopping the deploy on ${placeOf(from.target)}.`);
       yield* withDeployed(app, from, (old) => old.compose(["stop"])).pipe(Effect.ignore);
     }
+    yield* options.note(`Running at ${url}.`);
+    return { url, commitSha };
   });
 
-  const deploy = Effect.fn("AppDeploy.deploy")(function* (input: OzoneDeployRunInput) {
+  /** Removes the output of deploys no longer in the history. */
+  const dropOldOutput = (app: ResolvedApp, history: ReadonlyArray<OzoneDeployment>) =>
+    fs.readDirectory(path.join(directoryOf(app), "deploys")).pipe(
+      Effect.flatMap((files) => {
+        const kept = new Set(history.map((entry) => path.basename(outputOf(app, entry.id))));
+        return Effect.forEach(
+          files.filter((file) => !kept.has(file)),
+          (file) => fs.remove(path.join(directoryOf(app), "deploys", file)),
+          { discard: true },
+        );
+      }),
+      Effect.ignore,
+    );
+
+  const deploy = Effect.fn("AppDeploy.deploy")(function* (
+    input: OzoneDeployRunInput,
+    options: Omit<DeployOptions, "deploymentId" | "note">,
+  ) {
     const app = yield* registry.resolve(input.projectId);
     if (inFlight.has(input.projectId))
       return yield* failed("A deploy of this app is already running.");
@@ -561,9 +772,54 @@ const make = Effect.gen(function* () {
     }
     failures.delete(input.projectId);
     inFlight.set(input.projectId, "Starting the deploy.");
-    yield* deployNow(app, input).pipe(
+    const deploymentId = `${DateTime.formatIso(yield* DateTime.now)
+      .replace(/[^\d]/g, "")
+      .slice(0, 14)}-${(yield* random.uuidV4()).slice(0, 8)}`;
+    const outputFile = outputOf(app, deploymentId);
+    const note = yield* fs.makeDirectory(path.dirname(outputFile), { recursive: true }).pipe(
+      Effect.as(noteTo(outputFile)),
+      Effect.orElseSucceed(() => silent),
+    );
+    const notice = (
+      event: "deploy.succeeded" | "deploy.failed",
+      title: string,
+      detail: string | null,
+      url: string | null,
+      commitSha: string | null,
+    ) => notifier.notify({ event, app: app.app.name, title, detail, url, commitSha });
+    yield* deployNow(app, input, { ...options, deploymentId, note }).pipe(
       Effect.scoped,
-      Effect.tapError((error) => Effect.sync(() => failures.set(input.projectId, error.message))),
+      Effect.tap(({ url, commitSha }) =>
+        notice(
+          "deploy.succeeded",
+          `${app.app.name} is deployed${options.trigger === "rollback" ? " (rolled back)" : ""}.`,
+          null,
+          url,
+          commitSha,
+        ),
+      ),
+      Effect.tapError((error) =>
+        Effect.gen(function* () {
+          failures.set(input.projectId, error.message);
+          yield* note(`Failed: ${error.message}`);
+          const finishedAt = DateTime.formatIso(yield* DateTime.now);
+          yield* updateRecord(app, (file) => ({
+            ...file,
+            history: file.history.map((entry) =>
+              entry.id === deploymentId
+                ? { ...entry, outcome: "failed" as const, finishedAt, message: error.message }
+                : entry,
+            ),
+          })).pipe(Effect.ignore);
+          yield* notice(
+            "deploy.failed",
+            `The deploy of ${app.app.name} failed.`,
+            error.message.slice(0, 600),
+            null,
+            null,
+          );
+        }),
+      ),
       Effect.ensuring(Effect.sync(() => inFlight.delete(input.projectId))),
       Effect.ignore,
     );
@@ -584,16 +840,29 @@ const make = Effect.gen(function* () {
     });
   const deployed = Effect.fn("AppDeploy.deployed")(function* (projectId: ProjectId) {
     const app = yield* registry.resolve(projectId);
-    const last = (yield* readRecord(app))?.last ?? null;
-    if (last === null) return yield* failed("This app has not been deployed.");
-    return { app, last };
+    const record = yield* readRecord(app);
+    const last = record?.last ?? null;
+    if (record === null || last === null) return yield* failed("This app has not been deployed.");
+    return { app, last, record };
+  });
+  const hostArgsOf = (target: OzoneDeployTarget) =>
+    target.host === null ? [] : ["-H", `ssh://${target.host}`];
+
+  const redeploy = Effect.fn("AppDeploy.redeploy")(function* (
+    projectId: ProjectId,
+    trigger: OzoneDeployTrigger,
+  ) {
+    const { last } = yield* deployed(projectId);
+    return yield* deploy({ projectId, target: last.target }, { trigger });
   });
 
   return AppDeploy.of({
     status: Effect.fn("AppDeploy.status")(function* (projectId) {
       return yield* statusOf(yield* registry.resolve(projectId));
     }),
-    deploy: Effect.fn("AppDeploy.deployToTheEnd")((input) => toTheEnd(deploy(input))),
+    deploy: Effect.fn("AppDeploy.deployToTheEnd")((input) =>
+      toTheEnd(deploy(input, { trigger: "person" })),
+    ),
     stop: Effect.fn("AppDeploy.stop")(function* (projectId) {
       const { app, last } = yield* deployed(projectId);
       const output = yield* docker
@@ -653,6 +922,143 @@ const make = Effect.gen(function* () {
           ),
         ),
       );
+    }),
+    history: Effect.fn("AppDeploy.history")(function* (projectId) {
+      const app = yield* registry.resolve(projectId);
+      const record = yield* readRecord(app);
+      if (record === null) return { deployments: [] };
+      const snapshots = yield* data.listOf({
+        projectId,
+        folder: path.join(app.app.slug, "production"),
+      });
+      return {
+        deployments: historyEntries({
+          history: record.history,
+          last: record.last,
+          snapshotIds: new Set(snapshots.map((snapshot) => snapshot.id)),
+          inFlight: inFlight.has(projectId),
+        }),
+      };
+    }),
+    output: Effect.fn("AppDeploy.output")(function* (projectId, deploymentId) {
+      const app = yield* registry.resolve(projectId);
+      return yield* fs
+        .readFileString(outputOf(app, deploymentId))
+        .pipe(Effect.mapError(() => failed("The output of that deploy is no longer kept.")));
+    }),
+    rollback: Effect.fn("AppDeploy.rollback")(function* (input) {
+      const { app, last, record } = yield* deployed(input.projectId);
+      const entries = historyEntries({
+        history: record.history,
+        last,
+        snapshotIds: new Set(
+          (yield* data.listOf({
+            projectId: input.projectId,
+            folder: path.join(app.app.slug, "production"),
+          })).map((snapshot) => snapshot.id),
+        ),
+        inFlight: inFlight.has(input.projectId),
+      });
+      const chosen = entries.find((entry) => entry.id === input.deploymentId);
+      if (chosen === undefined || chosen.outcome !== "succeeded" || chosen.commitSha === null) {
+        return yield* failed("Only a deploy that succeeded can be deployed again.");
+      }
+      if (input.restoreData === true && chosen.dataSnapshotId === null) {
+        return yield* failed("The data as that version left it is no longer kept.");
+      }
+      return yield* toTheEnd(
+        deploy(
+          { projectId: input.projectId, target: last.target },
+          {
+            trigger: "rollback",
+            commitSha: chosen.commitSha,
+            ...(input.restoreData === true && chosen.dataSnapshotId !== null
+              ? { restoreSnapshotId: chosen.dataSnapshotId }
+              : {}),
+          },
+        ),
+      );
+    }),
+    redeploy: Effect.fn("AppDeploy.redeployToTheEnd")((projectId, trigger) =>
+      toTheEnd(redeploy(projectId, trigger)),
+    ),
+    redeployByToken: Effect.fn("AppDeploy.redeployByToken")(function* (token) {
+      if (!/^[0-9a-f]{64}$/.test(token)) return "unknown" as const;
+      for (const app of yield* registry.list) {
+        const resolved = yield* registry.resolve(app.projectId).pipe(Effect.option);
+        if (resolved._tag === "None") continue;
+        const record = yield* readRecord(resolved.value).pipe(Effect.orElseSucceed(() => null));
+        if (record?.webhookToken !== token || record.last === null) continue;
+        if (inFlight.has(app.projectId)) return "busy" as const;
+        yield* Effect.forkIn(redeploy(app.projectId, "webhook").pipe(Effect.ignore), scope);
+        return "started" as const;
+      }
+      return "unknown" as const;
+    }),
+    webhook: Effect.fn("AppDeploy.webhook")(function* (input) {
+      const { app, record } = yield* deployed(input.projectId);
+      const token =
+        input.action === "disable"
+          ? null
+          : input.action === "rotate" || record.webhookToken === null
+            ? `${yield* newSecret}`
+            : record.webhookToken;
+      if (token !== record.webhookToken) {
+        yield* updateRecord(app, (file) => ({ ...file, webhookToken: token }));
+      }
+      return { path: token === null ? null : `${OZONE_DEPLOY_WEBHOOK_PATH}/${token}` };
+    }),
+    logs: Effect.fn("AppDeploy.logs")(function* (input) {
+      const { app, last } = yield* deployed(input.projectId);
+      const output = yield* docker
+        .run({
+          args: [
+            ...composeArgs(app, last.target),
+            "logs",
+            "--no-color",
+            "--timestamps",
+            "--tail",
+            String(input.tail ?? 300),
+            input.service ?? appServiceOf(app),
+          ],
+          cwd: app.workspaceRoot,
+          timeout: Duration.seconds(30),
+          maxOutputBytes: 1024 * 1024,
+        })
+        .pipe(Effect.mapError((error) => failed(error.detail)));
+      return `${output.stdout}${output.stderr}`;
+    }),
+    metrics: Effect.fn("AppDeploy.metrics")(function* (projectId) {
+      const { app, last } = yield* deployed(projectId);
+      const ps = yield* docker
+        .run({
+          args: [...composeArgs(app, last.target), "ps", "--all", "--format", "json"],
+          cwd: app.workspaceRoot,
+          timeout: Duration.seconds(30),
+        })
+        .pipe(Effect.mapError((error) => failed(error.detail)));
+      const containers = parseComposePs(ps.stdout);
+      const running = containers.filter((container) => container.state === "running");
+      const stats =
+        running.length === 0
+          ? ""
+          : (yield* docker
+              .run({
+                args: [
+                  ...hostArgsOf(last.target),
+                  "stats",
+                  "--no-stream",
+                  "--format",
+                  "{{json .}}",
+                  ...running.map((container) => container.id),
+                ],
+                timeout: Duration.seconds(30),
+              })
+              .pipe(Effect.mapError((error) => failed(error.detail)))).stdout;
+      return {
+        containers: containerMetrics(containers, stats),
+        measuredAt: DateTime.formatIso(yield* DateTime.now),
+      };
     }),
   });
 });

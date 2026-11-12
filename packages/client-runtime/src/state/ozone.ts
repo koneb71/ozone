@@ -116,6 +116,59 @@ export function createOzoneEnvironmentAtoms<R, E>(
       label: "environment-data:ozone:stop-deploy",
       tag: OZONE_WS_METHODS.deployStop,
     }),
+    deployHistory: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:ozone:deploy-history",
+      tag: OZONE_WS_METHODS.deployHistory,
+      staleTimeMs: 0,
+    }),
+    deployOutput: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:ozone:deploy-output",
+      tag: OZONE_WS_METHODS.deployOutput,
+      staleTimeMs: 0,
+    }),
+    rollback: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:rollback",
+      tag: OZONE_WS_METHODS.deployRollback,
+    }),
+    deployLogs: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:ozone:deploy-logs",
+      tag: OZONE_WS_METHODS.deployLogs,
+      staleTimeMs: 0,
+    }),
+    deployMetrics: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:ozone:deploy-metrics",
+      tag: OZONE_WS_METHODS.deployMetrics,
+      staleTimeMs: 0,
+    }),
+    deployWebhook: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:deploy-webhook",
+      tag: OZONE_WS_METHODS.deployWebhook,
+    }),
+    checkServer: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:check-server",
+      tag: OZONE_WS_METHODS.serverCheck,
+    }),
+    setupServer: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:setup-server",
+      tag: OZONE_WS_METHODS.serverSetup,
+    }),
+    notifyChannels: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:ozone:notify-channels",
+      tag: OZONE_WS_METHODS.notifyList,
+      staleTimeMs: 0,
+    }),
+    setNotifyChannel: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:set-notify-channel",
+      tag: OZONE_WS_METHODS.notifySet,
+    }),
+    removeNotifyChannel: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:remove-notify-channel",
+      tag: OZONE_WS_METHODS.notifyRemove,
+    }),
+    testNotifyChannel: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:test-notify-channel",
+      tag: OZONE_WS_METHODS.notifyTest,
+    }),
   };
 }
 

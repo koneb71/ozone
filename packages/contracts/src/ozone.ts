@@ -14,6 +14,25 @@ import {
   OzoneBuildSubscribeInput,
 } from "./ozoneBuild.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
+import {
+  OzoneDeployHistoryResult,
+  OzoneDeployLogsInput,
+  OzoneDeployMetrics,
+  OzoneDeployOutputInput,
+  OzoneDeployOutputResult,
+  OzoneDeployRollbackInput,
+  OzoneDeployRunInput,
+  OzoneDeployStatus,
+  OzoneDeployStatusInput,
+  OzoneDeployWebhookInput,
+  OzoneDeployWebhookResult,
+  OzoneNotifyChannel,
+  OzoneNotifyListResult,
+  OzoneNotifyRemoveInput,
+  OzoneServerInput,
+  OzoneServerReport,
+  OzoneServerSetupInput,
+} from "./ozoneDeploy.ts";
 
 const ShortText = TrimmedNonEmptyString.check(Schema.isMaxLength(128));
 const CommandText = TrimmedNonEmptyString.check(Schema.isMaxLength(2_048));
@@ -84,6 +103,8 @@ export const OzoneAppSettings = Schema.Struct({
   workerModel: Schema.NullOr(OzoneWorkerModel).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
   ),
+  /** A build that completes is deployed where the app was last deployed. */
+  deployOnBuild: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
 });
 export type OzoneAppSettings = typeof OzoneAppSettings.Type;
 
@@ -91,6 +112,7 @@ export const DEFAULT_OZONE_APP_SETTINGS: OzoneAppSettings = {
   reviewPlans: false,
   verifyBuilds: true,
   workerModel: null,
+  deployOnBuild: false,
 };
 
 export const OzoneApp = Schema.Struct({
@@ -145,6 +167,7 @@ const OzoneAppSettingsPatch = Schema.Struct({
   reviewPlans: Schema.optionalKey(Schema.Boolean),
   verifyBuilds: Schema.optionalKey(Schema.Boolean),
   workerModel: Schema.optionalKey(Schema.NullOr(OzoneWorkerModel)),
+  deployOnBuild: Schema.optionalKey(Schema.Boolean),
 });
 
 export const OzoneAppCreateInput = Schema.Struct({
@@ -366,50 +389,6 @@ export type OzoneEnvSetInput = typeof OzoneEnvSetInput.Type;
 export const OzoneEnvRemoveInput = Schema.Struct({ projectId: ProjectId, name: EnvName });
 export type OzoneEnvRemoveInput = typeof OzoneEnvRemoveInput.Type;
 
-/** Where Deploy runs the production image. */
-export const OzoneDeployTarget = Schema.Struct({
-  /** A Docker host reached with this machine's SSH setup, as `user@host`. Null: this machine. */
-  host: Schema.NullOr(
-    TrimmedNonEmptyString.check(
-      Schema.isMaxLength(255),
-      Schema.isPattern(/^(?:[A-Za-z0-9._-]+@)?[A-Za-z0-9][A-Za-z0-9.-]*(?::\d{1,5})?$/),
-    ),
-  ),
-  /** Where people reach the app, for sign-in links. Null: the host and its port. */
-  publicUrl: Schema.NullOr(
-    TrimmedNonEmptyString.check(Schema.isMaxLength(512), Schema.isPattern(/^https?:\/\/\S+$/)),
-  ),
-});
-export type OzoneDeployTarget = typeof OzoneDeployTarget.Type;
-
-export const OzoneDeployStatus = Schema.Struct({
-  state: Schema.Literals(["none", "deploying", "running", "stopped", "failed"]),
-  /** The target of the last deploy. */
-  target: Schema.NullOr(OzoneDeployTarget),
-  url: Schema.NullOr(Schema.String),
-  commitSha: Schema.NullOr(Schema.String),
-  deployedAt: Schema.NullOr(IsoDateTime),
-  /** What went wrong, or what is happening. */
-  message: Schema.NullOr(Schema.String),
-  /** The statements of a migration the last deploy held back because it can lose data. */
-  migration: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
-});
-export type OzoneDeployStatus = typeof OzoneDeployStatus.Type;
-
-export const OzoneDeployStatusInput = Schema.Struct({ projectId: ProjectId });
-export const OzoneDeployRunInput = Schema.Struct({
-  projectId: ProjectId,
-  target: OzoneDeployTarget,
-  /** Runs the migration the last deploy held back, after the snapshot every deploy takes first. */
-  acceptMigrations: Schema.optionalKey(Schema.Boolean),
-  /**
-   * On a first deploy to a new place: starts from the data of the place deployed before, and stops
-   * the deploy there once this one runs. The old volume stays.
-   */
-  bringData: Schema.optionalKey(Schema.Boolean),
-});
-export type OzoneDeployRunInput = typeof OzoneDeployRunInput.Type;
-
 export const OZONE_WS_METHODS = {
   appsList: "ozone.apps.list",
   appsCreate: "ozone.apps.create",
@@ -432,6 +411,18 @@ export const OZONE_WS_METHODS = {
   deployStatus: "ozone.deploy.status",
   deployRun: "ozone.deploy.run",
   deployStop: "ozone.deploy.stop",
+  deployHistory: "ozone.deploy.history",
+  deployOutput: "ozone.deploy.output",
+  deployRollback: "ozone.deploy.rollback",
+  deployLogs: "ozone.deploy.logs",
+  deployMetrics: "ozone.deploy.metrics",
+  deployWebhook: "ozone.deploy.webhook",
+  serverCheck: "ozone.server.check",
+  serverSetup: "ozone.server.setup",
+  notifyList: "ozone.notify.list",
+  notifySet: "ozone.notify.set",
+  notifyRemove: "ozone.notify.remove",
+  notifyTest: "ozone.notify.test",
 } as const;
 
 type OzoneWsMethod = (typeof OZONE_WS_METHODS)[keyof typeof OZONE_WS_METHODS];
@@ -462,6 +453,15 @@ export const OZONE_OPERATE_RPC_SCOPES = {
   // Runs the app where others can reach it, with this machine's Docker or SSH access.
   [OZONE_WS_METHODS.deployRun]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.deployStop]: AuthOrchestrationOperateScope,
+  [OZONE_WS_METHODS.deployRollback]: AuthOrchestrationOperateScope,
+  // The URL it shows is a credential: anyone with it can deploy the app.
+  [OZONE_WS_METHODS.deployWebhook]: AuthOrchestrationOperateScope,
+  // Both reach a server with this machine's SSH keys; setup can install Docker there.
+  [OZONE_WS_METHODS.serverCheck]: AuthOrchestrationOperateScope,
+  [OZONE_WS_METHODS.serverSetup]: AuthOrchestrationOperateScope,
+  [OZONE_WS_METHODS.notifySet]: AuthOrchestrationOperateScope,
+  [OZONE_WS_METHODS.notifyRemove]: AuthOrchestrationOperateScope,
+  [OZONE_WS_METHODS.notifyTest]: AuthOrchestrationOperateScope,
 } as const;
 
 /** Spread into the server's scope map, which must name every method. */
@@ -476,6 +476,12 @@ export const OZONE_RPC_SCOPES = {
   // Secrets' values are never in the list.
   [OZONE_WS_METHODS.envList]: AuthOrchestrationReadScope,
   [OZONE_WS_METHODS.deployStatus]: AuthOrchestrationReadScope,
+  [OZONE_WS_METHODS.deployHistory]: AuthOrchestrationReadScope,
+  [OZONE_WS_METHODS.deployOutput]: AuthOrchestrationReadScope,
+  [OZONE_WS_METHODS.deployLogs]: AuthOrchestrationReadScope,
+  [OZONE_WS_METHODS.deployMetrics]: AuthOrchestrationReadScope,
+  // Channels' secrets are never in the list.
+  [OZONE_WS_METHODS.notifyList]: AuthOrchestrationReadScope,
 } as const;
 
 /** Every Ozone method reports under one aggregate in traces. */
@@ -594,6 +600,67 @@ export const OzoneWsRpcs = [
     success: OzoneDeployStatus,
     error: OzoneRpcError,
   }),
+  Rpc.make(OZONE_WS_METHODS.deployHistory, {
+    payload: OzoneDeployStatusInput,
+    success: OzoneDeployHistoryResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.deployOutput, {
+    payload: OzoneDeployOutputInput,
+    success: OzoneDeployOutputResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.deployRollback, {
+    payload: OzoneDeployRollbackInput,
+    success: OzoneDeployStatus,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.deployLogs, {
+    payload: OzoneDeployLogsInput,
+    success: OzoneRuntimeLogsResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.deployMetrics, {
+    payload: OzoneDeployStatusInput,
+    success: OzoneDeployMetrics,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.deployWebhook, {
+    payload: OzoneDeployWebhookInput,
+    success: OzoneDeployWebhookResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.serverCheck, {
+    payload: OzoneServerInput,
+    success: OzoneServerReport,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.serverSetup, {
+    payload: OzoneServerSetupInput,
+    success: OzoneServerReport,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.notifyList, {
+    payload: Schema.Struct({}),
+    success: OzoneNotifyListResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.notifySet, {
+    payload: OzoneNotifyChannel,
+    success: OzoneNotifyListResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.notifyRemove, {
+    payload: OzoneNotifyRemoveInput,
+    success: OzoneNotifyListResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.notifyTest, {
+    payload: OzoneNotifyRemoveInput,
+    success: Schema.Struct({}),
+    error: OzoneRpcError,
+  }),
 ] as const;
 
 export * from "./ozoneBuild.ts";
+export * from "./ozoneDeploy.ts";

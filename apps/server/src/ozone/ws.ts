@@ -8,7 +8,14 @@ import {
   type OzoneBuildApproveInput,
   type OzoneDataRestoreInput,
   type OzoneDataSnapshotInput,
+  type OzoneDeployLogsInput,
+  type OzoneDeployOutputInput,
+  type OzoneDeployRollbackInput,
   type OzoneDeployRunInput,
+  type OzoneDeployWebhookInput,
+  type OzoneNotifyChannel,
+  type OzoneServerInput,
+  type OzoneServerSetupInput,
   type OzoneEnvRemoveInput,
   type OzoneEnvSetInput,
   type OzoneHistoryRestoreInput,
@@ -29,6 +36,8 @@ import * as BuildReview from "./builds/BuildReview.ts";
 import * as BuildStore from "./builds/BuildStore.ts";
 import * as AppData from "./data/AppData.ts";
 import * as AppDeploy from "./deploy/AppDeploy.ts";
+import * as AppServers from "./deploy/AppServers.ts";
+import * as Notifier from "./deploy/Notifier.ts";
 import * as AppEnv from "./env/AppEnv.ts";
 import * as AppHistory from "./history/AppHistory.ts";
 import * as AppRuntime from "./runtime/AppRuntime.ts";
@@ -42,6 +51,8 @@ const make = Effect.gen(function* () {
   const history = yield* AppHistory.AppHistory;
   const env = yield* AppEnv.AppEnv;
   const deploys = yield* AppDeploy.AppDeploy;
+  const servers = yield* AppServers.AppServers;
+  const notifier = yield* Notifier.Notifier;
   const buildSnapshot = (build: OzoneBuild | null) => ({
     build,
     status: build === null ? ("planning" as const) : BuildModel.statusOf(build),
@@ -86,6 +97,23 @@ const make = Effect.gen(function* () {
     [OZONE_WS_METHODS.deployRun]: (input: OzoneDeployRunInput) => deploys.deploy(input),
     [OZONE_WS_METHODS.deployStop]: (input: { readonly projectId: ProjectId }) =>
       deploys.stop(input.projectId),
+    [OZONE_WS_METHODS.deployHistory]: (input: { readonly projectId: ProjectId }) =>
+      deploys.history(input.projectId),
+    [OZONE_WS_METHODS.deployOutput]: (input: OzoneDeployOutputInput) =>
+      Effect.map(deploys.output(input.projectId, input.deploymentId), (text) => ({ text })),
+    [OZONE_WS_METHODS.deployRollback]: (input: OzoneDeployRollbackInput) => deploys.rollback(input),
+    [OZONE_WS_METHODS.deployLogs]: (input: OzoneDeployLogsInput) =>
+      Effect.map(deploys.logs(input), (text) => ({ text })),
+    [OZONE_WS_METHODS.deployMetrics]: (input: { readonly projectId: ProjectId }) =>
+      deploys.metrics(input.projectId),
+    [OZONE_WS_METHODS.deployWebhook]: (input: OzoneDeployWebhookInput) => deploys.webhook(input),
+    [OZONE_WS_METHODS.serverCheck]: (input: OzoneServerInput) => servers.check(input.host),
+    [OZONE_WS_METHODS.serverSetup]: (input: OzoneServerSetupInput) => servers.setup(input),
+    [OZONE_WS_METHODS.notifyList]: () => notifier.list,
+    [OZONE_WS_METHODS.notifySet]: (input: OzoneNotifyChannel) => notifier.set(input),
+    [OZONE_WS_METHODS.notifyRemove]: (input: { readonly id: string }) => notifier.remove(input.id),
+    [OZONE_WS_METHODS.notifyTest]: (input: { readonly id: string }) =>
+      Effect.as(notifier.test(input.id), {}),
   };
 });
 
@@ -122,6 +150,18 @@ export class OzoneWsHandlers extends Context.Reference<Effect.Success<typeof mak
       [OZONE_WS_METHODS.deployStatus]: () => notProvided,
       [OZONE_WS_METHODS.deployRun]: () => notProvided,
       [OZONE_WS_METHODS.deployStop]: () => notProvided,
+      [OZONE_WS_METHODS.deployHistory]: () => notProvided,
+      [OZONE_WS_METHODS.deployOutput]: () => notProvided,
+      [OZONE_WS_METHODS.deployRollback]: () => notProvided,
+      [OZONE_WS_METHODS.deployLogs]: () => notProvided,
+      [OZONE_WS_METHODS.deployMetrics]: () => notProvided,
+      [OZONE_WS_METHODS.deployWebhook]: () => notProvided,
+      [OZONE_WS_METHODS.serverCheck]: () => notProvided,
+      [OZONE_WS_METHODS.serverSetup]: () => notProvided,
+      [OZONE_WS_METHODS.notifyList]: () => notProvided,
+      [OZONE_WS_METHODS.notifySet]: () => notProvided,
+      [OZONE_WS_METHODS.notifyRemove]: () => notProvided,
+      [OZONE_WS_METHODS.notifyTest]: () => notProvided,
     }),
   },
 ) {}
