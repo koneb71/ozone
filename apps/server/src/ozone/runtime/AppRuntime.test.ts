@@ -59,6 +59,9 @@ const makeHarness = (options: { readonly hostCa?: boolean; readonly docker?: "mi
     yield* fs.writeFileString(hostCa, "certificate");
 
     const composeCalls = yield* Queue.unbounded<ReadonlyArray<string>>();
+    // How many of the app's exclusive sections are open, and the container actions run outside one.
+    const exclusiveDepth = yield* Ref.make(0);
+    const outsideExclusive = yield* Ref.make<ReadonlyArray<string>>([]);
     const containers = yield* Ref.make("");
     const started = yield* Deferred.make<DockerCli.DockerRunOutput>();
 
@@ -66,7 +69,13 @@ const makeHarness = (options: { readonly hostCa?: boolean; readonly docker?: "mi
       DockerCli.DockerCli,
       DockerCli.DockerCli.of({
         run: Effect.fn("TestDocker.run")(function* (input) {
-          if (input.args[0] === "compose") yield* Queue.offer(composeCalls, input.args);
+          if (input.args[0] === "compose") {
+            yield* Queue.offer(composeCalls, input.args);
+            const action = input.args.find((arg) => ["up", "stop", "restart"].includes(arg));
+            if (action !== undefined && (yield* Ref.get(exclusiveDepth)) === 0) {
+              yield* Ref.update(outsideExclusive, (all) => [...all, action]);
+            }
+          }
           if (input.args[0] === "version") {
             if (options.docker === "missing") {
               return yield* new DockerCli.DockerUnavailableError({
@@ -111,6 +120,11 @@ const makeHarness = (options: { readonly hostCa?: boolean; readonly docker?: "mi
             sizeBytes: 0,
           }),
         ),
+      exclusive: (_projectId, effect) =>
+        Ref.update(exclusiveDepth, (depth) => depth + 1).pipe(
+          Effect.andThen(effect),
+          Effect.ensuring(Ref.update(exclusiveDepth, (depth) => depth - 1)),
+        ),
     });
     const runtime = yield* AppRuntime.make.pipe(
       Effect.provide(
@@ -141,6 +155,7 @@ const makeHarness = (options: { readonly hostCa?: boolean; readonly docker?: "mi
       statuses,
       watch,
       composeCalls,
+      outsideExclusive,
       snapshots,
       workspaceRoot,
       hostCa,
@@ -257,17 +272,20 @@ describe("AppRuntime", () => {
       ]);
 
       const up = yield* Queue.take(harness.composeCalls);
-      assert.deepStrictEqual(up.slice(0, 5), [
+      // The project is named by the slug, not by the compose file an agent can edit.
+      assert.deepStrictEqual(up.slice(0, 7), [
         "compose",
+        "--project-name",
+        "habits-a1b2c3",
         "--project-directory",
         harness.workspaceRoot,
         "-f",
         `${harness.workspaceRoot}/compose.yaml`,
       ]);
-      assert.deepStrictEqual(up.slice(7), ["up", "--detach", "--build"]);
+      assert.deepStrictEqual(up.slice(9), ["up", "--detach", "--build"]);
       // The container trusts what the host trusts, through a file kept outside the repository.
       const fs = yield* FileSystem.FileSystem;
-      const overridePath = up[6] ?? "";
+      const overridePath = up[8] ?? "";
       assert.notInclude(overridePath, harness.workspaceRoot);
       assert.include(
         yield* fs.readFileString(overridePath),
@@ -310,16 +328,21 @@ describe("AppRuntime", () => {
         yield* harness.runtime.act({ projectId, action });
         issued.push(yield* Queue.take(harness.composeCalls));
       }
+      yield* harness.runtime.apply(projectId);
+      issued.push(yield* Queue.take(harness.composeCalls));
       assert.deepStrictEqual(
-        issued.map((args) => args.slice(5)),
+        issued.map((args) => args.slice(7)),
         [
           ["up", "--detach", "--build"],
           ["stop"],
           ["restart"],
           ["up", "--detach", "--build", "--force-recreate"],
+          ["up", "--detach", "--build"],
         ],
       );
       assert.isFalse(issued.some(DockerCli.removesData));
+      // None of them can start or stop the app while a restore of its data is under way.
+      assert.deepStrictEqual(yield* Ref.get(harness.outsideExclusive), []);
       // Only the rebuild is preceded by a snapshot of the data.
       assert.deepStrictEqual(yield* Queue.takeAll(harness.snapshots), ["before-rebuild"]);
     }).pipe(Effect.provide(NodeServices.layer)),
@@ -335,7 +358,7 @@ describe("AppRuntime", () => {
 
       const stopped = yield* harness.runtime.act({ projectId, action: "stop" });
       assert.strictEqual(stopped.phase, "stopped");
-      assert.deepStrictEqual((yield* Queue.take(harness.composeCalls)).slice(5), ["stop"]);
+      assert.deepStrictEqual((yield* Queue.take(harness.composeCalls)).slice(7), ["stop"]);
 
       // The interrupted start must not report back after the stop.
       yield* Deferred.succeed(harness.started, { ...succeeded, code: 1, stderr: "killed" });
@@ -351,7 +374,7 @@ describe("AppRuntime", () => {
       yield* harness.runtime.act({ projectId, action: "up" });
       yield* Queue.take(harness.composeCalls);
       yield* harness.runtime.apply(projectId);
-      assert.deepStrictEqual((yield* Queue.take(harness.composeCalls)).slice(5), [
+      assert.deepStrictEqual((yield* Queue.take(harness.composeCalls)).slice(7), [
         "up",
         "--detach",
         "--build",

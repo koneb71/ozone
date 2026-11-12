@@ -30,7 +30,8 @@ starts its lead thread.
 - **A deploy is a second Compose project.** `compose.prod.yaml` runs the production image as
   `<slug>-prod`, with a database volume of its own, so development data is never what people use.
   Ozone generates the database password and auth secret once and keeps them in its state: a
-  Postgres volume keeps the password it was created with. Migrations run from the build stage,
+  Postgres volume keeps the password it was created with, so a settings file Ozone cannot read
+  stops a deploy instead of being replaced. Migrations run from the build stage,
   which has the tools the production image leaves out. A server is reached with `docker -H ssh://`,
   so Ozone needs no agent there, only Docker and this machine's SSH access.
 - **What an app is given stays out of its repository.** Its environment variables, Ozone's secrets

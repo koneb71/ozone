@@ -165,17 +165,30 @@ const make = Effect.gen(function* () {
     target.publicUrl ??
     `http://${target.host === null ? "localhost" : hostName(target.host)}:${portOf(app)}`;
 
+  /**
+   * The saved settings, or null before the first deploy. A file that exists but cannot be read
+   * stops everything: it holds the password the production database was created with.
+   */
   const readRecord = (app: ResolvedApp) =>
     fs.readFileString(fileOf(app)).pipe(
-      Effect.flatMap(decodeDeployFile),
-      Effect.orElseSucceed((): DeployFile | null => null),
+      Effect.map((json): string | null => json),
+      Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(null)),
+      Effect.flatMap((json) => (json === null ? Effect.succeed(null) : decodeDeployFile(json))),
+      Effect.mapError(() =>
+        failed(
+          `Ozone could not read ${fileOf(app)}, which holds the production database's password. Restore that file before deploying again.`,
+        ),
+      ),
     );
   const writeRecord = Effect.fn("AppDeploy.writeRecord")(
     function* (app: ResolvedApp, file: DeployFile) {
       const json = yield* encodeDeployFile(file);
+      const temporary = `${fileOf(app)}.tmp`;
       yield* fs.makeDirectory(directoryOf(app), { recursive: true });
-      yield* fs.writeFileString(fileOf(app), json, { mode: ENV_FILE_MODE });
-      yield* fs.chmod(fileOf(app), ENV_FILE_MODE);
+      // Written whole and then renamed, so a crash never leaves half a password file.
+      yield* fs.writeFileString(temporary, json, { mode: ENV_FILE_MODE });
+      yield* fs.chmod(temporary, ENV_FILE_MODE);
+      yield* fs.rename(temporary, fileOf(app));
     },
     Effect.mapError(() => failed("Ozone could not save the deploy's settings.")),
   );
@@ -195,39 +208,52 @@ const make = Effect.gen(function* () {
     path.join(app.workspaceRoot, PROD_COMPOSE_FILE),
   ];
 
-  const statusOf = Effect.fn("AppDeploy.statusOf")(function* (app: ResolvedApp) {
-    const projectId = app.app.projectId;
-    const record = yield* readRecord(app);
-    const last = record?.last ?? null;
-    const doing = inFlight.get(projectId);
-    const failure = failures.get(projectId) ?? null;
-    const base = {
-      target: last?.target ?? null,
-      url: last?.url ?? null,
-      commitSha: last?.commitSha ?? null,
-      deployedAt: last?.deployedAt ?? null,
-    };
-    if (doing !== undefined) return { ...base, state: "deploying" as const, message: doing };
-    if (failure !== null) return { ...base, state: "failed" as const, message: failure };
-    if (last === null) return NOT_DEPLOYED;
-    const ps = yield* docker
-      .run({
-        args: [
-          ...composeArgs(app, last.target),
-          "ps",
-          "--format",
-          "json",
-          app.manifest.runtime.appService,
-        ],
-        cwd: app.workspaceRoot,
-        timeout: Duration.seconds(30),
-      })
-      .pipe(Effect.option);
-    const running =
-      ps._tag === "Some" &&
-      ps.value.stdout.split("\n").some((line) => line.includes('"State":"running"'));
-    return { ...base, state: running ? ("running" as const) : ("stopped" as const), message: null };
-  });
+  const statusOf = Effect.fn("AppDeploy.statusOf")(
+    function* (app: ResolvedApp) {
+      const projectId = app.app.projectId;
+      const record = yield* readRecord(app);
+      const last = record?.last ?? null;
+      const doing = inFlight.get(projectId);
+      const failure = failures.get(projectId) ?? null;
+      const base = {
+        target: last?.target ?? null,
+        url: last?.url ?? null,
+        commitSha: last?.commitSha ?? null,
+        deployedAt: last?.deployedAt ?? null,
+      };
+      if (doing !== undefined) return { ...base, state: "deploying" as const, message: doing };
+      if (failure !== null) return { ...base, state: "failed" as const, message: failure };
+      if (last === null) return NOT_DEPLOYED;
+      const ps = yield* docker
+        .run({
+          args: [
+            ...composeArgs(app, last.target),
+            "ps",
+            "--format",
+            "json",
+            app.manifest.runtime.appService,
+          ],
+          cwd: app.workspaceRoot,
+          timeout: Duration.seconds(30),
+        })
+        .pipe(Effect.option);
+      const running =
+        ps._tag === "Some" &&
+        ps.value.stdout.split("\n").some((line) => line.includes('"State":"running"'));
+      return {
+        ...base,
+        state: running ? ("running" as const) : ("stopped" as const),
+        message: null,
+      };
+    },
+    Effect.catch((error) =>
+      Effect.succeed<OzoneDeployStatus>({
+        ...NOT_DEPLOYED,
+        state: "failed",
+        message: error.message,
+      }),
+    ),
+  );
 
   const deployNow = Effect.fn("AppDeploy.deployNow")(function* (
     app: ResolvedApp,

@@ -80,8 +80,8 @@ it.live("git ignores no Ozone file", () =>
   }).pipe(Effect.provide(NodeServices.layer)),
 );
 
-// DockerCli lets a volume go only when asked to. This keeps the askers countable: the Compose
-// service that passes the request on, and the "Delete app" flow that makes it after a snapshot.
+// DockerCli lets a volume go only when asked to. This keeps the asker countable: the "Delete app"
+// flow, which removes the volumes its snapshot holds.
 it.live("only the delete flow asks Docker to remove data", () =>
   Effect.gen(function* () {
     const { lines } = yield* gitLines([
@@ -93,9 +93,6 @@ it.live("only the delete flow asks Docker to remove data", () =>
       "apps/server/src",
       ":!*.test.ts",
     ]);
-    assert.deepStrictEqual(lines.toSorted(), [
-      "apps/server/src/ozone/data/AppData.ts",
-      "apps/server/src/ozone/runtime/AppCompose.ts",
-    ]);
+    assert.deepStrictEqual(lines, ["apps/server/src/ozone/data/AppData.ts"]);
   }).pipe(Effect.provide(NodeServices.layer)),
 );

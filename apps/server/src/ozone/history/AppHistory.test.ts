@@ -94,6 +94,8 @@ const makeHarness = Effect.gen(function* () {
   };
   // The last thing a restore does.
   const restarted = yield* Deferred.make<void>();
+  // The workspace's files when the app was started again.
+  const filesAtStart = yield* Ref.make<ReadonlyArray<string>>([]);
 
   const data = Layer.mock(AppData.AppData)({
     list: () => Ref.get(snapshots),
@@ -110,7 +112,17 @@ const makeHarness = Effect.gen(function* () {
   const runtime = Layer.mock(AppRuntime.AppRuntime)({
     act: (input) =>
       record(input.action).pipe(
-        Effect.andThen(Deferred.succeed(restarted, undefined)),
+        Effect.andThen(
+          input.action === "up"
+            ? fs.readDirectory(root).pipe(
+                Effect.orDie,
+                Effect.flatMap((names) =>
+                  Ref.set(filesAtStart, names.filter((name) => name !== ".git").toSorted()),
+                ),
+                Effect.andThen(Deferred.succeed(restarted, undefined)),
+              )
+            : Effect.void,
+        ),
         Effect.as({
           projectId,
           phase: "starting" as const,
@@ -196,6 +208,7 @@ const makeHarness = Effect.gen(function* () {
     path,
     hold,
     restarted,
+    filesAtStart,
     shas: { scaffold, schema, page },
   };
 });
@@ -204,7 +217,8 @@ const layerTest = Layer.mergeAll(NodeServices.layer, NodeCrypto.layer);
 
 it.effect("goes back to a point with its data, keeping what was there as history", () =>
   Effect.gen(function* () {
-    const { history, repo, store, root, steps, exists, fs, path, shas } = yield* makeHarness;
+    const { history, repo, store, root, steps, exists, fs, path, shas, filesAtStart } =
+      yield* makeHarness;
 
     const listed = yield* history.list(projectId);
     assert.deepStrictEqual(
@@ -219,7 +233,9 @@ it.effect("goes back to a point with its data, keeping what was there as history
     // An edit nobody committed is kept, not lost.
     yield* fs.writeFileString(path.join(root, "page.tsx"), "an unsaved edit\n");
     const restored = yield* history.restore({ projectId, sha: shas.schema });
-    assert.deepStrictEqual(yield* Ref.get(steps), ["restore data s1", "restart"]);
+    // Stopped first, so the app never runs newer code on the older data.
+    assert.deepStrictEqual(yield* Ref.get(steps), ["stop", "restore data s1", "up"]);
+    assert.deepStrictEqual(yield* Ref.get(filesAtStart), ["README.md", "schema.ts"]);
     assert.strictEqual(restored.safety?.id, "safety");
     assert.isFalse(yield* exists("page.tsx"));
     assert.isTrue(yield* exists("schema.ts"));
@@ -256,7 +272,7 @@ it.effect("goes back to a point with its data, keeping what was there as history
     // Where no snapshot was taken, only the code goes back.
     yield* Ref.set(steps, []);
     yield* history.restore({ projectId, sha: shas.scaffold });
-    assert.deepStrictEqual(yield* Ref.get(steps), ["restart"]);
+    assert.deepStrictEqual(yield* Ref.get(steps), ["stop", "up"]);
     assert.isFalse(yield* exists("schema.ts"));
     assert.deepStrictEqual(
       (yield* store.get(threadId))?.tasks.map((task) => task.status),

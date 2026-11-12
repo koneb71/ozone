@@ -261,7 +261,8 @@ export const make = Effect.gen(function* () {
     yield* FiberMap.run(
       starts,
       projectId,
-      compose.run(resolved, args, { timeout: START_TIMEOUT }).pipe(
+      // Waits for a restore of the app's data, which must not have the app running on it.
+      data.exclusive(projectId, compose.run(resolved, args, { timeout: START_TIMEOUT })).pipe(
         Effect.flatMap((output) =>
           output.code === 0
             ? setOperation(projectId, undefined)
@@ -286,7 +287,10 @@ export const make = Effect.gen(function* () {
   ) {
     const projectId = resolved.app.projectId;
     yield* supersede(projectId);
-    const output = yield* compose.run(resolved, args, { timeout: Duration.minutes(3) });
+    const output = yield* data.exclusive(
+      projectId,
+      compose.run(resolved, args, { timeout: Duration.minutes(3) }),
+    );
     yield* setOperation(
       projectId,
       output.code === 0

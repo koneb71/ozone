@@ -152,6 +152,17 @@ it.effect("deploys to this machine: builds, starts its own database, migrates, t
     // Stopping keeps the data; nothing in a deploy asks Docker to remove any.
     assert.strictEqual((yield* deploy.stop(projectId)).state, "stopped");
     assert.isFalse((yield* Ref.get(calls)).some((call) => DockerCli.removesData(call.args)));
+
+    // Settings Ozone cannot read are never replaced: new secrets would lock production out of
+    // the database it already has.
+    const settingsPath = path.join(directory, "deploy.json");
+    yield* fs.writeFileString(settingsPath, "{ not json");
+    yield* Ref.set(calls, []);
+    const refused = yield* deploy.deploy({ projectId, target: { host: null, publicUrl: null } });
+    assert.strictEqual(refused.state, "failed");
+    assert.include(refused.message ?? "", "deploy.json");
+    assert.strictEqual(yield* fs.readFileString(settingsPath), "{ not json");
+    assert.deepStrictEqual(yield* Ref.get(calls), []);
   }).pipe(Effect.provide(layerTest)),
 );
 

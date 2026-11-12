@@ -13,8 +13,10 @@ that keeps it. Read it before changing `apps/server/src/ozone/runtime` or `apps/
    `volume prune`, `system prune --volumes` and `compose down|rm` with `-v`. A refusal is a defect,
    not an error to handle: reaching it means new code asked for something Ozone must not do.
    Start, stop, restart and rebuild therefore keep the data by construction. The exception is
-   **Delete app**: `AppData.remove` takes a snapshot, and only when that worked asks the guard to
-   let the volumes go. A test counts the places that may ask.
+   **Delete app**: `AppData.remove` takes a snapshot, removes the containers, and only then asks
+   the guard to let go of the volumes that snapshot holds. A test checks it is the only asker. The
+   Compose project is named after the app's slug, never read from its compose file: agents can edit
+   that file, and Delete app must not reach another project, such as the app's production one.
 3. **Snapshots live outside the app.** [`AppData`](../../apps/server/src/ozone/data/AppData.ts)
    writes them under the server's state directory, in `ozone/backups/<app slug>/<snapshot id>/`.
    They survive the app's containers, its volume, its checkout and the app's own deletion.
@@ -22,7 +24,8 @@ that keeps it. Read it before changing `apps/server/src/ozone/runtime` or `apps/
    nowhere else. No MCP tool restores or deletes data. A restore first snapshots the data it is
    about to replace, so it can be undone. A deleted app leaves its last snapshot and its folder.
    Once confirmed, a restore or a deletion runs to its end in the server's own fiber: a window
-   closed halfway must not leave a database dropped and empty.
+   closed halfway must not leave a database dropped and empty. While one runs, every start and stop
+   of the app waits for it, so an agent's restart cannot run the app on a database just dropped.
 5. **A destructive migration is never applied silently.**
    [`findDestructiveStatements`](../../apps/server/src/ozone/data/migrationGuard.ts) names the
    statements in a migration that can lose data. A build stops on them and asks.
@@ -38,9 +41,11 @@ snapshot recorded. The app's service is stopped for the duration so nothing writ
 
 [`AppHistory`](../../apps/server/src/ozone/history/AppHistory.ts) takes an app back to an earlier
 commit with the data of that time: the newest snapshot taken at that commit. It never rewrites
-history. Uncommitted changes are committed first, the data is restored (its safety snapshot is
-filed under the commit being left, which is the data that belongs with it), and the old tree is
-committed as a new commit. Going back is therefore undone by going back to the commit before it.
+history. Uncommitted changes are committed first. The app is stopped, the data is restored (its
+safety snapshot is filed under the commit being left, which is the data that belongs with it), the
+old tree is committed as a new commit, and only then does the app start: started on the newer
+code, it would migrate the restored data forward. Going back is therefore undone by going back to
+the commit before it.
 Build tasks whose commits the restored point lacks go back into their plans, and come back as done
 when a later restore brings their commits back. A restore is refused while a build is working.
 
@@ -65,5 +70,8 @@ the recovery, which is why a snapshot is taken after every task that passes its 
   restore it into.
 - A deployed app's data lives in a volume of its own (`<slug>-prod_pgdata`) that nothing in Ozone
   removes, but Ozone does not snapshot it yet. Stop keeps it; the next deploy uses it again.
-- Snapshots Ozone takes by itself are pruned to the newest 20 per app. Ones a person takes are kept
-  until removed by hand.
+- Routine snapshots, the one after each task and the one before a rebuild, are pruned to the newest
+  20 per app. A person's own snapshots and the undo points of a restore or a delete are kept until
+  removed by hand.
+- Delete app leaves the volumes its snapshot does not hold, such as a `volume` service's data or a
+  dependency cache, in Docker. They lose nothing and take disk space until removed by hand.

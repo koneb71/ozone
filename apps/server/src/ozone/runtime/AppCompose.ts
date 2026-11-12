@@ -16,8 +16,6 @@ import { hostCaPath } from "./hostCa.ts";
 export interface ComposeOptions {
   readonly timeout?: Duration.Input;
   readonly maxOutputBytes?: number;
-  /** Set only by the user-confirmed "Delete app" flow, after its snapshot. */
-  readonly allowDataRemoval?: true;
 }
 
 /** Runs a Docker Compose command against one app's project, wherever Ozone needs one. */
@@ -77,6 +75,9 @@ const make = Effect.gen(function* () {
   const projectArgs = Effect.fn("AppCompose.projectArgs")(function* (app: ResolvedApp) {
     const base = [
       "compose",
+      // Named by the slug, never by a compose file an agent can edit to aim at another project.
+      "--project-name",
+      app.app.slug,
       "--project-directory",
       app.workspaceRoot,
       "-f",
@@ -115,7 +116,6 @@ const make = Effect.gen(function* () {
           ...(options?.maxOutputBytes === undefined
             ? {}
             : { maxOutputBytes: options.maxOutputBytes }),
-          ...(options?.allowDataRemoval === true ? { allowDataRemoval: true as const } : {}),
         })
         .pipe(
           Effect.mapError(

@@ -112,6 +112,14 @@ const make = Effect.gen(function* () {
     // What is there now is kept, so this restore can be undone like any other.
     if (changed) yield* repo.commitAll(root, `Changes before restoring "${target.subject}"`);
     const snapshot = snapshotsByCommit(yield* data.list(input.projectId)).get(input.sha) ?? null;
+    // Stopped until code and data match again: started on the newer code, the app would migrate
+    // the restored data forward, and a data restore leaves a stopped app stopped.
+    const stopped = yield* runtime.act({ projectId: input.projectId, action: "stop" });
+    if (stopped.phase === "failed") {
+      return yield* failed(
+        `The app could not be stopped, so nothing was restored. ${stopped.message ?? ""}`.trim(),
+      );
+    }
     // Data first: its safety snapshot is then filed under the commit whose data it holds.
     const safety =
       snapshot === null
@@ -131,7 +139,7 @@ const make = Effect.gen(function* () {
     }
     yield* rewind(root, builds, input.sha);
     // Dependencies may differ at that point, and the app installs them when it starts.
-    yield* runtime.act({ projectId: input.projectId, action: "restart" }).pipe(Effect.ignore);
+    yield* runtime.act({ projectId: input.projectId, action: "up" }).pipe(Effect.ignore);
     return { commitSha, safety };
   });
 

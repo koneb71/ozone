@@ -24,6 +24,7 @@ import * as ServerConfig from "../../config.ts";
 import * as GitVcsDriver from "../../vcs/GitVcsDriver.ts";
 import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as AppCompose from "../runtime/AppCompose.ts";
+import * as DockerCli from "../runtime/DockerCli.ts";
 
 export interface SnapshotInput {
   readonly projectId: ProjectId;
@@ -47,19 +48,32 @@ export class AppData extends Context.Service<
       input: OzoneDataRestoreInput,
     ) => Effect.Effect<OzoneDataRestoreResult, OzoneAppError>;
     /**
-     * Removes the app's containers and volumes, after a snapshot that is kept. The only caller is
-     * the "Delete app" flow a person confirmed.
+     * Removes the app's containers, and the volumes its snapshot holds, after that snapshot is
+     * kept. The only caller is the "Delete app" flow a person confirmed.
      */
     readonly remove: (
       projectId: ProjectId,
     ) => Effect.Effect<{ readonly snapshot: OzoneSnapshot }, OzoneAppError>;
+    /**
+     * Runs `effect` while no restore or delete of the app is under way, and holds the next one back
+     * until it ends. Every start and stop of the app goes through it.
+     */
+    readonly exclusive: <A, E, R>(
+      projectId: ProjectId,
+      effect: Effect.Effect<A, E, R>,
+    ) => Effect.Effect<A, E, R>;
   }
 >()("t3/ozone/data/AppData") {}
 
 const SNAPSHOT_FILE = "snapshot.json";
 const CONTAINER_DUMP = "/tmp/ozone-snapshot.dump";
-/** Snapshots Ozone takes by itself are pruned to this many per app. Manual ones are kept. */
-const AUTOMATIC_SNAPSHOTS_KEPT = 20;
+/**
+ * Routine snapshots are pruned to the newest 20 per app. The rest are kept: a person's own, and the
+ * undo point of a restore or a delete. Pruning only after a routine one also means a restore's safety
+ * snapshot can never prune the snapshot being restored.
+ */
+const PRUNED_REASONS: ReadonlySet<OzoneSnapshotReason> = new Set(["task", "before-rebuild"]);
+const ROUTINE_SNAPSHOTS_KEPT = 20;
 const DUMP_TIMEOUT = Duration.minutes(15);
 
 /** What a snapshot folder records: the snapshot, and which file holds which service's data. */
@@ -80,10 +94,16 @@ const decodeStored = Schema.decodeUnknownEffect(StoredSnapshotJson);
 const encodeStored = Schema.encodeEffect(StoredSnapshotJson);
 
 const failed = (message: string) => new OzoneAppError({ reason: "failed", message });
+/** What a failed command said, kept short. */
+const tail = (output: { readonly stdout: string; readonly stderr: string }) =>
+  (output.stderr.trim() || output.stdout.trim()).slice(-600);
+const databasesOf = (app: AppRegistry.ResolvedApp) =>
+  app.manifest.data.services.filter((service) => service.kind === "postgres");
 
 export const make = Effect.gen(function* () {
   const registry = yield* AppRegistry.AppRegistry;
   const compose = yield* AppCompose.AppCompose;
+  const docker = yield* DockerCli.DockerCli;
   const git = yield* GitVcsDriver.GitVcsDriver;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -91,6 +111,15 @@ export const make = Effect.gen(function* () {
   const random = yield* SecureRandom.SecureRandom;
   // One data operation at a time: a restore must never overlap a snapshot of the same database.
   const working = yield* Semaphore.make(1);
+  // Per app, so a restore also keeps the app's own starts out. Taken before `working`, never after.
+  const appLocks = new Map<ProjectId, Semaphore.Semaphore>();
+  const exclusive = <A, E, R>(projectId: ProjectId, effect: Effect.Effect<A, E, R>) =>
+    Effect.suspend(() => {
+      const existing = appLocks.get(projectId);
+      const lock = existing ?? Semaphore.makeUnsafe(1);
+      if (existing === undefined) appLocks.set(projectId, lock);
+      return lock.withPermits(1)(effect);
+    });
   const scope = yield* Scope.Scope;
   /**
    * Runs in the service's own fiber, so a caller that goes away stops waiting, not the work: a
@@ -110,7 +139,7 @@ export const make = Effect.gen(function* () {
   ) {
     const output = yield* compose.run(app, args, { timeout: DUMP_TIMEOUT });
     if (output.code !== 0) {
-      const detail = (output.stderr.trim() || output.stdout.trim()).slice(-600);
+      const detail = tail(output);
       return yield* failed(`Could not ${doing}.${detail.length === 0 ? "" : ` ${detail}`}`);
     }
     return output;
@@ -151,11 +180,11 @@ export const make = Effect.gen(function* () {
   });
 
   const prune = Effect.fn("AppData.prune")(function* (app: AppRegistry.ResolvedApp) {
-    const automatic = (yield* listStored(app)).filter(
-      (stored) => stored.snapshot.reason !== "manual",
+    const routine = (yield* listStored(app)).filter((stored) =>
+      PRUNED_REASONS.has(stored.snapshot.reason),
     );
     yield* Effect.forEach(
-      automatic.slice(AUTOMATIC_SNAPSHOTS_KEPT),
+      routine.slice(ROUTINE_SNAPSHOTS_KEPT),
       (stored) =>
         fs
           .remove(path.join(appDirectory(app), stored.snapshot.id), { recursive: true })
@@ -197,8 +226,7 @@ export const make = Effect.gen(function* () {
       .makeDirectory(directory, { recursive: true })
       .pipe(Effect.mapError(() => failed("Could not create the snapshot folder.")));
 
-    const databases = app.manifest.data.services.filter((service) => service.kind === "postgres");
-    const files = yield* Effect.forEach(databases, (service) => {
+    const files = yield* Effect.forEach(databasesOf(app), (service) => {
       const user = service.user ?? "postgres";
       const database = service.database ?? user;
       const file = `${service.service}.dump`;
@@ -251,7 +279,7 @@ export const make = Effect.gen(function* () {
       Effect.flatMap((json) => fs.writeFileString(path.join(directory, SNAPSHOT_FILE), json)),
       Effect.mapError(() => failed("Could not record the snapshot.")),
     );
-    yield* prune(app);
+    if (PRUNED_REASONS.has(input.reason)) yield* prune(app);
     return snapshot;
   });
 
@@ -328,44 +356,86 @@ export const make = Effect.gen(function* () {
     restore: Effect.fn("AppData.restore")(function* (input) {
       const app = yield* registry.resolve(input.projectId);
       return yield* toTheEnd(
-        working.withPermits(1)(
-          Effect.gen(function* () {
-            const stored = (yield* listStored(app)).find(
-              (entry) => entry.snapshot.id === input.snapshotId,
-            );
-            if (stored === undefined) return yield* failed("That snapshot no longer exists.");
-            const safety = yield* takeSnapshot(app, {
-              projectId: input.projectId,
-              reason: "before-restore",
-            });
-            yield* restoreStored(app, stored);
-            return { safety };
-          }),
+        exclusive(
+          input.projectId,
+          working.withPermits(1)(
+            Effect.gen(function* () {
+              const stored = (yield* listStored(app)).find(
+                (entry) => entry.snapshot.id === input.snapshotId,
+              );
+              if (stored === undefined) return yield* failed("That snapshot no longer exists.");
+              const safety = yield* takeSnapshot(app, {
+                projectId: input.projectId,
+                reason: "before-restore",
+              });
+              yield* restoreStored(app, stored);
+              return { safety };
+            }),
+          ),
         ),
       );
     }),
     remove: Effect.fn("AppData.remove")(function* (projectId) {
       const app = yield* registry.resolve(projectId);
       return yield* toTheEnd(
-        working.withPermits(1)(
-          Effect.gen(function* () {
-            // First, and nothing is removed unless it worked.
-            const snapshot = yield* takeSnapshot(app, { projectId, reason: "before-delete" });
-            const output = yield* compose.run(app, ["down", "--volumes", "--remove-orphans"], {
-              timeout: DUMP_TIMEOUT,
-              allowDataRemoval: true,
-            });
-            if (output.code !== 0) {
-              const detail = (output.stderr.trim() || output.stdout.trim()).slice(-600);
-              return yield* failed(
-                `The data is saved as snapshot ${snapshot.id}, but the containers could not be removed. ${detail}`.trim(),
+        exclusive(
+          projectId,
+          working.withPermits(1)(
+            Effect.gen(function* () {
+              // First, and nothing is removed unless it worked.
+              const snapshot = yield* takeSnapshot(app, { projectId, reason: "before-delete" });
+              const saved = `The data is saved as snapshot ${snapshot.id}, but`;
+              const down = yield* compose.run(app, ["down", "--remove-orphans"], {
+                timeout: DUMP_TIMEOUT,
+              });
+              if (down.code !== 0) {
+                return yield* failed(
+                  `${saved} the containers could not be removed. ${tail(down)}`.trim(),
+                );
+              }
+              // Only the volumes the snapshot holds go; any other volume stays in Docker.
+              const covered = new Set(
+                databasesOf(app).map((service) => `${app.app.slug}_${service.volume}`),
               );
-            }
-            return { snapshot };
-          }),
+              const dockerRun = (input: DockerCli.DockerRunInput) =>
+                docker
+                  .run({ timeout: DUMP_TIMEOUT, ...input })
+                  .pipe(Effect.mapError((error) => failed(`${saved} ${error.detail}`)));
+              const listed = yield* dockerRun({
+                args: [
+                  "volume",
+                  "ls",
+                  "--quiet",
+                  "--filter",
+                  `label=com.docker.compose.project=${app.app.slug}`,
+                ],
+              });
+              const doomed = listed.stdout
+                .split("\n")
+                .map((line) => line.trim())
+                .filter((name) => covered.has(name));
+              yield* Effect.forEach(
+                doomed,
+                Effect.fn("AppData.removeVolume")(function* (name) {
+                  const output = yield* dockerRun({
+                    args: ["volume", "rm", name],
+                    allowDataRemoval: true,
+                  });
+                  if (output.code !== 0) {
+                    return yield* failed(
+                      `${saved} the volume ${name} could not be removed. ${tail(output)}`.trim(),
+                    );
+                  }
+                }),
+                { discard: true },
+              );
+              return { snapshot };
+            }),
+          ),
         ),
       );
     }),
+    exclusive,
   });
 });
 
