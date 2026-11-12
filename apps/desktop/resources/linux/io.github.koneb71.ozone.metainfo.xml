@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.koneb71.ozone</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Ozone</name>
+  <summary>Describe an app and watch it get built</summary>
+  <developer id="io.github.koneb71">
+    <name>Ozone</name>
+  </developer>
+  <description>
+    <p>
+      Ozone builds apps from a description. It creates the app from a tested
+      template, runs it with Docker Compose, hands the work to coding agents
+      and checks every step itself.
+    </p>
+    <p>
+      Ozone is a fork of T3 Code and keeps what T3 Code does: threads,
+      providers, checkpoints, the preview browser and remote access.
+    </p>
+  </description>
+  <launchable type="desktop-id">ozone.desktop</launchable>
+  <icon type="stock">ozone</icon>
+  <provides>
+    <binary>ozone</binary>
+  </provides>
+  <categories>
+    <category>Development</category>
+  </categories>
+  <url type="homepage">https://github.com/koneb71/ozone</url>
+  <url type="bugtracker">https://github.com/koneb71/ozone/issues</url>
+  <url type="vcs-browser">https://github.com/koneb71/ozone</url>
+</component>

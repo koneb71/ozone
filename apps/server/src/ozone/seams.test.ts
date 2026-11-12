@@ -11,6 +11,7 @@ const OZONE_OWNED: ReadonlyArray<RegExp> = [
   /^docs\/ozone\//,
   /^apps\/server\/src\/ozone\//,
   /^apps\/server\/scripts\/ozone-/,
+  /^scripts\/ozone-/,
   /^apps\/web\/src\/ozone\//,
   /^packages\/ozone-templates\//,
   /^packages\/contracts\/src\/ozone/,

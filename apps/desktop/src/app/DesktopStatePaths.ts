@@ -16,7 +16,8 @@ export function resolveDesktopBaseDir(input: {
   readonly t3Home: Option.Option<string>;
 }): string {
   return Option.getOrElse(normalizeConfiguredBaseDir(input.t3Home), () =>
-    input.joinPath(input.homeDirectory, ".t3"),
+    // ozone-seam: the same folder the server defaults to, never T3 Code's database.
+    input.joinPath(input.homeDirectory, ".ozone"),
   );
 }
 

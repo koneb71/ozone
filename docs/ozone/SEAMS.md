@@ -9,6 +9,17 @@ These files contain a comment with `ozone-seam` at each edit.
 
 | File                                                        | Why                                                                                                    |
 | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `apps/desktop/src/app/DesktopAppIdentity.test.ts`           | expects Ozone's name and profile folders                                                               |
+| `apps/desktop/src/app/DesktopClerk.test.ts`                 | expects Ozone's profile folders                                                                        |
+| `apps/desktop/src/app/DesktopEarlyElectronStartup.ts`       | the Linux launcher is named for Ozone                                                                  |
+| `apps/desktop/src/app/DesktopEnvironment.test.ts`           | expects Ozone's data folder                                                                            |
+| `apps/desktop/src/app/DesktopEnvironment.ts`                | the desktop app's name and Windows identity                                                            |
+| `apps/desktop/src/app/DesktopLegacyLocalStorage.ts`         | T3 Code's old profiles are not imported                                                                |
+| `apps/desktop/src/app/DesktopPreReadyPlatform.test.ts`      | expects Ozone's launcher name                                                                          |
+| `apps/desktop/src/app/DesktopStatePaths.ts`                 | the desktop app keeps its data in `~/.ozone`                                                           |
+| `apps/desktop/src/app/DesktopUserData.test.ts`              | expects Ozone's profile folders                                                                        |
+| `apps/desktop/src/app/DesktopUserData.ts`                   | a browser profile of its own, so it can run beside T3 Code                                             |
+| `scripts/build-desktop-artifact.ts`                         | product name, and the staged package rewritten for Ozone                                               |
 | `apps/server/scripts/cli.ts`                                | the server build writes the template bundle into `dist`                                                |
 | `apps/server/src/auth/RpcAuthorization.ts`                  | spreads the scopes of Ozone's RPC methods into the scope map                                           |
 | `apps/server/src/cli/app.test.ts`                           | expects Ozone's default data directory name                                                            |
@@ -54,13 +65,15 @@ These files contain a comment with `ozone-seam` at each edit.
 
 These files cannot carry a comment, or were moved or replaced rather than edited.
 
-| File                                   | Why                                                                                             |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `CLAUDE.md`                            | also imports `docs/ozone/AGENTS.md`                                                             |
-| `README.md`                            | replaced with Ozone's; upstream's is in its own repository                                      |
-| `.github/workflows-upstream/`          | upstream's workflows, moved out of `.github/workflows/` so GitHub does not run them             |
-| `apps/server/package.json`             | adds the `ozone` bin beside `t3`                                                                |
-| `apps/web/public/manifest.webmanifest` | product name                                                                                    |
-| `assets/`                              | icon files replaced in place with the Ozone icon set (the `.icon` sources are still upstream's) |
-| `apps/web/public/`                     | the web copies of those icons                                                                   |
-| `packages/client-runtime/package.json` | exports `./state/ozone`                                                                         |
+| File                                                                | Why                                                                                             |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `CLAUDE.md`                                                         | also imports `docs/ozone/AGENTS.md`                                                             |
+| `README.md`                                                         | replaced with Ozone's; upstream's is in its own repository                                      |
+| `.github/workflows-upstream/`                                       | upstream's workflows, moved out of `.github/workflows/` so GitHub does not run them             |
+| `apps/desktop/package.json`                                         | product name                                                                                    |
+| `apps/desktop/resources/linux/io.github.koneb71.ozone.metainfo.xml` | Ozone's AppStream file, added beside upstream's                                                 |
+| `apps/server/package.json`                                          | adds the `ozone` bin beside `t3`                                                                |
+| `apps/web/public/manifest.webmanifest`                              | product name                                                                                    |
+| `assets/`                                                           | icon files replaced in place with the Ozone icon set (the `.icon` sources are still upstream's) |
+| `apps/web/public/`                                                  | the web copies of those icons                                                                   |
+| `packages/client-runtime/package.json`                              | exports `./state/ozone`                                                                         |

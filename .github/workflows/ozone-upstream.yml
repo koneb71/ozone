@@ -80,4 +80,4 @@ jobs:
 
       - name: Ozone tests
         if: steps.merge.outputs.behind != '0'
-        run: vp test run apps/server/src/ozone apps/web/src/ozone
+        run: vp test run apps/server/src/ozone apps/web/src/ozone scripts/ozone-desktop-identity.test.ts

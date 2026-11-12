@@ -56,7 +56,7 @@ jobs:
         run: vp run knip:check
 
       - name: Ozone tests
-        run: vp test run apps/server/src/ozone apps/web/src/ozone
+        run: vp test run apps/server/src/ozone apps/web/src/ozone scripts/ozone-desktop-identity.test.ts
 
       # A seam can break the upstream test that sits beside the file it edits. Browser tests need
       # Chromium, so the web job runs those.
