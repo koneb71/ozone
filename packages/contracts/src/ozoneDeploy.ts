@@ -22,10 +22,19 @@ export const OzoneDomain = TrimmedNonEmptyString.check(
   Schema.isPattern(/^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/),
 );
 
+/** A server saved in Ozone's list. */
+export const OzoneServerId = TrimmedNonEmptyString.check(
+  Schema.isMaxLength(64),
+  Schema.isPattern(/^[a-z0-9][a-z0-9-]*$/),
+);
+export type OzoneServerId = typeof OzoneServerId.Type;
+
 /** Where Deploy runs the production image. */
 export const OzoneDeployTarget = Schema.Struct({
-  /** Null: this machine. */
+  /** Null: this machine, or the Dokploy server below. */
   host: Schema.NullOr(OzoneServerHost),
+  /** A saved Dokploy server that runs the app instead of Ozone. Null: Ozone runs it. */
+  dokploy: Schema.NullOr(OzoneServerId).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
   /** Where people reach the app, for sign-in links. Null: the domain, or the host and its port. */
   publicUrl: Schema.NullOr(
     TrimmedNonEmptyString.check(Schema.isMaxLength(512), Schema.isPattern(/^https?:\/\/\S+$/)),
@@ -185,6 +194,84 @@ export const OzoneServerSetupInput = Schema.Struct({
   installDocker: Schema.optionalKey(Schema.Boolean),
 });
 export type OzoneServerSetupInput = typeof OzoneServerSetupInput.Type;
+
+const ServerName = TrimmedNonEmptyString.check(Schema.isMaxLength(64));
+const DokployUrl = TrimmedNonEmptyString.check(
+  Schema.isMaxLength(512),
+  Schema.isPattern(/^https?:\/\/[^\s/]+(?::\d{1,5})?\/?$/),
+);
+
+/**
+ * How Ozone signs in to an SSH server. `own-keys`: this machine's SSH setup, as `ssh host` would.
+ * `ozone-key`: a key Ozone made and installed there; this machine's keys are tried too.
+ */
+export const OzoneSshAccess = Schema.Literals(["own-keys", "ozone-key"]);
+export type OzoneSshAccess = typeof OzoneSshAccess.Type;
+
+/** A server in Ozone's list, as clients see it: never with its secret. */
+export const OzoneSavedServer = Schema.Union([
+  Schema.Struct({
+    id: OzoneServerId,
+    name: ServerName,
+    kind: Schema.Literal("ssh"),
+    host: OzoneServerHost,
+    access: OzoneSshAccess,
+  }),
+  Schema.Struct({
+    id: OzoneServerId,
+    name: ServerName,
+    kind: Schema.Literal("dokploy"),
+    url: DokployUrl,
+    /** The API key's last characters, so a person can tell keys apart. */
+    keyHint: Schema.String,
+  }),
+]);
+export type OzoneSavedServer = typeof OzoneSavedServer.Type;
+
+export const OzoneServersListResult = Schema.Struct({ servers: Schema.Array(OzoneSavedServer) });
+export type OzoneServersListResult = typeof OzoneServersListResult.Type;
+
+/** A server to add. Ozone signs in once before keeping it, so a wrong one is never saved. */
+export const OzoneServerAddInput = Schema.Union([
+  /** Reached as it is: with this machine's keys, or with Ozone's key already pasted there. */
+  Schema.Struct({
+    kind: Schema.Literal("ssh"),
+    name: ServerName,
+    host: OzoneServerHost,
+    access: OzoneSshAccess,
+  }),
+  /** Ozone signs in with the password once to install its key, and keeps only the key. */
+  Schema.Struct({
+    kind: Schema.Literal("ssh-password"),
+    name: ServerName,
+    host: OzoneServerHost,
+    password: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1_024)),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("dokploy"),
+    name: ServerName,
+    url: DokployUrl,
+    apiKey: TrimmedNonEmptyString.check(Schema.isMaxLength(1_024)),
+  }),
+]);
+export type OzoneServerAddInput = typeof OzoneServerAddInput.Type;
+
+export const OzoneServerRemoveInput = Schema.Struct({ id: OzoneServerId });
+export type OzoneServerRemoveInput = typeof OzoneServerRemoveInput.Type;
+export const OzoneServerRemoveResult = Schema.Struct({
+  servers: Schema.Array(OzoneSavedServer),
+  /** Why Ozone's key could not be taken off the server, which then still lets it in. */
+  problem: Schema.NullOr(Schema.String),
+});
+export type OzoneServerRemoveResult = typeof OzoneServerRemoveResult.Type;
+
+/** Ozone's SSH key, made the first time it is asked for. */
+export const OzoneServerKeyResult = Schema.Struct({
+  publicKey: Schema.String,
+  /** Run on the server, it lets Ozone's key in. */
+  installCommand: Schema.String,
+});
+export type OzoneServerKeyResult = typeof OzoneServerKeyResult.Type;
 
 export const OzoneNotifyEvent = Schema.Literals(["deploy.succeeded", "deploy.failed"]);
 export type OzoneNotifyEvent = typeof OzoneNotifyEvent.Type;

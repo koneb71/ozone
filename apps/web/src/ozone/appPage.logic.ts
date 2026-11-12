@@ -10,6 +10,7 @@ export const APP_SECTIONS = [
   "deploy",
   "deployments",
   "monitoring",
+  "servers",
   "notifications",
 ] as const;
 export type AppSection = (typeof APP_SECTIONS)[number];
@@ -24,6 +25,7 @@ export const APP_SECTION_LABEL: Record<AppSection, string> = {
   deploy: "Deploy",
   deployments: "Deployments",
   monitoring: "Monitoring",
+  servers: "Servers",
   notifications: "Notifications",
 };
 
@@ -33,7 +35,7 @@ export const APP_SECTION_GROUPS: ReadonlyArray<{
 }> = [
   { heading: "App", sections: ["overview", "data", "history", "environment", "build", "logs"] },
   { heading: "Production", sections: ["deploy", "deployments", "monitoring"] },
-  { heading: "All apps", sections: ["notifications"] },
+  { heading: "All apps", sections: ["servers", "notifications"] },
 ];
 
 /** The section a path names, or the overview for one it does not. */

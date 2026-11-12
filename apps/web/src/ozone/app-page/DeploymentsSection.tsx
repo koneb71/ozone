@@ -94,7 +94,11 @@ export function DeploymentsSection(props: {
                         formatRelativeTimeLabel(entry.startedAt),
                         durationLabel(entry),
                         entry.target.domain ??
-                          (entry.target.host === null ? "this computer" : entry.target.host),
+                          (entry.target.dokploy !== null
+                            ? "Dokploy"
+                            : entry.target.host === null
+                              ? "this computer"
+                              : entry.target.host),
                       ])}
                     </span>
                     {entry.outcome === "failed" && entry.message !== null ? (

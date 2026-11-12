@@ -29,9 +29,14 @@ import {
   OzoneNotifyChannel,
   OzoneNotifyListResult,
   OzoneNotifyRemoveInput,
+  OzoneServerAddInput,
   OzoneServerInput,
+  OzoneServerKeyResult,
+  OzoneServerRemoveInput,
+  OzoneServerRemoveResult,
   OzoneServerReport,
   OzoneServerSetupInput,
+  OzoneServersListResult,
 } from "./ozoneDeploy.ts";
 
 const ShortText = TrimmedNonEmptyString.check(Schema.isMaxLength(128));
@@ -419,6 +424,10 @@ export const OZONE_WS_METHODS = {
   deployWebhook: "ozone.deploy.webhook",
   serverCheck: "ozone.server.check",
   serverSetup: "ozone.server.setup",
+  serversList: "ozone.servers.list",
+  serversAdd: "ozone.servers.add",
+  serversRemove: "ozone.servers.remove",
+  serversKey: "ozone.servers.key",
   notifyList: "ozone.notify.list",
   notifySet: "ozone.notify.set",
   notifyRemove: "ozone.notify.remove",
@@ -459,6 +468,11 @@ export const OZONE_OPERATE_RPC_SCOPES = {
   // Both reach a server with this machine's SSH keys; setup can install Docker there.
   [OZONE_WS_METHODS.serverCheck]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.serverSetup]: AuthOrchestrationOperateScope,
+  // Signs in to a server, and keeps a way back in: a key, or a Dokploy API key.
+  [OZONE_WS_METHODS.serversAdd]: AuthOrchestrationOperateScope,
+  [OZONE_WS_METHODS.serversRemove]: AuthOrchestrationOperateScope,
+  // Makes Ozone's SSH key the first time; what it shows is public.
+  [OZONE_WS_METHODS.serversKey]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.notifySet]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.notifyRemove]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.notifyTest]: AuthOrchestrationOperateScope,
@@ -482,6 +496,8 @@ export const OZONE_RPC_SCOPES = {
   [OZONE_WS_METHODS.deployMetrics]: AuthOrchestrationReadScope,
   // Channels' secrets are never in the list.
   [OZONE_WS_METHODS.notifyList]: AuthOrchestrationReadScope,
+  // API keys are never in the list.
+  [OZONE_WS_METHODS.serversList]: AuthOrchestrationReadScope,
 } as const;
 
 /** Every Ozone method reports under one aggregate in traces. */
@@ -638,6 +654,26 @@ export const OzoneWsRpcs = [
   Rpc.make(OZONE_WS_METHODS.serverSetup, {
     payload: OzoneServerSetupInput,
     success: OzoneServerReport,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.serversList, {
+    payload: Schema.Struct({}),
+    success: OzoneServersListResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.serversAdd, {
+    payload: OzoneServerAddInput,
+    success: OzoneServersListResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.serversRemove, {
+    payload: OzoneServerRemoveInput,
+    success: OzoneServerRemoveResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.serversKey, {
+    payload: Schema.Struct({}),
+    success: OzoneServerKeyResult,
     error: OzoneRpcError,
   }),
   Rpc.make(OZONE_WS_METHODS.notifyList, {

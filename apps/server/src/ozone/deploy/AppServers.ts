@@ -16,6 +16,7 @@ import * as ServerConfig from "../../config.ts";
 import * as ProcessRunner from "../../processRunner.ts";
 import * as DockerCli from "../runtime/DockerCli.ts";
 import { parseDiskFree } from "./metrics.ts";
+import * as SshAccess from "./SshAccess.ts";
 import {
   PROXY_CONTAINER,
   PROXY_PROJECT,
@@ -31,7 +32,8 @@ export interface ShellOutput {
 }
 
 /**
- * Runs a POSIX shell script on this machine, or on a server over SSH with this machine's keys.
+ * Runs a POSIX shell script on this machine, or on a server over SSH with this machine's keys and
+ * Ozone's.
  * Kept apart from Docker so tests can play the server.
  */
 export class ServerShell extends Context.Service<
@@ -64,12 +66,14 @@ export const layerServerShell = Layer.effect(
   ServerShell,
   Effect.gen(function* () {
     const runner = yield* ProcessRunner.ProcessRunner;
+    const access = yield* SshAccess.SshAccess;
     return ServerShell.of({
       run: Effect.fn("ServerShell.run")(function* (host, script, timeout) {
         const output = yield* runner
           .run({
             command: host === null ? "sh" : "ssh",
-            args: host === null ? ["-s"] : [...sshArgs(host), "sh -s"],
+            args:
+              host === null ? ["-s"] : [...(yield* access.sshOptions), ...sshArgs(host), "sh -s"],
             stdin: script,
             timeout: timeout ?? Duration.minutes(1),
             maxOutputBytes: 256 * 1024,
@@ -208,7 +212,7 @@ const make = Effect.gen(function* () {
       if (reach.code !== 0) {
         return {
           ...base,
-          problem: `Ozone could not reach ${placeOf(host)} over SSH. Check that \`ssh ${host}\` works from this machine without a password prompt.\n${tail(reach)}`,
+          problem: `Ozone could not reach ${placeOf(host)} over SSH. Add it under Servers, or check that \`ssh ${host}\` works from this machine without a password prompt.\n${tail(reach)}`,
         };
       }
       if (reach.stdout.includes("ozone-no-docker")) {

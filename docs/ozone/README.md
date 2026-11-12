@@ -35,7 +35,18 @@ starts its lead thread.
   Postgres volume keeps the password it was created with, so a settings file Ozone cannot read
   stops a deploy instead of being replaced. Migrations run from the build stage,
   which has the tools the production image leaves out. A server is reached with `docker -H ssh://`,
-  so Ozone needs no agent there, only Docker and this machine's SSH access.
+  so Ozone needs no agent there, only Docker and SSH access.
+- **Servers are saved once, and reached with Ozone's key beside the person's own.** Ozone runs
+  ssh with `<state>/ozone/ssh/config`, which adds its key and then includes `~/.ssh/config`, and
+  Docker gets a PATH whose first `ssh` passes that file. So a server added with a pasted key or a
+  one-time password works for every deploy, and one reached with the person's keys still does. The
+  password goes to ssh through `SSH_ASKPASS` and is never written down.
+- **Dokploy runs what Ozone hands it, from the app's Git remote.** Dokploy builds Compose from a
+  clone; a pasted Compose file has no folder to build in. So Ozone pushes the commit to the
+  branch's remote, and gives Dokploy its settings as a file mount, which Dokploy writes beside the
+  clone and the deploy command adds with `-f`. Dokploy then owns the containers, the domain and
+  the volumes, so snapshots, rollback, moving data and monitoring stay in Dokploy, and Ozone
+  refuses a migration that can lose data there: it could not take a snapshot first.
 - **A domain goes through one proxy per host.** Ozone runs Traefik there as its own Compose
   project, `ozone-proxy`, on ports 80 and 443; an app with a domain drops its published port, joins
   the proxy's network and is routed by its labels. Without a port of its own, a second copy can

@@ -3,8 +3,8 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { HISTORY_LIMIT, historyEntries, withDeployment } from "./deployments.ts";
 
-const here = { host: null, publicUrl: null, domain: null };
-const server = { host: "deploy@example.com", publicUrl: null, domain: null };
+const here = { host: null, dokploy: null, publicUrl: null, domain: null };
+const server = { host: "deploy@example.com", dokploy: null, publicUrl: null, domain: null };
 const deployment = (id: string, extra: Partial<OzoneDeployment> = {}): OzoneDeployment => ({
   id,
   trigger: "person",

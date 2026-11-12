@@ -14,7 +14,9 @@ import {
   type OzoneDeployRunInput,
   type OzoneDeployWebhookInput,
   type OzoneNotifyChannel,
+  type OzoneServerAddInput,
   type OzoneServerInput,
+  type OzoneServerRemoveInput,
   type OzoneServerSetupInput,
   type OzoneEnvRemoveInput,
   type OzoneEnvSetInput,
@@ -38,6 +40,7 @@ import * as AppData from "./data/AppData.ts";
 import * as AppDeploy from "./deploy/AppDeploy.ts";
 import * as AppServers from "./deploy/AppServers.ts";
 import * as Notifier from "./deploy/Notifier.ts";
+import * as SavedServers from "./deploy/SavedServers.ts";
 import * as AppEnv from "./env/AppEnv.ts";
 import * as AppHistory from "./history/AppHistory.ts";
 import * as AppRuntime from "./runtime/AppRuntime.ts";
@@ -53,6 +56,7 @@ const make = Effect.gen(function* () {
   const deploys = yield* AppDeploy.AppDeploy;
   const servers = yield* AppServers.AppServers;
   const notifier = yield* Notifier.Notifier;
+  const saved = yield* SavedServers.SavedServers;
   const buildSnapshot = (build: OzoneBuild | null) => ({
     build,
     status: build === null ? ("planning" as const) : BuildModel.statusOf(build),
@@ -109,6 +113,10 @@ const make = Effect.gen(function* () {
     [OZONE_WS_METHODS.deployWebhook]: (input: OzoneDeployWebhookInput) => deploys.webhook(input),
     [OZONE_WS_METHODS.serverCheck]: (input: OzoneServerInput) => servers.check(input.host),
     [OZONE_WS_METHODS.serverSetup]: (input: OzoneServerSetupInput) => servers.setup(input),
+    [OZONE_WS_METHODS.serversList]: () => saved.list,
+    [OZONE_WS_METHODS.serversAdd]: (input: OzoneServerAddInput) => saved.add(input),
+    [OZONE_WS_METHODS.serversRemove]: (input: OzoneServerRemoveInput) => saved.remove(input.id),
+    [OZONE_WS_METHODS.serversKey]: () => saved.key,
     [OZONE_WS_METHODS.notifyList]: () => notifier.list,
     [OZONE_WS_METHODS.notifySet]: (input: OzoneNotifyChannel) => notifier.set(input),
     [OZONE_WS_METHODS.notifyRemove]: (input: { readonly id: string }) => notifier.remove(input.id),
@@ -158,6 +166,10 @@ export class OzoneWsHandlers extends Context.Reference<Effect.Success<typeof mak
       [OZONE_WS_METHODS.deployWebhook]: () => notProvided,
       [OZONE_WS_METHODS.serverCheck]: () => notProvided,
       [OZONE_WS_METHODS.serverSetup]: () => notProvided,
+      [OZONE_WS_METHODS.serversList]: () => notProvided,
+      [OZONE_WS_METHODS.serversAdd]: () => notProvided,
+      [OZONE_WS_METHODS.serversRemove]: () => notProvided,
+      [OZONE_WS_METHODS.serversKey]: () => notProvided,
       [OZONE_WS_METHODS.notifyList]: () => notProvided,
       [OZONE_WS_METHODS.notifySet]: () => notProvided,
       [OZONE_WS_METHODS.notifyRemove]: () => notProvided,

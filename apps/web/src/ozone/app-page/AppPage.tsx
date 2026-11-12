@@ -11,6 +11,7 @@ import {
   type LucideIcon,
   RocketIcon,
   ScrollTextIcon,
+  ServerCogIcon,
   ServerIcon,
 } from "lucide-react";
 
@@ -52,6 +53,7 @@ import { LogsSection } from "./LogsSection";
 import { MonitoringSection } from "./MonitoringSection";
 import { NotificationsSection } from "./NotificationsSection";
 import { OverviewSection } from "./OverviewSection";
+import { ServersSection } from "./ServersSection";
 
 const SECTION_ICON: Record<AppSection, LucideIcon> = {
   overview: BoxIcon,
@@ -63,6 +65,7 @@ const SECTION_ICON: Record<AppSection, LucideIcon> = {
   deploy: RocketIcon,
   deployments: ServerIcon,
   monitoring: ActivityIcon,
+  servers: ServerCogIcon,
   notifications: BellIcon,
 };
 
@@ -177,6 +180,8 @@ function Section(props: {
       return <DeploymentsSection {...shared} />;
     case "monitoring":
       return <MonitoringSection {...shared} />;
+    case "servers":
+      return <ServersSection environmentId={props.environmentId} />;
     case "notifications":
       return <NotificationsSection environmentId={props.environmentId} />;
   }

@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
 import * as ProcessRunner from "../../processRunner.ts";
+import * as SshAccess from "../deploy/SshAccess.ts";
 
 export interface DockerRunInput {
   readonly args: ReadonlyArray<string>;
@@ -100,8 +101,14 @@ export const removesData = (args: ReadonlyArray<string>): boolean => {
   return (compose.name === "down" || compose.name === "rm") && asksForVolumes(compose.rest);
 };
 
+/** Whether the command reaches a Docker host over SSH. */
+const overSsh = (args: ReadonlyArray<string>) =>
+  args.some((arg, index) => arg.startsWith("ssh://") && args[index - 1] === "-H");
+
 export const make = Effect.gen(function* () {
   const runner = yield* ProcessRunner.ProcessRunner;
+  // Absent in tests that build Docker alone; then ssh is the person's own.
+  const access = yield* Effect.serviceOption(SshAccess.SshAccess);
   return DockerCli.of({
     run: Effect.fn("DockerCli.run")(function* (input) {
       if (removesData(input.args) && input.allowDataRemoval !== true) {
@@ -109,12 +116,15 @@ export const make = Effect.gen(function* () {
           new Error(`Ozone refused a Docker command that removes data: ${input.args.join(" ")}`),
         );
       }
+      const sshEnv =
+        access._tag === "Some" && overSsh(input.args) ? yield* access.value.dockerEnv : {};
+      const env = Object.keys(sshEnv).length === 0 ? input.env : { ...input.env, ...sshEnv };
       const output = yield* runner
         .run({
           command: "docker",
           args: input.args,
           cwd: input.cwd,
-          env: input.env,
+          env,
           stdin: input.stdin,
           timeout: input.timeout ?? DEFAULT_TIMEOUT,
           maxOutputBytes: input.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES,

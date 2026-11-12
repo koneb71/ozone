@@ -3,6 +3,7 @@ import type {
   OzoneDeploymentEntry,
   OzoneNotifyChannel,
   OzoneNotifyEvent,
+  OzoneServerAddInput,
 } from "@t3tools/contracts";
 
 export const HOST = /^(?:[A-Za-z0-9._-]+@)?[A-Za-z0-9][A-Za-z0-9.-]*(?::\d{1,5})?$/;
@@ -85,4 +86,53 @@ export const DEFAULT_NAME: Record<ChannelKind, string> = {
   discord: "Discord",
   telegram: "Telegram",
   webhook: "Webhook",
+};
+
+export type ServerMethod = "own-keys" | "ozone-key" | "password" | "dokploy";
+
+export interface ServerDraft {
+  readonly method: ServerMethod;
+  readonly name: string;
+  readonly host: string;
+  readonly password: string;
+  readonly url: string;
+  readonly apiKey: string;
+}
+
+const DOKPLOY_URL = /^https?:\/\/[^\s/]+(?::\d{1,5})?\/?$/;
+
+/** The server a form describes, or what is wrong with it. */
+export function serverFromDraft(
+  draft: ServerDraft,
+): { readonly server: OzoneServerAddInput } | { readonly problem: string } {
+  const host = draft.host.trim();
+  if (draft.method === "dokploy") {
+    const url = draft.url.trim().replace(/\/+$/, "");
+    const apiKey = draft.apiKey.trim();
+    if (!DOKPLOY_URL.test(url)) {
+      return { problem: "The address you open Dokploy at, such as https://dokploy.example.com." };
+    }
+    if (apiKey.length === 0)
+      return { problem: "Paste an API key from Dokploy's profile settings." };
+    const name = draft.name.trim() || url.replace(/^https?:\/\//, "");
+    return { server: { kind: "dokploy", name: name.slice(0, 64), url, apiKey } };
+  }
+  if (!HOST.test(host) || !host.includes("@")) {
+    return {
+      problem: "Name it as user@host, such as root@203.0.113.7 or deploy@example.com:2222.",
+    };
+  }
+  const name = (draft.name.trim() || host.replace(/^[^@]*@/, "").replace(/:\d+$/, "")).slice(0, 64);
+  if (draft.method === "password") {
+    if (draft.password.length === 0) return { problem: "Type the password for that user." };
+    return { server: { kind: "ssh-password", name, host, password: draft.password } };
+  }
+  return { server: { kind: "ssh", name, host, access: draft.method } };
+}
+
+export const SERVER_METHOD_LABEL: Record<ServerMethod, string> = {
+  "own-keys": "This computer's SSH keys",
+  "ozone-key": "Paste Ozone's key on it",
+  password: "Sign in with a password once",
+  dokploy: "Dokploy, with an API key",
 };

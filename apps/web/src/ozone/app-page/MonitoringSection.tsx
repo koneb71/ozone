@@ -43,8 +43,9 @@ export function MonitoringSection(props: {
 }) {
   const target = { environmentId: props.environmentId, input: { projectId: props.app.projectId } };
   const metrics = useEnvironmentQuery(ozoneEnvironment.deployMetrics(target));
-  const host =
-    useEnvironmentQuery(ozoneEnvironment.deployStatus(target)).data?.target?.host ?? null;
+  const deployedTo =
+    useEnvironmentQuery(ozoneEnvironment.deployStatus(target)).data?.target ?? null;
+  const host = deployedTo?.host ?? null;
   const containers = (metrics.data?.containers ?? []).filter(
     (container) => container.service !== "migrate",
   );
@@ -165,7 +166,9 @@ export function MonitoringSection(props: {
         />
       </SettingsSection>
 
-      <ServerSection environmentId={props.environmentId} host={host} />
+      {deployedTo?.dokploy == null ? (
+        <ServerSection environmentId={props.environmentId} host={host} />
+      ) : null}
     </SettingsPageContainer>
   );
 }

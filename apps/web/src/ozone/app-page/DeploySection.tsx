@@ -3,7 +3,9 @@ import type {
   OzoneApp,
   OzoneDeployStatus,
   OzoneDeployTarget,
+  OzoneSavedServer,
 } from "@t3tools/contracts";
+import { Link } from "@tanstack/react-router";
 import { CopyIcon, ExternalLinkIcon, RocketIcon, SquareIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -15,6 +17,13 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import {
+  Select,
+  SelectItem,
+  SelectPopup,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
 import { Spinner } from "~/components/ui/spinner";
 import { Switch } from "~/components/ui/switch";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
@@ -35,8 +44,14 @@ import { useOzoneCommand } from "../ui/useOzoneCommand";
 import { ServerSection } from "./ServerRows";
 
 const URL_PATTERN = /^https?:\/\/\S+$/;
-const placeOf = (host: string | null) =>
-  host === null ? "this computer" : host.replace(/^[^@]*@/, "");
+const placeOf = (target: Pick<OzoneDeployTarget, "host" | "dokploy">) =>
+  target.dokploy !== null
+    ? "Dokploy"
+    : target.host === null
+      ? "this computer"
+      : target.host.replace(/^[^@]*@/, "");
+/** The picker's value for a host typed before servers could be saved. */
+const TYPED = "typed";
 
 function stateLine(status: OzoneDeployStatus): string {
   // Held back before anything changed: what ran before still runs.
@@ -73,15 +88,23 @@ export function DeploySection(props: {
 }) {
   const target = { environmentId: props.environmentId, input: { projectId: props.app.projectId } };
   const status = useEnvironmentQuery(ozoneEnvironment.deployStatus(target));
+  const saved = useEnvironmentQuery(
+    ozoneEnvironment.savedServers({ environmentId: props.environmentId, input: {} }),
+  );
   return (
     <SettingsPageContainer>
-      {status.data === null ? (
+      {status.data === null || (saved.data === null && saved.error === null) ? (
         <SettingsSection title="Production">
           <LoadingRow label="Loading the deploy" />
         </SettingsSection>
       ) : (
         // The form starts from where the app was last deployed, once that is known.
-        <DeployForm {...props} status={status.data} refresh={status.refresh} />
+        <DeployForm
+          {...props}
+          status={status.data}
+          servers={saved.data?.servers ?? []}
+          refresh={status.refresh}
+        />
       )}
     </SettingsPageContainer>
   );
@@ -91,26 +114,41 @@ function DeployForm(props: {
   readonly app: OzoneApp;
   readonly environmentId: EnvironmentId;
   readonly status: OzoneDeployStatus;
+  readonly servers: ReadonlyArray<OzoneSavedServer>;
   readonly refresh: () => void;
 }) {
-  const { status } = props;
+  const { status, servers } = props;
   const last = status.target;
+  const lastServer =
+    last === null
+      ? null
+      : (servers.find((server) =>
+          server.kind === "dokploy" ? server.id === last.dokploy : server.host === last.host,
+        ) ?? null);
   const deploy = useAtomCommand(ozoneEnvironment.deploy, { reportFailure: false });
   const stopDeploy = useAtomCommand(ozoneEnvironment.stopDeploy, { reportFailure: false });
   const { working, run } = useOzoneCommand();
-  const [where, setWhere] = useState<"here" | "server">(last?.host == null ? "here" : "server");
-  const [host, setHost] = useState(last?.host ?? "");
+  const [where, setWhere] = useState<"here" | "server">(
+    last === null || (last.host === null && last.dokploy === null) ? "here" : "server",
+  );
+  // A host typed before servers could be saved stays choosable as it was.
+  const typedHost = last?.host != null && lastServer === null ? last.host : null;
+  const [serverId, setServerId] = useState<string>(
+    lastServer?.id ?? (typedHost !== null ? TYPED : (servers[0]?.id ?? "")),
+  );
+  const chosen = servers.find((server) => server.id === serverId) ?? null;
   const [domain, setDomain] = useState(last?.domain ?? "");
   const [publicUrl, setPublicUrl] = useState(last?.publicUrl ?? "");
   const [bringData, setBringData] = useState(true);
   const [confirm, setConfirm] = useState<"stop" | "migrate" | null>(null);
 
-  const trimmedHost = host.trim();
+  const trimmedHost =
+    serverId === TYPED ? (typedHost ?? "") : chosen?.kind === "ssh" ? chosen.host : "";
   const trimmedDomain = domain.trim().toLowerCase();
   const trimmedUrl = publicUrl.trim();
   const hostProblem =
-    where === "server" && !HOST.test(trimmedHost)
-      ? "Name it as user@host, the way ssh reaches it."
+    where === "server" && chosen === null && !(serverId === TYPED && HOST.test(trimmedHost))
+      ? "Add a server under Servers first."
       : null;
   const domainProblem =
     trimmedDomain.length > 0 && !DOMAIN.test(trimmedDomain)
@@ -122,10 +160,17 @@ function DeployForm(props: {
       : null;
   const invalid = hostProblem !== null || domainProblem !== null || urlProblem !== null;
   const busy = working !== null || status.state === "deploying";
-  const chosenHost = where === "server" ? trimmedHost : null;
-  // Somewhere other than where it runs now: its data can come along.
+  const chosenDokploy = where === "server" && chosen?.kind === "dokploy" ? chosen.id : null;
+  const chosenHost = where === "server" && chosenDokploy === null ? trimmedHost : null;
+  // Somewhere other than where it runs now: its data can come along, unless Dokploy keeps it.
   const movesFrom =
-    last !== null && !invalid && chosenHost !== last.host ? placeOf(last.host) : null;
+    last !== null &&
+    !invalid &&
+    last.dokploy === null &&
+    chosenDokploy === null &&
+    chosenHost !== last.host
+      ? placeOf(last)
+      : null;
 
   const refresh = props.refresh;
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- polls the server's deploy status, which names the step that runs, while a deploy is under way
@@ -137,6 +182,7 @@ function DeployForm(props: {
 
   const targetOf = (): OzoneDeployTarget => ({
     host: chosenHost,
+    dokploy: chosenDokploy,
     publicUrl: trimmedDomain.length === 0 && trimmedUrl.length > 0 ? trimmedUrl : null,
     domain: trimmedDomain.length > 0 ? trimmedDomain : null,
   });
@@ -236,7 +282,23 @@ function DeployForm(props: {
       <SettingsSection title="Target">
         <SettingsRow
           title="Where"
-          description="A server is reached over SSH with this computer's keys."
+          description={
+            <>
+              A server you added under{" "}
+              <Link
+                className="underline underline-offset-2"
+                params={{
+                  environmentId: props.environmentId,
+                  projectId: props.app.projectId,
+                  section: "servers",
+                }}
+                to="/apps/$environmentId/$projectId/$section"
+              >
+                Servers
+              </Link>
+              , over SSH or through Dokploy.
+            </>
+          }
           control={
             <ToggleGroup
               aria-label="Where to deploy"
@@ -255,19 +317,43 @@ function DeployForm(props: {
         {where === "server" ? (
           <SettingsRow
             title="Server"
-            description={hostProblem ?? "As user@host, the way ssh reaches it."}
+            description={
+              hostProblem ??
+              (chosenDokploy !== null
+                ? "Dokploy clones the app's Git remote, so Ozone pushes the commit there first. Snapshots, rollback and monitoring stay in Dokploy."
+                : serverId === TYPED
+                  ? "Typed before it could be saved. Add it under Servers to keep it."
+                  : "Ozone builds and runs the app there over SSH.")
+            }
             control={
-              <Input
-                aria-label="Server"
-                aria-invalid={hostProblem !== null && trimmedHost.length > 0}
-                autoComplete="off"
-                className="sm:w-64"
-                disabled={busy}
-                placeholder="deploy@example.com"
-                spellCheck={false}
-                value={host}
-                onChange={(event) => setHost(event.target.value)}
-              />
+              <Select
+                disabled={busy || (servers.length === 0 && typedHost === null)}
+                value={serverId}
+                onValueChange={(value) => {
+                  if (typeof value === "string") setServerId(value);
+                }}
+              >
+                <SelectTrigger aria-label="Server" className="sm:w-64">
+                  <SelectValue>
+                    {chosen?.name ?? (serverId === TYPED ? typedHost : "No servers yet")}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectPopup alignItemWithTrigger={false}>
+                  {servers.map((server) => (
+                    <SelectItem key={server.id} hideIndicator value={server.id}>
+                      {server.name}
+                      <span className="text-muted-foreground">
+                        {server.kind === "dokploy" ? " · Dokploy" : ` · ${server.host}`}
+                      </span>
+                    </SelectItem>
+                  ))}
+                  {typedHost === null ? null : (
+                    <SelectItem hideIndicator value={TYPED}>
+                      {typedHost}
+                    </SelectItem>
+                  )}
+                </SelectPopup>
+              </Select>
             }
           />
         ) : null}
@@ -276,7 +362,9 @@ function DeployForm(props: {
           description={
             domainProblem ??
             (trimmedDomain.length > 0
-              ? `Point it at ${where === "server" ? "the server" : "this computer"} first. Served over HTTPS; new versions take over without downtime.`
+              ? chosenDokploy !== null
+                ? "Point it at the Dokploy server first. Dokploy serves it over HTTPS."
+                : `Point it at ${where === "server" ? "the server" : "this computer"} first. Served over HTTPS; new versions take over without downtime.`
               : "Optional. Without one, the app answers on its own port.")
           }
           control={
@@ -326,7 +414,7 @@ function DeployForm(props: {
         )}
       </SettingsSection>
 
-      {where === "server" && hostProblem === null ? (
+      {where === "server" && hostProblem === null && chosenDokploy === null ? (
         <ServerSection environmentId={props.environmentId} host={trimmedHost} />
       ) : null}
 

@@ -102,6 +102,9 @@ is taken after every task that passes its checks.
   removes. Its snapshots are kept apart, in `backups/<slug>/production/`, on this machine even when
   the app runs on a server. Checking a server and starting its proxy were tried over real SSH; a
   deploy to a server, and moving to one, with scripted Docker only.
+- An app deployed through Dokploy keeps its data in volumes Dokploy owns, out of Ozone's reach:
+  Ozone takes no snapshot there, never deletes the Dokploy service, and does not run a migration
+  that can lose data. Backups are Dokploy's.
 - Routine snapshots, the one after each task and the one before a rebuild, are pruned to the newest
   20 per app. A person's own snapshots and the undo points of a restore or a delete are kept until
   removed by hand.

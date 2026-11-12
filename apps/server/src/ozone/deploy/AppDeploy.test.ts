@@ -24,10 +24,11 @@ import * as AppData from "../data/AppData.ts";
 import * as DockerCli from "../runtime/DockerCli.ts";
 import * as AppDeploy from "./AppDeploy.ts";
 import * as AppServers from "./AppServers.ts";
+import * as DokployDeploy from "./DokployDeploy.ts";
 import * as Notifier from "./Notifier.ts";
 
 const projectId = ProjectId.make("project-notes");
-const here = { host: null, publicUrl: null, domain: null };
+const here = { host: null, dokploy: null, publicUrl: null, domain: null };
 const manifest: OzoneAppManifest = {
   version: 1,
   runtime: {
@@ -195,6 +196,8 @@ const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: bool
               awaitRoutes: (_host, _slug, count) =>
                 Ref.update(journal, (all) => [...all, `routes ${count}`]).pipe(Effect.as(true)),
             }),
+            // Only a target that names a Dokploy server reaches Dokploy.
+            Layer.mock(DokployDeploy.DokployDeploy)({}),
             Layer.mock(Notifier.Notifier)({
               notify: (notice) => Ref.update(notices, (all) => [...all, notice]),
             }),
@@ -324,6 +327,15 @@ it.effect("runs a migration that can lose data only when the person applies it",
     assert.isNull(applied.migration);
     const migrate = (yield* Ref.get(calls)).find((call) => step(call.args) === "run migrate");
     assert.include(migrate?.args ?? [], "OZONE_ACCEPT_MIGRATIONS=0001_drop.sql@abc");
+
+    // Dokploy keeps its data out of Ozone's reach, so no snapshot could come first.
+    const onDokploy = yield* deploy.deploy({
+      projectId,
+      target: { ...here, dokploy: "dokploy" },
+      acceptMigrations: true,
+    });
+    assert.strictEqual(onDokploy.state, "failed");
+    assert.include(onDokploy.message ?? "", "cannot reach the data Dokploy keeps");
   }).pipe(Effect.provide(layerTest)),
 );
 
@@ -360,7 +372,7 @@ it.effect("backs up and restores production from the commit it runs", () =>
 it.effect("moves to a server with its data, and stops what ran before", () =>
   Effect.gen(function* () {
     const { deploy, calls, steps, forget } = yield* makeHarness();
-    const server = { host: "deploy@example.com", publicUrl: null, domain: null };
+    const server = { host: "deploy@example.com", dokploy: null, publicUrl: null, domain: null };
     yield* deploy.deploy({ projectId, target: here });
     yield* forget;
     yield* Ref.set(calls, []);
@@ -411,7 +423,12 @@ it.effect("gives the image build the host's certificate bundle behind a proxy", 
 it.effect("reaches a Docker host over SSH, and says which step failed", () =>
   Effect.gen(function* () {
     const { deploy, calls } = yield* makeHarness({ failAt: "build" });
-    const target = { host: "deploy@example.com:2222", publicUrl: null, domain: null };
+    const target = {
+      host: "deploy@example.com:2222",
+      dokploy: null,
+      publicUrl: null,
+      domain: null,
+    };
     const failed = yield* deploy.deploy({ projectId, target });
     assert.strictEqual(failed.state, "failed");
     assert.include(failed.message ?? "", "The production image could not be built");
@@ -434,7 +451,12 @@ it.effect("reaches a Docker host over SSH, and says which step failed", () =>
 it.effect("serves a domain through the proxy, and switches versions without going down", () =>
   Effect.gen(function* () {
     const { deploy, steps, forget, fs, path, directory } = yield* makeHarness();
-    const domain = { host: "deploy@example.com", publicUrl: null, domain: "notes.example.com" };
+    const domain = {
+      host: "deploy@example.com",
+      dokploy: null,
+      publicUrl: null,
+      domain: "notes.example.com",
+    };
     const first = yield* deploy.deploy({ projectId, target: domain });
     assert.include(first, { state: "running", url: "https://notes.example.com" });
     assert.deepStrictEqual((yield* steps).slice(0, 2), ["proxy on deploy@example.com", "build"]);

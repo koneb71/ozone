@@ -19,7 +19,11 @@ import * as AppData from "./data/AppData.ts";
 import * as AppDeploy from "./deploy/AppDeploy.ts";
 import * as AppServers from "./deploy/AppServers.ts";
 import * as AutoDeploy from "./deploy/AutoDeploy.ts";
+import * as Dokploy from "./deploy/Dokploy.ts";
+import * as DokployDeploy from "./deploy/DokployDeploy.ts";
 import * as Notifier from "./deploy/Notifier.ts";
+import * as SavedServers from "./deploy/SavedServers.ts";
+import * as SshAccess from "./deploy/SshAccess.ts";
 import * as OzoneDeployWebhook from "./deploy/webhook.ts";
 import * as AppEnv from "./env/AppEnv.ts";
 import * as AppHistory from "./history/AppHistory.ts";
@@ -46,7 +50,9 @@ export const layer = Layer.mergeAll(OzoneWs.layer, AutoDeploy.layer).pipe(
       BuildPreview.layer,
     ),
   ),
-  Layer.provideMerge(Layer.mergeAll(AppServers.layer, Notifier.layer)),
+  Layer.provideMerge(DokployDeploy.layer),
+  Layer.provideMerge(SavedServers.layer),
+  Layer.provideMerge(Layer.mergeAll(AppServers.layer, Notifier.layer, Dokploy.layer)),
   Layer.provideMerge(BuildGates.layer),
   Layer.provideMerge(AppRuntime.layer),
   Layer.provideMerge(AppData.layer),
@@ -61,6 +67,8 @@ export const layer = Layer.mergeAll(OzoneWs.layer, AutoDeploy.layer).pipe(
       AppServers.layerServerShell,
     ),
   ),
+  // Below Docker and the shell, so both reach servers with Ozone's key.
+  Layer.provideMerge(SshAccess.layer),
   Layer.provide(Layer.mergeAll(GitVcsDriver.layer, NetService.layer)),
 );
 
