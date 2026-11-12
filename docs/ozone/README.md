@@ -68,8 +68,14 @@ git fetch upstream main
 git merge upstream/main
 ```
 
+`.github/workflows/ozone-upstream.yml` tries this merge every Monday without pushing anything. A
+red run means the fork has drifted; its summary names the files that conflict.
+
 - Conflicts should only appear in files listed in [SEAMS.md](./SEAMS.md). Keep upstream's side and
   re-apply the seam.
+- A seam that replaces a line of upstream's can fall behind without conflicting. After a merge,
+  compare `McpHttpServer.layer` with the server's own registration in `apps/server/src/server.ts`:
+  a toolkit upstream adds to its layer, as it did `layerToolSearch`, must be added there too.
 - Upstream's GitHub workflows are parked in `.github/workflows-upstream/` because they need
   upstream's runners and secrets. If a merge adds a file to `.github/workflows/`, move it there.
 - Re-read `packages/provider-core/src/server/orchestrationInstructions.ts` after each merge. The
