@@ -111,8 +111,11 @@ red run means the fork has drifted; its summary names the files that conflict.
 
 ## Releasing
 
-`.github/workflows/ozone-release.yml` builds the desktop app for Linux and Apple silicon, and the
-command-line archive the app installs on a remote machine. It opens each desktop build before it
+`.github/workflows/ozone-release.yml` builds the desktop app for Linux, Apple silicon and Windows
+x64, and the command-line archive the app installs on a remote machine. Windows builds on a Windows
+runner rather than cross-compiling as upstream does, which only pays off with upstream's signing.
+Its app does not carry the Linux archive upstream embeds for running the server inside WSL, so that
+mode needs a development build. It opens each desktop build before it
 keeps it. A manual run leaves the files on the run. Pushing a `v<version>` tag also gathers them
 into a draft release; publishing that draft is the release.
 

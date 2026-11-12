@@ -1,7 +1,7 @@
 name: Ozone release
 
-# Builds what people install: the desktop app and the command-line archive the app fetches for a
-# remote machine. A manual run keeps them as workflow artifacts. A v* tag also gathers them into a
+# Builds what people install, for Linux, Apple silicon and Windows: the desktop app and the
+# command-line archive the app fetches for a remote machine. A manual run keeps them as workflow artifacts. A v* tag also gathers them into a
 # draft GitHub Release, which a person reads and publishes. Nothing is signed.
 on:
   workflow_dispatch:
@@ -26,6 +26,10 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
+    # Git's bash, on Windows too, so every step reads the same.
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
@@ -44,6 +48,14 @@ jobs:
             arch: arm64
             rust_target: aarch64-apple-darwin
             key: darwin-arm64
+          # Built on Windows itself: unsigned, so it needs none of the cross-signing upstream does.
+          - name: Windows x64
+            runner: windows-2025
+            platform: win
+            target: nsis
+            arch: x64
+            rust_target: x86_64-pc-windows-msvc
+            key: win32-x64
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -93,7 +105,8 @@ jobs:
           rustup target add "${{ matrix.rust_target }}"
           cargo build --locked --release --manifest-path native/resource-monitor/Cargo.toml --target "${{ matrix.rust_target }}"
           mkdir -p "$RUNNER_TEMP/resource-monitor/${{ matrix.key }}"
-          cp "native/resource-monitor/target/${{ matrix.rust_target }}/release/t3-resource-monitor" "$RUNNER_TEMP/resource-monitor/${{ matrix.key }}/"
+          binary="t3-resource-monitor${{ matrix.platform == 'win' && '.exe' || '' }}"
+          cp "native/resource-monitor/target/${{ matrix.rust_target }}/release/$binary" "$RUNNER_TEMP/resource-monitor/${{ matrix.key }}/"
 
       - name: Build the command-line archive
         shell: bash
@@ -132,6 +145,9 @@ jobs:
             app=$(ls -d "$mount"/*.app)
             executable=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$app/Contents/Info.plist")
             "${check[@]}" --executable "$app/Contents/MacOS/$executable"
+          elif [[ "${{ matrix.platform }}" == "win" ]]; then
+            # The installer's own contents, unpacked beside it by electron-builder.
+            "${check[@]}" --executable "$(ls "$GITHUB_WORKSPACE"/release/win-unpacked/*.exe | head -n 1)"
           else
             appimage=$(ls "$GITHUB_WORKSPACE"/release/*.AppImage)
             chmod +x "$appimage"
@@ -155,7 +171,7 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           mkdir -p release-publish
-          for file in release/*.dmg release/*.zip release/*.AppImage release/*.deb release/*.blockmap release/*.yml release-cli/*; do
+          for file in release/*.dmg release/*.zip release/*.AppImage release/*.deb release/*.exe release/*.blockmap release/*.yml release-cli/*; do
             [[ "$file" == */builder-debug.yml ]] && continue
             cp "$file" release-publish/
           done
@@ -191,7 +207,7 @@ jobs:
       - name: Write checksums
         working-directory: assets
         run: |
-          sha256sum t3-*.tar.gz > SHA256SUMS
+          sha256sum t3-*.tar.gz t3-*.zip > SHA256SUMS
           cat SHA256SUMS
 
       - name: Draft
