@@ -34,9 +34,10 @@ export function firstManagedDenial(
 export function managedTelemetryOffMessage(
   policy: ManagedPolicySummary | undefined,
 ): string | undefined {
+  // ozone-seam: Ozone reports nothing by default, so its notices must not say it collects data.
   return policy?.limits?.telemetry === false
     ? `${policy.organization} turned off anonymous usage data.`
-    : undefined;
+    : "Ozone does not collect usage data.";
 }
 
 export interface ManagedInstanceLocks {

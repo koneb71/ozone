@@ -118,12 +118,15 @@ jobs:
 
       # Vite bundles a dependency the first time a test asks for it. On a fresh runner the browser
       # sometimes loses its connection in the middle of a run, most likely when a late bundle makes
-      # the page reload. The cache keeps what earlier runs bundled.
-      - name: Cache Vite's dependency bundles
-        uses: actions/cache@v6
+      # the page reload. The cache keeps what earlier runs bundled. It is saved after every run,
+      # failed ones too: a run that lost its browser has bundled what the next one needs.
+      - name: Restore Vite's dependency bundles
+        uses: actions/cache/restore@v6
         with:
           path: apps/web/node_modules/.vite
-          key: web-vite-deps-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'apps/web/vite.config.ts') }}-${{ matrix.shard }}
+          key: web-vite-deps-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'apps/web/vite.config.ts') }}-${{ matrix.shard }}-${{ github.run_id }}
+          restore-keys: |
+            web-vite-deps-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'apps/web/vite.config.ts') }}-${{ matrix.shard }}-
 
       # The package's own test script, plus the shard. A shard that fails runs once more, on what
       # its first try bundled: a lost browser passes then, and a test that is broken fails again.
@@ -137,3 +140,10 @@ jobs:
             echo "::warning::Web shard ${{ matrix.shard }} failed once. Running it again."
             run_shard
           }
+
+      - name: Save Vite's dependency bundles
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: apps/web/node_modules/.vite
+          key: web-vite-deps-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'apps/web/vite.config.ts') }}-${{ matrix.shard }}-${{ github.run_id }}

@@ -50,6 +50,7 @@ These files contain a comment with `ozone-seam` at each edit.
 | `apps/web/src/components/chat/useComposerSend.ts`           | sending a prompt no longer counts towards upstream's star prompt                                       |
 | `apps/web/src/components/sidebar/SidebarChrome.tsx`         | sidebar brand name                                                                                     |
 | `apps/web/src/routes/_chat.index.tsx`                       | the index route shows Ozone's home                                                                     |
+| `apps/web/src/state/managedPolicy.ts`                       | usage-data notices say Ozone collects none                                                             |
 | `apps/web/vite.config.ts`                                   | registers the build-time rename to Ozone, and `OZONE_TEST_CHROMIUM` for tests                          |
 | `knip.jsonc`                                                | finds the scripts upstream's parked workflows still name                                               |
 | `packages/client-runtime/src/rpc/client.ts`                 | lists Ozone's streaming RPC methods beside upstream's                                                  |
