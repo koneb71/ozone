@@ -1,4 +1,13 @@
-import { OZONE_WS_METHODS } from "@t3tools/contracts";
+import {
+  OZONE_WS_METHODS,
+  type OzoneApp,
+  type OzoneBuild,
+  type OzoneBuildSnapshot,
+  type OzoneBuildTask,
+  type OzoneCriterionResult,
+  type OzoneRuntimePhase,
+  type OzoneRuntimeStatus,
+} from "@t3tools/contracts";
 import type { Atom } from "effect/reactivity";
 
 import type { EnvironmentRegistry } from "../connection/registry.ts";
@@ -108,4 +117,203 @@ export function createOzoneEnvironmentAtoms<R, E>(
       tag: OZONE_WS_METHODS.deployStop,
     }),
   };
+}
+
+export interface BuildHeadline {
+  readonly tone: "info" | "success" | "warning";
+  readonly title: string;
+  readonly detail: string | undefined;
+  readonly busy: boolean;
+}
+
+const settled = (task: OzoneBuildTask) => task.status === "done" || task.status === "skipped";
+
+/** What a task is doing, in the words the build card shows beside its title. */
+export function taskStateLabel(task: OzoneBuildTask, build: OzoneBuild): string {
+  switch (task.status) {
+    case "pending":
+      return task.attempts > 0 ? "Going back for repair" : "Waiting";
+    case "running":
+      return task.attempts > 1 ? `Repairing (${task.attempts}/${build.maxAttempts})` : "Working";
+    case "checking":
+      return "Checking";
+    case "blocked":
+      return "Needs a decision";
+    case "done":
+      return "Done";
+    case "skipped":
+      return "Skipped";
+  }
+}
+
+export const CRITERION_LABEL: Record<OzoneCriterionResult["verdict"], string> = {
+  pass: "Works",
+  fail: "Does not work",
+  unchecked: "Not tried",
+};
+
+const failedCriteria = (build: OzoneBuild) =>
+  build.verification.results.filter((result) => result.verdict === "fail");
+
+/** The one line that says where a build stands. Null when there is nothing to show yet. */
+export function buildHeadline(snapshot: OzoneBuildSnapshot | null): BuildHeadline | null {
+  const build = snapshot?.build ?? null;
+  if (snapshot === null || build === null || build.tasks.length === 0) return null;
+  const done = build.tasks.filter(settled).length;
+  const progress = `${done} of ${build.tasks.length} tasks done`;
+  const tasks = `${build.tasks.length} ${build.tasks.length === 1 ? "task" : "tasks"}`;
+  if (snapshot.status === "review") {
+    return {
+      tone: "info",
+      title: "The plan is ready for you",
+      detail: `${tasks}. Start it here, or ask for changes below.`,
+      busy: false,
+    };
+  }
+  if (snapshot.status === "complete") {
+    const tried =
+      build.verification.status === "passed"
+        ? " · Tried in a browser"
+        : build.verification.status === "accepted"
+          ? " · Kept despite the browser test"
+          : "";
+    return { tone: "success", title: "Build complete", detail: `${progress}${tried}`, busy: false };
+  }
+  const blocked = build.tasks.find((task) => task.status === "blocked");
+  if (blocked !== undefined) {
+    return {
+      tone: "warning",
+      title: "The build needs a decision",
+      detail: `${blocked.title}: ${blocked.blockedReason ?? "it could not be finished."}`,
+      busy: false,
+    };
+  }
+  if (snapshot.status === "blocked") {
+    const failedGates = build.finalEvidence.filter((gate) => !gate.ok);
+    if (failedGates.length > 0) {
+      return {
+        tone: "warning",
+        title: "The final check failed",
+        detail: failedGates.map((gate) => gate.id).join(", "),
+        busy: false,
+      };
+    }
+    const failed = failedCriteria(build);
+    return {
+      tone: "warning",
+      title: "The app does not do everything asked",
+      detail: `A browser test found ${failed.length === 1 ? "1 problem" : `${failed.length} problems`}. The lead is on it.`,
+      busy: false,
+    };
+  }
+  const active = build.tasks.find(
+    (task) => task.status === "running" || task.status === "checking",
+  );
+  if (active !== undefined) {
+    return {
+      tone: "info",
+      title: `Building · ${progress}`,
+      detail: `${taskStateLabel(active, build)}: ${active.title}`,
+      busy: true,
+    };
+  }
+  if (build.finalStartedAt !== null) {
+    return { tone: "info", title: "Running the final check", detail: progress, busy: true };
+  }
+  const testing = build.verification.status;
+  if (testing === "running" || testing === "pending") {
+    return {
+      tone: "info",
+      title: "Trying the app in a browser",
+      detail: "A tester uses it the way you would.",
+      busy: true,
+    };
+  }
+  return { tone: "info", title: `Building · ${progress}`, detail: undefined, busy: false };
+}
+
+export interface RuntimePhaseLabel {
+  readonly label: string;
+  readonly tone: "success" | "info" | "warning" | "error" | "outline";
+}
+
+export function runtimePhaseLabel(phase: OzoneRuntimePhase | undefined): RuntimePhaseLabel {
+  switch (phase) {
+    case "running":
+      return { label: "Running", tone: "success" };
+    case "starting":
+      return { label: "Starting", tone: "info" };
+    case "unhealthy":
+      return { label: "Unhealthy", tone: "warning" };
+    case "failed":
+      return { label: "Failed", tone: "error" };
+    case "unavailable":
+      return { label: "Docker needed", tone: "warning" };
+    case "stopped":
+      return { label: "Stopped", tone: "outline" };
+    case undefined:
+      return { label: "Checking", tone: "outline" };
+  }
+}
+
+export interface AppNotice {
+  readonly tone: "default" | "info" | "warning" | "error";
+  readonly title: string;
+  readonly description: string | undefined;
+}
+
+/** What a thread says about the app it belongs to, above the composer. */
+export function appNotice(app: OzoneApp, status: OzoneRuntimeStatus | null): AppNotice {
+  const where = `localhost:${app.port}`;
+  switch (status?.phase) {
+    case undefined:
+      return { tone: "default", title: app.name, description: where };
+    case "running":
+      return { tone: "default", title: `${app.name} is running`, description: where };
+    case "starting":
+      return {
+        tone: "info",
+        title: `Starting ${app.name}`,
+        description: status.message ?? undefined,
+      };
+    case "stopped":
+      return { tone: "default", title: `${app.name} is stopped`, description: where };
+    case "unhealthy":
+      return {
+        tone: "warning",
+        title: `${app.name} is not answering`,
+        description: status.message ?? undefined,
+      };
+    case "failed":
+      return {
+        tone: "error",
+        title: `${app.name} did not start`,
+        description: status.message ?? undefined,
+      };
+    case "unavailable":
+      return {
+        tone: "warning",
+        title: "Docker is not running",
+        description: status.message ?? undefined,
+      };
+  }
+}
+
+/** Each project's most recently updated thread in one environment: the one opening an app shows. */
+export function latestThreadByProject<
+  Thread extends {
+    readonly environmentId: string;
+    readonly projectId: string;
+    readonly updatedAt: string;
+  },
+>(threads: Iterable<Thread>, environmentId: string): ReadonlyMap<string, Thread> {
+  const latest = new Map<string, Thread>();
+  for (const thread of threads) {
+    if (thread.environmentId !== environmentId) continue;
+    const current = latest.get(thread.projectId);
+    if (current === undefined || thread.updatedAt > current.updatedAt) {
+      latest.set(thread.projectId, thread);
+    }
+  }
+  return latest;
 }

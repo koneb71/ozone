@@ -28,6 +28,8 @@ const LISTED_OVERLAY_ROUTES: ReadonlySet<string> = new Set([
   "SettingsAuth",
   "SettingsWaitlist",
   "ThreadAgents",
+  // ozone-seam: the build's task list is a sheet over the thread, like the agents list.
+  "OzoneBuild",
   "ThreadBackgroundWork",
   "ThreadPullRequests",
   "ThreadQueue",

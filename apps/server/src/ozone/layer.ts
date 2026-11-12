@@ -9,6 +9,7 @@ import * as OzoneApps from "./apps/OzoneApps.ts";
 import * as BuildChecks from "./builds/BuildChecks.ts";
 import * as BuildConductor from "./builds/BuildConductor.ts";
 import * as BuildGates from "./builds/BuildGates.ts";
+import * as BuildPreview from "./builds/BuildPreview.ts";
 import * as BuildRepo from "./builds/BuildRepo.ts";
 import * as BuildReview from "./builds/BuildReview.ts";
 import * as BuildStore from "./builds/BuildStore.ts";
@@ -38,6 +39,7 @@ export const layer = OzoneWs.layer.pipe(
       AppHistory.layer,
       AppEnv.layer,
       AppDeploy.layer,
+      BuildPreview.layer,
     ),
   ),
   Layer.provideMerge(BuildGates.layer),

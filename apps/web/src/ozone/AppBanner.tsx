@@ -1,19 +1,12 @@
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
+import { appNotice } from "@t3tools/client-runtime/state/ozone";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import {
-  PreviewTabId,
-  type OzoneApp,
-  type OzoneRuntimeAction,
-  type OzoneRuntimeStatus,
-  type ProjectId,
-  type ScopedThreadRef,
-} from "@t3tools/contracts";
+import type { OzoneRuntimeAction, ProjectId, ScopedThreadRef } from "@t3tools/contracts";
 import { BoxIcon, DatabaseIcon, HammerIcon, MonitorIcon, PlayIcon } from "lucide-react";
 import { useEffect, useEffectEvent } from "react";
 
 import { resolveDiscoveredServerUrl } from "~/browser/browserTargetResolver";
 import { previewRuntimeFor } from "~/browser/previewRuntime";
-import type { ComposerBannerVariant } from "~/components/chat/ComposerBanner";
 import type { ComposerBannerStackItem } from "~/components/chat/ComposerBannerStack";
 import { openPreviewSession } from "~/components/preview/openPreviewSession";
 import { dispatchPreviewAction } from "~/components/preview/previewActionBus";
@@ -31,7 +24,7 @@ import { useAtomCommand } from "~/state/use-atom-command";
 import { AppMenu } from "./AppMenu";
 import { buildBannerItem } from "./BuildCard";
 import { useBuildStagedIn } from "./homeFiles";
-import { previewTabsShowing } from "./preview.logic";
+import { visiblePreviewShows } from "./preview.logic";
 import { ozoneEnvironment } from "./state";
 
 /** Threads whose preview Ozone has opened by itself, so closing it stays the user's decision. */
@@ -61,48 +54,6 @@ const heldBackSummary = (statements: string) => {
   return rest.length === 0 ? first : `${first} (and ${rest.length} more)`;
 };
 
-interface BannerCopy {
-  readonly variant: ComposerBannerVariant;
-  readonly title: string;
-  readonly description: string | undefined;
-}
-
-function bannerCopy(app: OzoneApp, status: OzoneRuntimeStatus | null): BannerCopy {
-  const where = `localhost:${app.port}`;
-  switch (status?.phase) {
-    case undefined:
-      return { variant: "default", title: app.name, description: where };
-    case "running":
-      return { variant: "default", title: `${app.name} is running`, description: where };
-    case "starting":
-      return {
-        variant: "info",
-        title: `Starting ${app.name}`,
-        description: status.message ?? undefined,
-      };
-    case "stopped":
-      return { variant: "default", title: `${app.name} is stopped`, description: where };
-    case "unhealthy":
-      return {
-        variant: "warning",
-        title: `${app.name} is not answering`,
-        description: status.message ?? undefined,
-      };
-    case "failed":
-      return {
-        variant: "error",
-        title: `${app.name} did not start`,
-        description: status.message ?? undefined,
-      };
-    case "unavailable":
-      return {
-        variant: "warning",
-        title: "Docker is not running",
-        description: status.message ?? undefined,
-      };
-  }
-}
-
 /**
  * The status of the Ozone app a thread belongs to, with its controls, as one composer notice.
  * Returns nothing for projects Ozone did not create.
@@ -126,7 +77,6 @@ export function useAppBanners(
   const approveBuild = useAtomCommand(ozoneEnvironment.approveBuild, { reportFailure: false });
   const sentThread = useQuietThreadShell(threadRef);
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
-  const adjustPreview = useAtomCommand(previewEnvironment.adjust, { reportFailure: false });
   const build = useEnvironmentQuery(
     threadRef === null || app === undefined
       ? null
@@ -172,21 +122,11 @@ export function useAppBanners(
   }, [threadRef, url, hasPreview]);
 
   // A page that failed while a worker was mid-edit has no live reload in it and would stay on
-  // screen after the fix, so a task that passes reloads the tabs that show the app.
+  // screen after the fix. The server reloads the tabs it runs; this reloads the one this window
+  // renders.
   const reloadPreview = useEffectEvent((target: ScopedThreadRef, appUrl: string) => {
-    const showing = previewTabsShowing(
-      readThreadPreviewState(target),
-      previewUrlOf(target, appUrl),
-    );
-    for (const tab of showing) {
-      if (tab.through === "visible-preview") {
-        dispatchPreviewAction("refresh");
-        continue;
-      }
-      void adjustPreview({
-        environmentId: target.environmentId,
-        input: { threadId: target.threadId, tabId: PreviewTabId.make(tab.tabId), hardReload: true },
-      });
+    if (visiblePreviewShows(readThreadPreviewState(target), previewUrlOf(target, appUrl))) {
+      dispatchPreviewAction("refresh");
     }
   });
   const tasksPassed = build.data?.build?.tasks.filter((task) => task.status === "done").length;
@@ -250,7 +190,7 @@ export function useAppBanners(
     }
   };
 
-  const copy = bannerCopy(app, status);
+  const copy = appNotice(app, status);
   const phase = status?.phase;
   const busy = phase === "starting";
   const buildItem = buildBannerItem(build.data, () => void approve());
@@ -291,7 +231,7 @@ export function useAppBanners(
       : []),
     {
       id: "ozone-app",
-      variant: copy.variant,
+      variant: copy.tone,
       group: "environment",
       icon: busy ? <Spinner /> : <BoxIcon />,
       title: copy.title,

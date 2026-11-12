@@ -1,5 +1,6 @@
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
-import type { EnvironmentId, OzoneApp, ThreadId } from "@t3tools/contracts";
+import { latestThreadByProject, runtimePhaseLabel } from "@t3tools/client-runtime/state/ozone";
+import type { EnvironmentId, OzoneApp } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
 import {
@@ -39,7 +40,6 @@ import { useEnvironmentQuery } from "~/state/query";
 import { buildThreadRouteParams } from "~/threadRoutes";
 
 import { DeletedAppList } from "./DeletedAppList";
-import { runtimePhaseLabel } from "./home.logic";
 import { OzoneMark } from "./OzoneMark";
 import { ozoneEnvironment } from "./state";
 import { useOzoneLaunch } from "./useOzoneLaunch";
@@ -357,17 +357,10 @@ function AppList(props: {
   const handleNewThread = useNewThreadHandler();
   const threads = useThreadShells();
 
-  const latestThreadByProject = new Map<string, { id: ThreadId; updatedAt: string }>();
-  for (const thread of threads) {
-    if (thread.environmentId !== props.environmentId) continue;
-    const latest = latestThreadByProject.get(thread.projectId);
-    if (latest === undefined || thread.updatedAt > latest.updatedAt) {
-      latestThreadByProject.set(thread.projectId, thread);
-    }
-  }
+  const latestThreads = latestThreadByProject(threads, props.environmentId);
 
   const open = (app: OzoneApp) => {
-    const latest = latestThreadByProject.get(app.projectId);
+    const latest = latestThreads.get(app.projectId);
     if (latest === undefined) {
       void handleNewThread(scopeProjectRef(props.environmentId, app.projectId));
       return;

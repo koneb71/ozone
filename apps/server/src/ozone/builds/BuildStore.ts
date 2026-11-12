@@ -28,6 +28,8 @@ export class BuildStore extends Context.Service<
     ) => Effect.Effect<A, OzoneAppError>;
     /** The build as it is now, then each saved change. */
     readonly changes: (threadId: ThreadId) => Stream.Stream<OzoneBuild | null, OzoneAppError>;
+    /** Every build as it is saved, from the moment of subscribing. */
+    readonly saves: Stream.Stream<OzoneBuild>;
   }
 >()("t3/ozone/builds/BuildStore") {}
 
@@ -96,6 +98,7 @@ const make = Effect.gen(function* () {
         }),
       ),
     ),
+    saves: Stream.fromPubSub(saved),
     changes: (threadId) =>
       Stream.unwrap(
         Effect.gen(function* () {

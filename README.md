@@ -100,7 +100,9 @@ Everything else under [docs](docs/) is T3 Code's documentation, and it still app
 
 ## What is not Ozone yet
 
-- The mobile app is T3 Code's and carries its name.
+- The mobile app carries T3 Code's name and has no build of Ozone's own. It shows a thread's app,
+  its controls, its build and its preview, and lists your apps under Settings, but this has not
+  been tried on a device yet.
 - The command-line tool is still called `t3`, and messages that come from the server can still say
   T3 Code.
 - There is no Windows build, and Ozone is untested on Windows.

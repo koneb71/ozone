@@ -268,6 +268,8 @@ function useSettingsIndexSections(): SettingsListSection[] {
     page(target, icon, label, { disabled: noServerTargets });
   // The same pages and groups as Settings on web, minus what mobile has no setting for.
   return [
+    // ozone-seam: Ozone's apps open from the top of Settings.
+    { rows: [serverPage("SettingsOzoneApps", "square.grid.2x2", gt("Apps"))] },
     {
       rows: [
         page("SettingsOrganization", "gearshape", gt("General")),

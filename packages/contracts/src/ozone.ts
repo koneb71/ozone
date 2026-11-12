@@ -441,36 +441,41 @@ export type OzoneSubscriptionMethod =
   | typeof OZONE_WS_METHODS.runtimeSubscribe
   | typeof OZONE_WS_METHODS.buildSubscribe;
 
-/** Spread into the server's scope map, which must name every method. */
-export const OZONE_RPC_SCOPES = {
-  [OZONE_WS_METHODS.appsList]: AuthOrchestrationReadScope,
+/** The methods that change something. A client offers one only with its scope. */
+export const OZONE_OPERATE_RPC_SCOPES = {
   [OZONE_WS_METHODS.appsCreate]: AuthOrchestrationOperateScope,
   // Removes the app's containers and data, behind a snapshot.
   [OZONE_WS_METHODS.appsDelete]: AuthOrchestrationOperateScope,
   // Brings a deleted app back from its folder and its last snapshot.
   [OZONE_WS_METHODS.appsRestore]: AuthOrchestrationOperateScope,
+  [OZONE_WS_METHODS.appsConfigure]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.runtimeAct]: AuthOrchestrationOperateScope,
-  [OZONE_WS_METHODS.runtimeLogs]: AuthOrchestrationReadScope,
-  [OZONE_WS_METHODS.runtimeSubscribe]: AuthOrchestrationReadScope,
-  [OZONE_WS_METHODS.dataList]: AuthOrchestrationReadScope,
   [OZONE_WS_METHODS.dataSnapshot]: AuthOrchestrationOperateScope,
   // Replaces the app's data: only a client that can already change the project may.
   [OZONE_WS_METHODS.dataRestore]: AuthOrchestrationOperateScope,
-  [OZONE_WS_METHODS.buildSubscribe]: AuthOrchestrationReadScope,
-  [OZONE_WS_METHODS.appsConfigure]: AuthOrchestrationOperateScope,
   // Starts the work of a plan: the same right as sending the lead a message.
   [OZONE_WS_METHODS.buildApprove]: AuthOrchestrationOperateScope,
-  [OZONE_WS_METHODS.historyList]: AuthOrchestrationReadScope,
   // Replaces the app's code and data, behind a commit and a snapshot of both as they are.
   [OZONE_WS_METHODS.historyRestore]: AuthOrchestrationOperateScope,
-  // Secrets' values are never in the list.
-  [OZONE_WS_METHODS.envList]: AuthOrchestrationReadScope,
   [OZONE_WS_METHODS.envSet]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.envRemove]: AuthOrchestrationOperateScope,
-  [OZONE_WS_METHODS.deployStatus]: AuthOrchestrationReadScope,
   // Runs the app where others can reach it, with this machine's Docker or SSH access.
   [OZONE_WS_METHODS.deployRun]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.deployStop]: AuthOrchestrationOperateScope,
+} as const;
+
+/** Spread into the server's scope map, which must name every method. */
+export const OZONE_RPC_SCOPES = {
+  ...OZONE_OPERATE_RPC_SCOPES,
+  [OZONE_WS_METHODS.appsList]: AuthOrchestrationReadScope,
+  [OZONE_WS_METHODS.runtimeLogs]: AuthOrchestrationReadScope,
+  [OZONE_WS_METHODS.runtimeSubscribe]: AuthOrchestrationReadScope,
+  [OZONE_WS_METHODS.dataList]: AuthOrchestrationReadScope,
+  [OZONE_WS_METHODS.buildSubscribe]: AuthOrchestrationReadScope,
+  [OZONE_WS_METHODS.historyList]: AuthOrchestrationReadScope,
+  // Secrets' values are never in the list.
+  [OZONE_WS_METHODS.envList]: AuthOrchestrationReadScope,
+  [OZONE_WS_METHODS.deployStatus]: AuthOrchestrationReadScope,
 } as const;
 
 /** Every Ozone method reports under one aggregate in traces. */

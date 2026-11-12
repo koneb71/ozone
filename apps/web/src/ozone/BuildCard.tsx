@@ -1,3 +1,8 @@
+import {
+  buildHeadline,
+  CRITERION_LABEL,
+  taskStateLabel,
+} from "@t3tools/client-runtime/state/ozone";
 import type {
   OzoneBuild,
   OzoneBuildSnapshot,
@@ -16,8 +21,6 @@ import {
 import type { ComposerBannerStackItem } from "~/components/chat/ComposerBannerStack";
 import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
-
-import { buildHeadline, CRITERION_LABEL, taskStateLabel } from "./build.logic";
 
 function TaskIcon({ task }: { readonly task: OzoneBuildTask }) {
   switch (task.status) {

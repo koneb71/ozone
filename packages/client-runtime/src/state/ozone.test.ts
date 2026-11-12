@@ -7,7 +7,7 @@ import {
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { buildHeadline, taskStateLabel } from "./build.logic";
+import { buildHeadline, latestThreadByProject, taskStateLabel } from "./ozone.ts";
 
 const task = (id: string, extra: Partial<OzoneBuildTask> = {}): OzoneBuildTask => ({
   id,
@@ -129,5 +129,29 @@ describe("taskStateLabel", () => {
     [task("a", { status: "blocked" }), "Needs a decision"],
   ])("%#", (entry, label) => {
     expect(taskStateLabel(entry, build([entry]))).toBe(label);
+  });
+});
+
+describe("latestThreadByProject", () => {
+  it("picks each project's newest thread in the environment asked for", () => {
+    const thread = (id: string, environmentId: string, projectId: string, updatedAt: string) => ({
+      id,
+      environmentId,
+      projectId,
+      updatedAt,
+    });
+    const latest = latestThreadByProject(
+      [
+        thread("old", "here", "notes", "2026-01-01T00:00:00.000Z"),
+        thread("new", "here", "notes", "2026-01-03T00:00:00.000Z"),
+        thread("elsewhere", "there", "notes", "2026-01-09T00:00:00.000Z"),
+        thread("only", "here", "shop", "2026-01-02T00:00:00.000Z"),
+      ],
+      "here",
+    );
+    expect([...latest].map(([projectId, entry]) => [projectId, entry.id])).toEqual([
+      ["notes", "new"],
+      ["shop", "only"],
+    ]);
   });
 });

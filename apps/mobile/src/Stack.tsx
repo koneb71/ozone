@@ -62,6 +62,9 @@ import { GitConfirmSheet } from "./features/threads/git/GitConfirmSheet";
 import { GitOverviewSheet } from "./features/threads/git/GitOverviewSheet";
 import { ThreadPullRequestsSheet } from "./features/threads/ThreadPullRequestsSheet";
 import { ThreadAgentsSheet } from "./features/threads/ThreadAgentsSheet";
+// ozone-seam: Ozone's screens are registered beside upstream's.
+import { OzoneAppsScreen } from "./ozone/OzoneAppsScreen";
+import { OzoneBuildSheet } from "./ozone/OzoneBuildSheet";
 import { ThreadBackgroundWorkSheet } from "./features/threads/ThreadBackgroundWorkSheet";
 import { ThreadQueueSheet } from "./features/threads/ThreadQueueControl";
 import {
@@ -237,6 +240,11 @@ const SETTINGS_SCREENS = {
     screen: ArchivedThreadsRouteScreen,
     linking: "settings/archive",
     options: settingsPage("Archive"),
+  }),
+  SettingsOzoneApps: createNativeStackScreen({
+    screen: OzoneAppsScreen,
+    linking: "settings/apps",
+    options: settingsPage("Apps"),
   }),
   SettingsNavigation: createNativeStackScreen({
     screen: SettingsNavigationRouteScreen,
@@ -681,6 +689,10 @@ const RootStackConfig = createWorkspaceStackNavigator({
     }),
     ThreadAgents: createNativeStackScreen({
       screen: ThreadAgentsSheet,
+      options: sheetRoute({ detent: 0.5, androidMaxDetent: 0.9 }),
+    }),
+    OzoneBuild: createNativeStackScreen({
+      screen: OzoneBuildSheet,
       options: sheetRoute({ detent: 0.5, androidMaxDetent: 0.9 }),
     }),
     GitOverview: createNativeStackScreen({

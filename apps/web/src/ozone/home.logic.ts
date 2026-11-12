@@ -1,5 +1,3 @@
-import type { OzoneRuntimePhase } from "@t3tools/contracts";
-
 const REQUEST =
   /^(?:please\s+)?(?:(?:can|could)\s+you\s+)?(?:build|create|make|design|develop|generate|write|i\s+(?:want|need)|we\s+(?:want|need))\s+(?:me\s+|us\s+)?/i;
 const ARTICLE = /^(?:an?|the|some|my|our)\s+/i;
@@ -18,28 +16,4 @@ export function appNameFromPrompt(prompt: string): string {
   const named = GENERIC.has(subject.toLowerCase()) ? request : subject;
   const name = named.split(" ").slice(0, 4).join(" ").slice(0, 40).trim();
   return name.length === 0 ? "New app" : name.charAt(0).toUpperCase() + name.slice(1);
-}
-
-export interface RuntimePhaseLabel {
-  readonly label: string;
-  readonly tone: "success" | "info" | "warning" | "error" | "outline";
-}
-
-export function runtimePhaseLabel(phase: OzoneRuntimePhase | undefined): RuntimePhaseLabel {
-  switch (phase) {
-    case "running":
-      return { label: "Running", tone: "success" };
-    case "starting":
-      return { label: "Starting", tone: "info" };
-    case "unhealthy":
-      return { label: "Unhealthy", tone: "warning" };
-    case "failed":
-      return { label: "Failed", tone: "error" };
-    case "unavailable":
-      return { label: "Docker needed", tone: "warning" };
-    case "stopped":
-      return { label: "Stopped", tone: "outline" };
-    case undefined:
-      return { label: "Checking", tone: "outline" };
-  }
 }

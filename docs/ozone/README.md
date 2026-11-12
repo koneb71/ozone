@@ -49,9 +49,10 @@ starts its lead thread.
 ## Fork rules
 
 1. **Beside, not inside.** Ozone code lives in its own modules:
-   `apps/server/src/ozone/`, `apps/web/src/ozone/`, `packages/contracts/src/ozone*.ts`,
-   `packages/client-runtime/src/state/ozone.ts`, `packages/ozone-templates/`, `docs/ozone/`, and
-   any script or workflow whose file name starts with `ozone-`.
+   `apps/server/src/ozone/`, `apps/web/src/ozone/`, `apps/mobile/src/ozone/`,
+   `packages/contracts/src/ozone*.ts`, `packages/client-runtime/src/state/ozone.ts`,
+   `packages/ozone-templates/`, `docs/ozone/`, and any script or workflow whose file name starts
+   with `ozone-`.
 2. **Upstream files change only at seams.** A seam is the smallest edit that registers Ozone code
    with upstream code. Tag it with a comment containing `ozone-seam` and list the file in
    [SEAMS.md](./SEAMS.md). `apps/server/src/ozone/seams.test.ts` fails when the two disagree.

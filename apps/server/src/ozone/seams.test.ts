@@ -13,6 +13,7 @@ const OZONE_OWNED: ReadonlyArray<RegExp> = [
   /^apps\/server\/scripts\/ozone-/,
   /^scripts\/ozone-/,
   /^apps\/web\/src\/ozone\//,
+  /^apps\/mobile\/src\/ozone\//,
   /^packages\/ozone-templates\//,
   /^packages\/contracts\/src\/ozone/,
   /^packages\/client-runtime\/src\/state\/ozone/,
@@ -25,6 +26,7 @@ const isOzoneOwned = (file: string) => OZONE_OWNED.some((pattern) => pattern.tes
 const OZONE_SOURCE = [
   "apps/server/src/ozone",
   "apps/web/src/ozone",
+  "apps/mobile/src/ozone",
   "docs/ozone",
   "packages/ozone-templates/templates",
 ];
