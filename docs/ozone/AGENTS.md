@@ -6,7 +6,7 @@ These rules come first where they differ.
 - Read [docs/ozone/README.md](./README.md) before changing an upstream file.
 - New behaviour goes in an Ozone module: `apps/server/src/ozone/`, `apps/web/src/ozone/`,
   `packages/contracts/src/ozone*.ts`, `packages/client-runtime/src/state/ozone.ts`,
-  `packages/ozone-templates/`.
+  `packages/ozone-templates/`, or a script or workflow named `ozone-*`.
 - An edit to any other file is a seam. Keep it to the registration itself, tag it with a comment
   containing `ozone-seam`, and add the file to [docs/ozone/SEAMS.md](./SEAMS.md).
 - Never rename upstream packages, `T3CODE_*` variables, the `t3-code` MCP key, URL schemes or

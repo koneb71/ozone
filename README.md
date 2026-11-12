@@ -46,33 +46,41 @@ it as read, and see how many are left to read." This is the app it built:
 
 ## Run it
 
-Ozone runs from source today. There are no installers or releases yet.
-
 You need Docker with Compose, and [Claude Code](https://claude.com/product/claude-code) or another
-supported provider installed on the same machine.
+supported provider on the same machine. Ozone tells you on its home screen when one is missing,
+and how to get it.
 
-### Install `vp`
+### Install the desktop app
+
+Download the latest build from [Releases](https://github.com/koneb71/ozone/releases/latest):
+
+| Your computer              | File                                             |
+| -------------------------- | ------------------------------------------------ |
+| Mac with Apple silicon     | `Ozone-…-arm64.dmg`                              |
+| Linux, 64-bit Intel or AMD | `Ozone-…-x86_64.AppImage` or `Ozone-…-amd64.deb` |
+
+The builds are not signed. On a Mac, the first time, open **System Settings**, choose **Privacy &
+Security** and press **Open Anyway** after macOS refuses to open Ozone. There is no Windows build
+yet.
+
+Ozone keeps its data in `~/.ozone` and can run beside T3 Code.
+
+If no release is published yet, build the installers yourself: on GitHub, open **Actions**, choose
+**Ozone release** and press **Run workflow**. The files are attached to the finished run.
+
+### Run from source
 
 Ozone builds with [Vite+](https://viteplus.dev/guide/), which also provides the right Node version.
 
 ```sh
 curl -fsSL https://vite.plus | bash
-```
-
-On Windows, in PowerShell:
-
-```powershell
-irm https://vite.plus/ps1 | iex
-```
-
-### Start it
-
-```sh
 vp i
 vp run dev
 ```
 
-Open the pairing URL the dev runner prints. Then:
+Open the pairing URL the dev runner prints.
+
+### Build your first app
 
 1. Open **Settings**, choose **Providers** and sign in to Claude.
 2. On the home screen, describe an app and press Enter.
@@ -92,8 +100,12 @@ Everything else under [docs](docs/) is T3 Code's documentation, and it still app
 
 ## What is not Ozone yet
 
-The mobile app, the desktop shell and many settings screens are T3 Code's and still carry its
-name. Product telemetry and upstream's update checks are switched off.
+- The mobile app is T3 Code's and carries its name.
+- The command-line tool is still called `t3`, and messages that come from the server can still say
+  T3 Code.
+- There is no Windows build, and Ozone is untested on Windows.
+- Ozone collects no usage data. The privacy policy and a few help links still lead to T3 Code's
+  site.
 
 ## License
 

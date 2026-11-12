@@ -50,7 +50,8 @@ starts its lead thread.
 
 1. **Beside, not inside.** Ozone code lives in its own modules:
    `apps/server/src/ozone/`, `apps/web/src/ozone/`, `packages/contracts/src/ozone*.ts`,
-   `packages/client-runtime/src/state/ozone.ts`, `packages/ozone-templates/` and `docs/ozone/`.
+   `packages/client-runtime/src/state/ozone.ts`, `packages/ozone-templates/`, `docs/ozone/`, and
+   any script or workflow whose file name starts with `ozone-`.
 2. **Upstream files change only at seams.** A seam is the smallest edit that registers Ozone code
    with upstream code. Tag it with a comment containing `ozone-seam` and list the file in
    [SEAMS.md](./SEAMS.md). `apps/server/src/ozone/seams.test.ts` fails when the two disagree.
@@ -83,6 +84,20 @@ red run means the fork has drifted; its summary names the files that conflict.
 - Run `vp run typecheck`, the Ozone tests and the web suite
   (`vp run --filter @t3tools/web test`), then the app once. A seam in the web client can break an
   upstream test far from the file it edits.
+
+## Releasing
+
+`.github/workflows/ozone-release.yml` builds the desktop app for Linux and Apple silicon, and the
+command-line archive the app installs on a remote machine. It opens each desktop build before it
+keeps it. A manual run leaves the files on the run. Pushing a `v<version>` tag also gathers them
+into a draft release; publishing that draft is the release.
+
+- The version comes from the tag. The workflow stamps it into the package files of its own
+  checkout; never commit that.
+- An installed desktop app looks for a newer version in this repository's releases, and a remote
+  machine downloads its archive from there. Both need the repository to be public.
+- Nothing is signed. Signing needs upstream's steps in `.github/workflows-upstream/release-desktop.yml`
+  and certificates of Ozone's own.
 
 ## Traps
 
