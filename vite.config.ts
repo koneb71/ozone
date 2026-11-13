@@ -10,7 +10,7 @@ const TEST_EXCLUDE = [
   "**/dist/**",
   "**/dist-electron/**",
   "**/.{idea,git,cache,output,temp}/**",
-  // ozone-seam: a template is an app's source, tested inside its own container.
+  // A template is an app's source, tested inside its own container.
   "packages/ozone-templates/templates/**",
 ];
 
@@ -150,7 +150,7 @@ export default defineConfig({
   },
   fmt: {
     ignorePatterns: [
-      // ozone-seam: templates keep the formatting their own toolchain gives them.
+      // Templates keep the formatting their own toolchain gives them.
       "packages/ozone-templates/templates/**",
       ".repos/**",
       // Macroscope requires one glob per line; Markdown formatting corrupts it.
@@ -181,7 +181,7 @@ export default defineConfig({
   },
   lint: {
     ignorePatterns: [
-      // ozone-seam: templates are linted by their own toolchain.
+      // Templates are linted by their own toolchain.
       "packages/ozone-templates/templates/**",
       ".repos",
       ".repos/**",

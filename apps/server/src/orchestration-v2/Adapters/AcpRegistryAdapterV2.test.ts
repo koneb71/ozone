@@ -1175,7 +1175,7 @@ describe("AcpRegistryAdapterV2", () => {
     }).pipe(Effect.provide(layerTest), Effect.scoped),
   );
 
-  it.effect("gives Copilot T3's MCP server over HTTP when it advertises HTTP", () =>
+  it.effect("gives Copilot Ozone's MCP server over HTTP when it advertises HTTP", () =>
     Effect.gen(function* () {
       const selfInvocation = yield* resolveSelfInvocation();
       const mockAgentPath = yield* (yield* Path.Path).fromFileUrl(
@@ -1328,7 +1328,7 @@ describe("AcpRegistryAdapterV2", () => {
       });
       // Several agents can run from one directory at once; the spawn env is how
       // a process the agent starts (an MCP server, a shell tool) finds its own
-      // T3 thread, the same way Claude and Codex sessions do.
+      // Ozone thread, the same way Claude and Codex sessions do.
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const spawnEnvironments: Array<Record<string, unknown> | undefined> = [];
       const capturingSpawner = ChildProcessSpawner.make((command) =>

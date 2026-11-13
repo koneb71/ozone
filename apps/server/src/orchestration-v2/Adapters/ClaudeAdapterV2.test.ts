@@ -691,7 +691,7 @@ describe("ClaudeAdapterV2 native protocol logging", () => {
     assert.equal(systemPrompt.preset, "claude_code");
     assert.include(systemPrompt.append ?? "", "Use `delegate_task`");
     assert.include(systemPrompt.append ?? "", "call `t3_background_wait`");
-    assert.notInclude(systemPrompt.append ?? "", "## T3 Code devices");
+    assert.notInclude(systemPrompt.append ?? "", "## Ozone devices");
     const logged = ClaudeAdapterV2.loggedClaudeQueryOptions(options);
     assert.equal(logged.hasMcpServers, true);
     assert.notInclude(JSON.stringify(logged), "secret-claude-token");
@@ -736,9 +736,9 @@ describe("ClaudeAdapterV2 device instructions", () => {
     assert.include(text, "Use `delegate_task`");
   });
 
-  it("leaves the device block out without device access or without T3 tools", () => {
-    assert.notInclude(append({ mcp: true, deviceToolsAvailable: false }), "## T3 Code devices");
-    assert.notInclude(append({ mcp: false, deviceToolsAvailable: true }), "## T3 Code devices");
+  it("leaves the device block out without device access or without Ozone tools", () => {
+    assert.notInclude(append({ mcp: true, deviceToolsAvailable: false }), "## Ozone devices");
+    assert.notInclude(append({ mcp: false, deviceToolsAvailable: true }), "## Ozone devices");
   });
 
   it("gives native subagents the device block only in a session with device access", async () => {
@@ -1138,7 +1138,7 @@ describe("ClaudeAdapterV2 append-system-prompt-file launch argument", () => {
   const appendSystemPrompt = (options: ClaudeAdapterV2.ClaudeAgentSdkQueryOptions | undefined) =>
     (options?.systemPrompt as { readonly append?: string } | undefined)?.append;
 
-  it.effect("sends append launch arguments to Claude after the T3 instructions", () =>
+  it.effect("sends append launch arguments to Claude after the Ozone instructions", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
@@ -1171,11 +1171,11 @@ describe("ClaudeAdapterV2 append-system-prompt-file launch argument", () => {
     ),
   );
 
-  // regression: #15073 the SDK replaced the --settings launch argument with T3's settings
+  // regression: #15073 the SDK replaced the --settings launch argument with Ozone's settings
   it.effect.each([
     `--settings '{"skillOverrides":{"lint":"off"},"showThinkingSummaries":false}'`,
     "--settings user-settings.json",
-  ])("merges %s beneath T3's settings", (launchArgs) =>
+  ])("merges %s beneath Ozone's settings", (launchArgs) =>
     Effect.scoped(
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
@@ -2905,7 +2905,7 @@ describe("ClaudeAdapterV2 MCP credential channel", () => {
           ...ClaudeAdapterV2.makeClaudeQueryOptions({
             modelSelection: CLAUDE_TEST_MODEL_SELECTION,
             nativeThreadId: "native-thread-claude-mcp-channel",
-            title: "Existing T3 title",
+            title: "Existing Ozone title",
             resume: false,
             cwd: null,
             environment: { PATH: "/usr/bin" },
@@ -2962,7 +2962,7 @@ describe("ClaudeAdapterV2 MCP credential channel", () => {
       });
       assert.deepInclude(
         cli.controlRequests.find((request) => Reflect.get(request, "subtype") === "initialize"),
-        { title: "Existing T3 title" },
+        { title: "Existing Ozone title" },
       );
       const spawned = JSON.stringify(cli.spawns);
       assert.notInclude(spawned, "--title");
@@ -3132,7 +3132,7 @@ describe("ClaudeAdapterV2 native session identity", () => {
     }),
   );
 
-  it.effect("resumes an imported native session on its first T3 turn", () =>
+  it.effect("resumes an imported native session on its first Ozone turn", () =>
     Effect.gen(function* () {
       const openedQueries = yield* openTurnWithOrdinal(1, false, "imported-native-session");
       assert.equal(openedQueries.length, 1);
@@ -5699,7 +5699,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
         server: "probe.server",
       });
       assert.deepInclude(tool, { name: "show_weather", inputSchema: { type: "object" } });
-      // T3 skips the app-call confirmation only for `readOnlyHint` tools.
+      // Ozone skips the app-call confirmation only for `readOnlyHint` tools.
       assert.deepInclude(appOnlyTool, {
         annotations: { readOnlyHint: true, destructiveHint: false },
       });
@@ -5838,7 +5838,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       readOnly: false,
     },
     {
-      case: "a deny rule for this tool on a server alias T3 can't list",
+      case: "a deny rule for this tool on a server alias Ozone can't list",
       rules: [{ behavior: "deny", rule: "mcp__probe_alias__refresh_weather" }],
       called: false,
       readOnly: false,
@@ -13520,7 +13520,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
 
   // regression: #17531 a mod that holds a tool behind a focused pane must fail the turn, not hang it
   it.effect.each([
-    { case: "fails a turn whose mod requests focus for a pane T3 cannot show", focus: true },
+    { case: "fails a turn whose mod requests focus for a pane Ozone cannot show", focus: true },
     { case: "keeps a turn running beside a passive mod pane", focus: false },
   ] as const)("$case", ({ focus }) =>
     Effect.scoped(
@@ -14874,7 +14874,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
           );
           assert.lengthOf(harness.continuationRequests, 1);
 
-          // An empty session-task lifecycle result arriving before T3 opens the
+          // An empty session-task lifecycle result arriving before Ozone opens the
           // wake run must not replace the root's terminal usage-limit result.
           yield* harness.offerAndWait(wakeTurnInit);
           yield* harness.offerAndWait(

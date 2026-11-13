@@ -80,7 +80,10 @@ it.layer(NodeServices.layer)("discoverClaudeSkills", (it) => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const tempDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-claude-skills-" });
+      // The workspace is matched by its real path, and macOS links its temporary folder.
+      const tempDir = yield* fs.realPath(
+        yield* fs.makeTempDirectoryScoped({ prefix: "t3-claude-skills-" }),
+      );
       const configDir = path.join(tempDir, "claude-home");
       const workspace = path.join(tempDir, "workspace");
       const nestedWorkspace = path.join(workspace, "packages", "app");
@@ -479,6 +482,8 @@ it.layer(NodeServices.layer)("discoverClaudeSkills", (it) => {
         ["a_b", undefined, "renamed"],
         ["PSTACK", "PSTACK", "shouted"],
       ] as const) {
+        // A disk that ignores case, as on macOS, already holds `PSTACK` as `pstack`.
+        if (yield* fs.exists(path.join(bucket, directory))) continue;
         yield* writeSkill(path.join(bucket, directory, "skills"), skill, "# Synced");
         if (prefix === undefined) continue;
         yield* fs.makeDirectory(path.join(bucket, directory, ".claude-plugin"));

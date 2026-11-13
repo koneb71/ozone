@@ -45,7 +45,7 @@ describe("importPastedComposerText", () => {
     expect(imported.map((fragment) => fragment.records)).toEqual([target.fragment!.records]);
   });
 
-  it("makes a chip of a v2 link pasted without T3's clipboard format", () => {
+  it("makes a chip of a v2 link pasted without Ozone's clipboard format", () => {
     const text = importPastedComposerText(
       clipboard({ "text/plain": "[Login](t3-thread://v2/env-1/thread-1)" }),
       APP,

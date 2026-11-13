@@ -196,7 +196,7 @@ export const make = Effect.gen(function* () {
     createChangeRequest: Effect.fn("OriginSourceControlProvider.createChangeRequest")(
       function* (input) {
         const repository = input.target?.repository ?? (yield* cli.resolveRepository(input));
-        // Origin creates drafts unless told otherwise; T3 asks for draft explicitly elsewhere.
+        // Origin creates drafts unless told otherwise; Ozone asks for draft explicitly elsewhere.
         yield* cli.api(
           {
             cwd: input.cwd,

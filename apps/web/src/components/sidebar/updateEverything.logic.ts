@@ -124,7 +124,6 @@ export function collectServerUpdateTargets(
       environmentId: machine.environmentId,
       serverLabel: machine.label,
       selfUpdate,
-      installation: config.environment.capabilities.serverInstallation,
       desktopAppUpdate,
       targetVersion,
     };
@@ -241,7 +240,6 @@ export function collectChannelSwitchTargets(
       environmentId: machine.environmentId,
       serverLabel: machine.label,
       selfUpdate,
-      installation: config?.environment.capabilities.serverInstallation,
       desktopAppUpdate: config !== null && supportsDesktopAppUpdate(config),
       targetVersion,
       ...(selfUpdate === "desktop-managed" ? { channel: release.channel } : {}),
@@ -297,7 +295,7 @@ export function collectChannelSwitchTargets(
       compareSemverVersions(release.version, serverVersion) <= 0
     ) {
       skip(
-        `run \`t3 update --channel ${release.channel === "nightly" ? "nightly" : "stable"} --allow-downgrade\` there`,
+        `run \`ozone update --channel ${release.channel === "nightly" ? "nightly" : "stable"} --allow-downgrade\` there`,
       );
       continue;
     }

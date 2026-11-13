@@ -49,7 +49,7 @@ const writeSettings = (baseDir: string, settings: Record<string, unknown>) => {
   NodeFS.writeFileSync(settingsPathFor(baseDir), `${JSON.stringify(settings, null, 2)}\n`);
 };
 
-describe("t3 theme", () => {
+describe("ozone theme", () => {
   it.effect("preserves settings it does not recognise", () =>
     Effect.gen(function* () {
       const baseDir = makeBaseDir();
@@ -84,7 +84,7 @@ describe("t3 theme", () => {
   it.effect("sets the theme of a dev server running in the default home", () =>
     Effect.gen(function* () {
       const home = makeBaseDir();
-      const devStateDir = NodePath.join(home, ".t3", "dev");
+      const devStateDir = NodePath.join(home, ".ozone", "dev");
       NodeFS.mkdirSync(devStateDir, { recursive: true });
       NodeFS.writeFileSync(
         NodePath.join(devStateDir, "server-runtime.json"),
@@ -105,7 +105,7 @@ describe("t3 theme", () => {
       );
 
       assert.equal(
-        NodeFS.existsSync(NodePath.join(home, ".t3", "userdata", "settings.json")),
+        NodeFS.existsSync(NodePath.join(home, ".ozone", "userdata", "settings.json")),
         false,
       );
       if (result._tag === "Success") {

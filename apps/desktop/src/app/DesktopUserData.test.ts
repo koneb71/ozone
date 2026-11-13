@@ -7,8 +7,6 @@ import * as PlatformError from "effect/PlatformError";
 
 import { clearStaleGpuCaches, resolveUserDataPath } from "./DesktopUserData.ts";
 
-// ozone-seam: expects Ozone's profile folders.
-
 it.effect.each(["ozone-v0", "Ozone (Alpha)"])(
   "preserves Windows credential keys from %s without copying browser databases",
   (sourceName) =>

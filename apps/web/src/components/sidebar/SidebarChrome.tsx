@@ -180,7 +180,6 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
 function SidebarBrandMark({ onBackdrop }: { onBackdrop: boolean }) {
   return (
     <span className="inline-flex min-w-0 items-baseline gap-1 text-sm font-medium tracking-tight">
-      {/* ozone-seam: the Ozone mark and name. */}
       <T3Wordmark aria-hidden className="h-[1cap] w-auto shrink-0 self-center" />
       <span
         className={cn(

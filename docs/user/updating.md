@@ -1,4 +1,4 @@
-# Updating T3 Code
+# Updating Ozone
 
 The app you use and the server running your agents can be on different machines.
 When a server is behind your web or desktop app, the update button at the bottom
@@ -9,10 +9,8 @@ of the sidebar and **Settings → Environments** offer to update it.
 The update button at the bottom of the sidebar updates every connected machine
 in one step. It updates outdated providers, then servers that are behind, then
 the desktop app you are using. Servers move to the
-version your desktop app is installing, or to your web app's version. A
-background service stays on its current release channel. A remote desktop app
-installs the latest release from its own channel. Hover the button to see what
-it will update.
+version your desktop app is installing, or to your web app's version. Hover the
+button to see what it will update.
 
 While it runs, the button widens to show progress. It names a machine that is
 taking longer than usual, and offers **Retry** for a server that failed. Click
@@ -28,36 +26,13 @@ running, and you can retry. The confirmation lists each machine it skips and
 why, such as a machine that is offline or needs a manual update. Use
 **Settings → Environments** for those.
 
-If a desktop app restarts on its old version, T3 Code tells you the update did
+If a desktop app restarts on its old version, Ozone tells you the update did
 not apply. It does not install that version again on its own, even when another
 device asks. Use the update button on that machine to retry.
 
 The confirmation counts the running threads that the restarts will interrupt,
 and how many can resume afterwards. See **Continue threads after restarts**
 below.
-
-## Switch between Stable and Nightly
-
-In the desktop app, change **Settings → About → Update track**. T3 Code shows each
-connected machine it will move and each one it skips, then moves them in one
-step. Remote servers install the latest release on the new track. Remote desktop
-apps reinstall on the new track. This app reinstalls last. Your threads,
-settings, and data stay.
-
-A background service cannot move to an older release remotely. When Stable is
-older than its Nightly, run `t3 update --channel stable --allow-downgrade` on
-that machine.
-
-A switch is blocked for a machine whose database already has changes the
-target release does not support, or when T3 Code cannot confirm that it does.
-The dialog says why: update a machine on its current track first when its
-release is too old to check, or wait until the target track includes the
-changes. A Mac running the desktop app must switch on that Mac.
-
-Each machine keeps the new track even if its switch did not finish, but it
-moves to that track only through a switch. **Update track** shows how many
-machines still run the other track. **Review** opens the same dialog with fresh
-checks.
 
 ## Before you update
 
@@ -66,10 +41,7 @@ terminal commands. Saved threads, settings, and project files remain.
 
 **Settings → Maintenance → Continue threads after restarts** is on by default.
 It resumes supported active threads after an update, crash, or machine
-restart. Changes are saved to connected environments that support this setting;
-update older servers first. If a supported environment was offline or has a
-different value, use **Apply to all** in Settings after it connects.
-T3 Code must start again on that machine;
+restart. Ozone must start again on that machine;
 the setting does not enable automatic startup. Terminal commands may still be
 interrupted, and threads without saved provider resume state need a new message.
 A thread that finished its turn to wait on a subagent, a background task, or a
@@ -80,17 +52,13 @@ A thread is not resumed while it waits for your approval, answer, or secret, or
 while it is archived, snoozed, or settled. After three automatic resumes in a row,
 the thread waits for your next message.
 
-Updates from the previous orchestration system preserve conversation transcripts but cannot carry
-every kind of runtime history forward. Read [Threads from older T3 Code versions](./thread-migration.md)
-before continuing an important older thread.
-
 ## When versions don't match
 
 A client and server must speak the same orchestration protocol. If they do not, the connection is
 refused rather than running half-upgraded:
 
 - An app newer than the server is blocked before connecting, with a notice telling you to update
-  T3 Code on the machine named in the notice.
+  Ozone on the machine named in the notice.
 - A server newer than your app refuses the connection with an update message.
 
 Update the side the notice names, then reconnect.
@@ -103,28 +71,19 @@ The offered action depends on how the server runs:
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Update server**          | Keep the client open while it installs and reconnects. Supported background services update remotely. For a desktop-hosted server, this also closes and relaunches the desktop app on the host. |
 | **Update the desktop app** | Update the desktop app on the machine running the server, then reopen it if needed.                                                                                                             |
-| **Copy update command**    | Run the command on the named host to update the detected global npm install, then restart the server with your usual options.                                                                   |
-| **Copy relaunch command**  | Stop the command-line server on its host and relaunch with the copied command, keeping your usual subcommand and options. This does not update an installed `t3` command.                       |
+| **Copy update command**    | Run the copied command on the server's host, then stop the command-line server and start it again with your usual subcommand and options.                                                       |
 
 On the host, run:
 
 ```sh
-t3 update <client-version>
+ozone update <client-version>
 ```
 
 Replace `<client-version>` with the version shown in the notice. The command
 asks before restarting the background service; if you decline, run
-`t3 service restart` when you are ready. For a server you started by hand,
+`ozone service restart` when you are ready. For a server you started by hand,
 stop it and start it again afterwards with your usual options such as `--host`
 or `--tailscale-serve`.
-
-If you decline the restart for a background service installed by an older
-release, the service can stay down after a crash or reboot until you run
-`t3 service restart`.
-
-If you run the server with `npx` rather than an installed `t3`, there is
-nothing to update on the host: stop the server and relaunch it as
-`npx t3@<client-version>` with the same subcommand and options.
 
 ## If an update fails
 
@@ -135,40 +94,24 @@ update can roll back to the previous version. If the update still fails:
 2. Check that you updated the server's machine, not only the device you are using.
 3. For a command-line server, stop it and relaunch the exact version shown in the notice.
 
-Only one server can use a T3 home directory at a time. If startup reports that
-another server owns it, stop that server before retrying, or use a separate home
-directory and pair with the running server.
-
-### macOS app does not reopen after an Alpha update
-
-Updating an older **T3 Code (Alpha)** installation can replace it with
-**T3 Code (Beta)** without reopening the app. Open **T3 Code (Beta)** from
-Applications, or run:
-
-```sh
-open "/Applications/T3 Code (Beta).app"
-```
-
-If an old Dock shortcut no longer opens the app, remove it and add the Beta app
-from Applications again.
+Only one server can use a data folder at a time. If startup reports that
+another server owns it, stop that server before retrying, or use a separate data
+folder and pair with the running server.
 
 ## If the desktop app does not start
 
-If the desktop app's server keeps failing at startup, T3 Code shows a "T3 Code
-could not start" window instead of the app. If a newer version is available,
+If the desktop app's server keeps failing at startup, Ozone shows a window that says it
+could not start instead of the app. If a newer version is available,
 choose **Update** to install it. If not, the window links to the last version
 that started on your computer. Download and install it to go back. Use **Copy
 details** to include the error in a bug report.
 
 ## Registries and proxies
 
-Each server checks T3 Code releases, and providers installed with npm, through
-its own npm, so the checks use npm's configured registry, authentication, and
-proxy settings. Providers installed with Homebrew or pnpm check through those
-tools.
-Configure npm on the server's machine. If that registry cannot be reached, the
-release shows as unavailable; T3 Code does not try the public registry instead.
-Machines without npm check the public npm registry directly.
+Ozone downloads its own releases from GitHub. Providers installed with npm check
+for updates through the server's own npm, so those checks use npm's configured
+registry, authentication, and proxy settings. Providers installed with Homebrew
+or pnpm check through those tools. Configure them on the server's machine.
 
 ## Update providers
 
@@ -180,7 +123,7 @@ or when its instances use different update commands, such as two instances that
 run different CLI installs. Update those by hand, or point every instance of the
 provider at the same CLI.
 
-After a successful provider CLI update, T3 Code refreshes model discovery for
+After a successful provider CLI update, Ozone refreshes model discovery for
 every enabled instance of that provider using its own configuration. Connected
 clients receive the refreshed catalogs automatically. The model catalog itself
 ships with Ozone and changes only when you update Ozone.
@@ -189,23 +132,7 @@ Provider updates do not restart running chats. An existing session can keep
 using the previous CLI until it ends. If discovery fails, check the provider
 status and refresh it again.
 
-## Mobile updates
-
-To update an environment from your phone, open **Settings → Environments** and
-select it. **Check for updates** finds the latest release on that environment's
-current release channel. Keep the app open while the environment updates and
-reconnects. Hosts that cannot update remotely show instructions for updating on
-the machine instead.
-
-The same page lets you refresh provider status and update supported providers.
-These controls require a connected environment and permission to operate it.
 Provider update checks and restart continuation preferences are in
 **Settings → Maintenance**. Provider update checks are off by default, so Ozone
 contacts no provider release server on its own. Turn them on there before
 refreshing to find newer versions.
-
-Install App Store or Google Play releases as usual. The mobile app can also
-download updates in the background and apply them when you next leave the app.
-It saves drafts and queued messages before restarting. If you keep the app open
-for a long time, it may ask to install immediately; choosing **Later** leaves the
-update queued for the next suitable moment.

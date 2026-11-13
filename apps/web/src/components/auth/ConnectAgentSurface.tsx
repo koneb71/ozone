@@ -287,8 +287,8 @@ export function ConnectAgentSurface() {
             value={pairingCode}
           />
           <p className="text-xs text-muted-foreground">
-            Get one from Settings → Sharing & access, or <code>t3 auth pairing create</code> on this
-            machine.
+            Get one from Settings → Sharing & access, or <code>ozone auth pairing create</code> on
+            this machine.
           </p>
         </div>
 

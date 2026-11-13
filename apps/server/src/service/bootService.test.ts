@@ -55,17 +55,17 @@ const windowsTaskOptions = {
   conhostPath: "C:\\Windows\\System32\\conhost.exe",
 };
 
-it("reads the served T3 home back out of a rendered unit, plist, or task", () => {
+it("reads the served Ozone home back out of a rendered unit, plist, or task", () => {
   const plan = (baseDir: string) => ({
-    program: [`${baseDir}/runtime/versions/1.2.3/t3`, "__service-launcher"],
+    program: [`${baseDir}/runtime/versions/1.2.3/ozone`, "__service-launcher"],
     baseDir,
     logPath: `${baseDir}/userdata/logs/boot-service.log`,
-    unitPath: "/home/theo/.config/systemd/user/t3code.service",
+    unitPath: "/home/theo/.config/systemd/user/ozone.service",
   });
 
   expect(
-    BootService.bootServiceBaseDirOf(BootService.renderBootServiceUnit(plan("/home/theo/.t3"))),
-  ).toBe("/home/theo/.t3");
+    BootService.bootServiceBaseDirOf(BootService.renderBootServiceUnit(plan("/home/theo/.ozone"))),
+  ).toBe("/home/theo/.ozone");
   expect(
     BootService.bootServiceBaseDirOf(
       BootService.renderBootServiceUnit(plan("/home/theo/T3 Data/100%")),
@@ -89,10 +89,10 @@ it("reads the served T3 home back out of a rendered unit, plist, or task", () =>
 
 it("protects the server unit from agents under CPU and memory pressure", () => {
   const unit = BootService.renderBootServiceUnit({
-    program: ["/home/theo/.t3/runtime/versions/1.2.3/t3", "__service-launcher"],
-    baseDir: "/home/theo/.t3",
-    logPath: "/home/theo/.t3/userdata/logs/boot-service.log",
-    unitPath: "/home/theo/.config/systemd/user/t3code.service",
+    program: ["/home/theo/.ozone/runtime/versions/1.2.3/ozone", "__service-launcher"],
+    baseDir: "/home/theo/.ozone",
+    logPath: "/home/theo/.ozone/userdata/logs/boot-service.log",
+    unitPath: "/home/theo/.config/systemd/user/ozone.service",
   });
   const service = unit.slice(unit.indexOf("[Service]"), unit.indexOf("[Install]"));
   for (const line of [
@@ -121,7 +121,7 @@ it.each([
       BootService.renderBootServiceTask(plan, windowsTaskOptions),
   ],
 ] as const)("reads the launcher back out of %s", (_, baseDir, render) => {
-  const program = `${baseDir}/runtime/versions/1.2.3/t3`;
+  const program = `${baseDir}/runtime/versions/1.2.3/ozone`;
   expect(
     BootService.bootServiceProgramOf(
       render({ program: [program, "__service-launcher"], baseDir, logPath: "/log", unitPath: "" }),
@@ -149,7 +149,7 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
     "systemd",
     "user",
   );
-  const baseDir = path.join(home, ".t3");
+  const baseDir = path.join(home, ".ozone");
   const statePath = path.join(baseDir, "runtime", "service-state.json");
   const runtime = pinnedRuntimePaths(path, baseDir, "1.2.3", platform);
   yield* fs.makeDirectory(path.dirname(runtime.entryPath), { recursive: true });
@@ -196,7 +196,7 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
         control.linger = "yes";
         control.managerReachable ||= control.lingerStartsManager;
       }
-      if (!failed && command === "systemctl --user enable t3code.service") control.enabled = true;
+      if (!failed && command === "systemctl --user enable ozone.service") control.enabled = true;
       const taskMissing =
         input.command === "schtasks" && input.args[0] !== "/Create" && control.task === undefined;
       if (input.command === "schtasks" && !failed) {
@@ -210,16 +210,16 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
         if (input.args[0] === "/Delete") delete control.task;
         if (input.args[0] === "/End") control.launcher?.close();
       }
-      if (!failed && command === "systemctl --user restart t3code.service") control.active = true;
+      if (!failed && command === "systemctl --user restart ozone.service") control.active = true;
       // The manager loads units only from its own unit directory.
       const unitOutsideManager =
-        command === "systemctl --user enable t3code.service" &&
-        !(yield* fs.exists(path.join(managerUnitDir, "t3code.service")));
+        command === "systemctl --user enable ozone.service" &&
+        !(yield* fs.exists(path.join(managerUnitDir, "ozone.service")));
       // A timed-out stop may still stop the service.
-      if (command === "systemctl --user stop t3code.service") control.active = false;
+      if (command === "systemctl --user stop ozone.service") control.active = false;
       if (
         control.stateAfterStop !== undefined &&
-        (command === "systemctl --user stop t3code.service" ||
+        (command === "systemctl --user stop ozone.service" ||
           command.startsWith("launchctl bootout --wait "))
       ) {
         yield* fs.writeFileString(statePath, control.stateAfterStop);
@@ -238,7 +238,7 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
                 ],
               })
             : input.args[0] === "--version"
-              ? `t3 v${/versions[\\/]([^\\/]+)[\\/]/.exec(input.command)?.[1] ?? "1.2.3"}\n`
+              ? `ozone v${/versions[\\/]([^\\/]+)[\\/]/.exec(input.command)?.[1] ?? "1.2.3"}\n`
               : input.command === "schtasks" && input.args.includes("/XML")
                 ? control.task?.enabled === false
                   ? disabledServiceTask(control.task.xml)
@@ -281,7 +281,7 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
     cliVersion = "1.2.3",
     serviceBaseDir = baseDir,
     insideService = false,
-    hostExecPath = "/usr/bin/t3",
+    hostExecPath = "/usr/bin/ozone",
     underSudo = false,
     serviceInstallBinDir: string | null | undefined = installBinDir,
   ) =>
@@ -325,7 +325,7 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
                 ...(insideService
                   ? {
                       T3_BOOT_SERVICE_UNIT:
-                        platform === "win32" ? "t3code-task.xml" : "t3code.service",
+                        platform === "win32" ? "ozone-task.xml" : "ozone.service",
                     }
                   : {}),
                 ...(underSudo ? { SUDO_USER: "julius" } : {}),
@@ -403,7 +403,7 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
         );
         expect(yield* fs.readFileString(statePath)).toBe(before);
         expect(yield* fs.readFileString(plan.unitPath)).toBe(unit);
-        expect(commands).not.toContain("systemctl --user stop t3code.service");
+        expect(commands).not.toContain("systemctl --user stop ozone.service");
       }),
   );
 
@@ -457,7 +457,7 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
         _tag: "BootServicePrerequisiteError",
         problem: "user-manager-unavailable",
       });
-      expect(commands).not.toContain("systemctl --user enable t3code.service");
+      expect(commands).not.toContain("systemctl --user enable ozone.service");
     }),
   );
 
@@ -494,7 +494,7 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
 
       const plan = yield* service.install();
 
-      const unitPath = path.join(home, ".config", "systemd", "user", "t3code.service");
+      const unitPath = path.join(home, ".config", "systemd", "user", "ozone.service");
       expect(plan.unitPath).toBe(unitPath);
       expect(yield* service.status).toMatchObject({ current: true, unitPath });
     }),
@@ -676,7 +676,7 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
           : path.join(home, ".config"),
         "systemd",
         "user",
-        "t3code.service",
+        "ozone.service",
       );
       expect(yield* service.status).toMatchObject({ installed: false, unitPath });
       const plan = yield* service.install();
@@ -723,7 +723,7 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
       expect(yield* fs.exists(unitPath)).toBe(false);
       expect((yield* discoveredService.status).installed).toBe(false);
       // systemd can take 90s to stop, exceeding the runner's 60s default.
-      expect(timeouts.get("systemctl --user disable --now t3code.service")).toEqual(
+      expect(timeouts.get("systemctl --user disable --now ozone.service")).toEqual(
         Duration.seconds(120),
       );
     }),
@@ -801,9 +801,9 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
           ),
         ).toEqual(
           platform === "linux"
-            ? ["systemctl --user stop t3code.service", "systemctl --user restart t3code.service"]
+            ? ["systemctl --user stop ozone.service", "systemctl --user restart ozone.service"]
             : [
-                "launchctl bootout --wait gui/501/com.t3tools.t3code.service",
+                "launchctl bootout --wait gui/501/io.github.koneb71.ozone.service",
                 `launchctl bootstrap gui/501 ${plan.unitPath}`,
               ],
         );
@@ -868,7 +868,7 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
           protocol: SERVICE_LAUNCHER_PROTOCOL,
           activeVersion: "1.2.4",
         });
-        expect(yield* fs.readFileString(plan.unitPath)).toContain("versions/1.2.4/t3");
+        expect(yield* fs.readFileString(plan.unitPath)).toContain("versions/1.2.4/ozone");
         expect(
           commands.filter(
             (command) =>
@@ -890,7 +890,7 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
           protocol: SERVICE_LAUNCHER_PROTOCOL,
           activeVersion: "1.2.5",
         });
-        expect(yield* fs.readFileString(plan.unitPath)).toContain("versions/1.2.5/t3");
+        expect(yield* fs.readFileString(plan.unitPath)).toContain("versions/1.2.5/ozone");
         expect((yield* latest.status).current).toBe(true);
         expect(
           yield* fs.exists(path.join(path.dirname(statePath), SERVICE_RESTART_PENDING_FILE)),
@@ -908,7 +908,7 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
         const unit = yield* fs.readFileString(plan.unitPath);
         yield* fs.writeFileString(
           plan.unitPath,
-          unit.replace("versions/1.2.3/t3", "versions/1.2.2/t3"),
+          unit.replace("versions/1.2.3/ozone", "versions/1.2.2/ozone"),
         );
         yield* fs.writeFileString(
           statePath,
@@ -1036,7 +1036,7 @@ process.disconnect();
           protocol: SERVICE_LAUNCHER_PROTOCOL,
           activeVersion: "1.2.4",
         });
-        expect(yield* fs.readFileString(plan.unitPath)).toContain("versions/1.2.4/t3");
+        expect(yield* fs.readFileString(plan.unitPath)).toContain("versions/1.2.4/ozone");
         expect(
           yield* fs.readFileString(
             path.join(path.dirname(statePath), SERVICE_RESTART_PENDING_FILE),
@@ -1105,7 +1105,7 @@ process.disconnect();
       expect(failure).toBe("repair failed");
       expect(control.active).toBe(true);
 
-      control.failCommand = "systemctl --user stop t3code.service";
+      control.failCommand = "systemctl --user stop ozone.service";
       let ran = false;
       const stopFailure = yield* service
         .withStopped(
@@ -1126,11 +1126,11 @@ process.disconnect();
       commands.length = 0;
       yield* service.withStopped(Effect.sync(() => commands.push("repair")));
       expect(commands).toEqual([
-        "systemctl --user is-enabled t3code.service",
-        "systemctl --user is-active t3code.service",
-        "systemctl --user stop t3code.service",
+        "systemctl --user is-enabled ozone.service",
+        "systemctl --user is-active ozone.service",
+        "systemctl --user stop ozone.service",
         "repair",
-        "systemctl --user restart t3code.service",
+        "systemctl --user restart ozone.service",
       ]);
       expect(control.active).toBe(true);
       control.enabled = false;
@@ -1140,8 +1140,8 @@ process.disconnect();
       control.enabled = false;
       commands.length = 0;
       yield* service.withStopped(Effect.sync(() => commands.push("repair")));
-      expect(commands).toContain("systemctl --user stop t3code.service");
-      expect(commands).not.toContain("systemctl --user restart t3code.service");
+      expect(commands).toContain("systemctl --user stop ozone.service");
+      expect(commands).not.toContain("systemctl --user restart ozone.service");
       expect(control.active).toBe(false);
       control.enabled = true;
       control.active = true;
@@ -1155,7 +1155,7 @@ process.disconnect();
     }),
   );
 
-  it.effect("restart and install leave a service that serves another T3 home alone", () =>
+  it.effect("restart and install leave a service that serves another Ozone home alone", () =>
     Effect.gen(function* () {
       const { service, fs, baseDir, commands, makeService } = yield* makeHarness();
       const plan = yield* service.install();
@@ -1163,7 +1163,7 @@ process.disconnect();
       const path = yield* Path.Path;
       const otherHome = yield* fs.makeTempDirectoryScoped({ prefix: "t3-other-home-" });
 
-      const other = yield* makeService(undefined, "1.2.3", path.join(otherHome, ".t3"));
+      const other = yield* makeService(undefined, "1.2.3", path.join(otherHome, ".ozone"));
       commands.length = 0;
       expect(yield* other.restart).toBe("skipped");
       const refused = yield* other.install().pipe(Effect.flip);
@@ -1195,7 +1195,7 @@ process.disconnect();
 
       expect(yield* fs.readFileString(statePath)).toBe(state);
       expect(yield* fs.readFileString(plan.unitPath)).toBe(unit);
-      expect(commands).not.toContain("systemctl --user stop t3code.service");
+      expect(commands).not.toContain("systemctl --user stop ozone.service");
       expect(result).toMatchObject({ handedOff: true, logPath: plan.logPath });
       const handoffs = invocations.filter(({ command }) => command === "systemd-run");
       expect(handoffs).toHaveLength(1);
@@ -1221,7 +1221,7 @@ process.disconnect();
       expect(yield* fs.readFileString(statePath)).toBe(state);
       expect(yield* fs.readFileString(plan.unitPath)).toBe(unit);
       expect(control.active).toBe(true);
-      expect(commands).not.toContain("systemctl --user stop t3code.service");
+      expect(commands).not.toContain("systemctl --user stop ozone.service");
     }),
   );
 
@@ -1248,8 +1248,8 @@ process.disconnect();
         const outcome = yield* inside.restart;
         expect(commands).toEqual([
           "systemctl --user daemon-reload",
-          "systemctl --user enable t3code.service",
-          "systemctl --user restart --no-block t3code.service",
+          "systemctl --user enable ozone.service",
+          "systemctl --user restart --no-block ozone.service",
         ]);
         expect(outcome).toBe("queued");
         expect(yield* fs.readFileString(statePath)).toBe(state);
@@ -1271,9 +1271,9 @@ process.disconnect();
           (command) => command.startsWith("systemctl ") && !command.includes("show-environment"),
         ),
       ).toEqual([
-        "systemctl --user stop t3code.service",
+        "systemctl --user stop ozone.service",
         "systemctl --user daemon-reload",
-        "systemctl --user restart t3code.service",
+        "systemctl --user restart ozone.service",
       ]);
     }),
   );
@@ -1305,8 +1305,8 @@ process.disconnect();
             (command) => command.startsWith("systemctl ") && !command.includes("show-environment"),
           ),
         ).toEqual([
-          "systemctl --user stop t3code.service",
-          "systemctl --user restart t3code.service",
+          "systemctl --user stop ozone.service",
+          "systemctl --user restart ozone.service",
         ]);
       }
     }),
@@ -1320,7 +1320,7 @@ process.disconnect();
 
       expect(
         plan.unitPath.endsWith(
-          path.join("Library", "LaunchAgents", "com.t3tools.t3code.service.plist"),
+          path.join("Library", "LaunchAgents", "io.github.koneb71.ozone.service.plist"),
         ),
       ).toBe(true);
       expect(yield* fs.readFileString(plan.unitPath)).toContain(
@@ -1341,10 +1341,60 @@ process.disconnect();
       expect((yield* service.status).installed).toBe(false);
       expect(commands.some((command) => command.startsWith("systemctl "))).toBe(false);
       // launchd can take 90s to bootout; the runner's 60s default could let bootstrap race it.
-      expect(timeouts.get("launchctl bootout --wait gui/501/com.t3tools.t3code.service")).toEqual(
-        Duration.seconds(120),
-      );
+      expect(
+        timeouts.get("launchctl bootout --wait gui/501/io.github.koneb71.ozone.service"),
+      ).toEqual(Duration.seconds(120));
     }),
+  );
+
+  it.effect.each(["linux", "darwin"] as const)(
+    "replaces the service an earlier Ozone installed under T3 Code's names on %s, and leaves T3 Code's",
+    (platform) =>
+      Effect.gen(function* () {
+        const { service, fs, home, baseDir, commands } = yield* makeHarness(platform);
+        const path = yield* Path.Path;
+        const render = (servedHome: string) => {
+          const legacyPlan = {
+            program: [`${servedHome}/runtime/versions/1.0.0/t3`, "__service-launcher"],
+            baseDir: servedHome,
+            logPath: "/log",
+            unitPath: "",
+          };
+          return platform === "linux"
+            ? BootService.renderBootServiceUnit(legacyPlan)
+            : BootService.renderBootServicePlist(legacyPlan, {
+                homeDir: home,
+                environmentPath: "",
+              });
+        };
+        const legacyPath = path.join(
+          path.dirname((yield* service.status).unitPath),
+          platform === "linux" ? "t3code.service" : "com.t3tools.t3code.service.plist",
+        );
+        const stop =
+          platform === "linux"
+            ? "systemctl --user disable --now t3code.service"
+            : "launchctl bootout --wait gui/501/com.t3tools.t3code.service";
+        yield* fs.makeDirectory(path.dirname(legacyPath), { recursive: true });
+
+        yield* fs.writeFileString(legacyPath, render(path.join(home, ".t3")));
+        yield* service.install();
+        expect(yield* service.uninstall).toBe(true);
+        expect(yield* service.uninstall).toBe(false);
+        expect(yield* fs.exists(legacyPath)).toBe(true);
+        expect(commands).not.toContain(stop);
+
+        yield* fs.writeFileString(legacyPath, render(baseDir));
+        const plan = yield* service.install();
+        expect(yield* fs.exists(legacyPath)).toBe(false);
+        expect(commands.indexOf(stop)).toBeGreaterThan(-1);
+        expect(yield* fs.exists(plan.unitPath)).toBe(true);
+        expect(yield* service.uninstall).toBe(true);
+
+        yield* fs.writeFileString(legacyPath, render(baseDir));
+        expect(yield* service.uninstall).toBe(true);
+        expect(yield* fs.exists(legacyPath)).toBe(false);
+      }),
   );
 
   it.effect("installs, reports a stopped launcher, and uninstalls on Windows", () =>
@@ -1355,7 +1405,7 @@ process.disconnect();
       const task = yield* fs.readFileString(plan.unitPath);
 
       expect(plan.unitPath).toBe(
-        path.join(path.dirname(plan.baseDir), "AppData", "Local", "t3code", "t3code-task.xml"),
+        path.join(path.dirname(plan.baseDir), "AppData", "Local", "ozone", "ozone-task.xml"),
       );
       expect(BootService.bootServiceProgramOf(task)).toBe(runtime.entryPath);
       expect(BootService.bootServiceBaseDirOf(task)).toBe(plan.baseDir);
@@ -1366,8 +1416,8 @@ process.disconnect();
         activeVersion: "1.2.3",
       });
       expect(commands.filter((command) => command.startsWith("schtasks "))).toEqual([
-        `schtasks /Create /XML ${plan.unitPath} /TN t3code-PC-theo /F`,
-        "schtasks /Run /TN t3code-PC-theo",
+        `schtasks /Create /XML ${plan.unitPath} /TN ozone-PC-theo /F`,
+        "schtasks /Run /TN ozone-PC-theo",
       ]);
       // No launcher holds the lock here.
       expect(yield* service.status).toMatchObject({
@@ -1377,7 +1427,7 @@ process.disconnect();
       });
 
       // A task that Task Scheduler refuses to delete stays installed, so a retry finds it.
-      control.failCommand = "schtasks /Delete /TN t3code-PC-theo /F";
+      control.failCommand = "schtasks /Delete /TN ozone-PC-theo /F";
       expect((yield* service.uninstall.pipe(Effect.flip))._tag).toBe("BootServiceCommandError");
       expect((yield* service.status).installed).toBe(true);
       control.failCommand = undefined;
@@ -1385,9 +1435,9 @@ process.disconnect();
       commands.length = 0;
       expect(yield* service.uninstall).toBe(true);
       expect(commands).toEqual([
-        "schtasks /Change /TN t3code-PC-theo /DISABLE",
-        "schtasks /End /TN t3code-PC-theo",
-        "schtasks /Delete /TN t3code-PC-theo /F",
+        "schtasks /Change /TN ozone-PC-theo /DISABLE",
+        "schtasks /End /TN ozone-PC-theo",
+        "schtasks /Delete /TN ozone-PC-theo /F",
       ]);
       expect(control.task).toBeUndefined();
       expect((yield* service.status).installed).toBe(false);
@@ -1427,11 +1477,11 @@ process.disconnect();
       commands.length = 0;
       yield* service.withStopped(Effect.sync(() => commands.push("repair")));
       expect(commands.filter((command) => !command.includes("/Query"))).toEqual([
-        "schtasks /Change /TN t3code-PC-theo /DISABLE",
-        "schtasks /End /TN t3code-PC-theo",
+        "schtasks /Change /TN ozone-PC-theo /DISABLE",
+        "schtasks /End /TN ozone-PC-theo",
         "repair",
-        "schtasks /Change /TN t3code-PC-theo /ENABLE",
-        "schtasks /Run /TN t3code-PC-theo",
+        "schtasks /Change /TN ozone-PC-theo /ENABLE",
+        "schtasks /Run /TN ozone-PC-theo",
       ]);
     }),
   );
@@ -1442,9 +1492,9 @@ process.disconnect();
       const plan = yield* service.install();
       const inside = yield* makeService(undefined, "1.2.4", undefined, true);
       const handoff = [
-        `schtasks /Create /XML ${plan.unitPath} /TN t3code-PC-theo /F`,
-        "schtasks /End /TN t3code-PC-theo",
-        "schtasks /Run /TN t3code-PC-theo",
+        `schtasks /Create /XML ${plan.unitPath} /TN ozone-PC-theo /F`,
+        "schtasks /End /TN ozone-PC-theo",
+        "schtasks /Run /TN ozone-PC-theo",
       ];
       commands.length = 0;
 
@@ -1540,7 +1590,7 @@ process.disconnect();
     Effect.gen(function* () {
       const { service, control } = yield* makeHarness("darwin");
       yield* service.install();
-      control.failCommand = "launchctl bootout --wait gui/501/com.t3tools.t3code.service";
+      control.failCommand = "launchctl bootout --wait gui/501/io.github.koneb71.ozone.service";
 
       yield* service.install();
       expect((yield* service.status).current).toBe(true);

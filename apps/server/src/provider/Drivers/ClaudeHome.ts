@@ -46,7 +46,7 @@ export const makeClaudeEnvironment = Effect.fn("makeClaudeEnvironment")(function
   };
 });
 
-// A Claude Code session that launched T3 exports these. A claude spawned with them acts as part of
+// A Claude Code session that launched Ozone exports these. A claude spawned with them acts as part of
 // that session: its session id, messaging socket and token, and effort.
 const CLAUDE_HOST_SESSION_VARIABLES = [
   "CLAUDECODE",
@@ -64,22 +64,22 @@ const CLAUDE_HOST_SESSION_VARIABLES = [
 ];
 
 /**
- * Base env for the Claude processes T3 Code runs, before `makeClaudeEnvironment`.
- * Claude Code reads its entrypoint from the process env, not its settings `env`, so T3 Code applies that override itself.
+ * Base env for the Claude processes Ozone runs, before `makeClaudeEnvironment`.
+ * Claude Code reads its entrypoint from the process env, not its settings `env`, so Ozone applies that override itself.
  */
 export const mergeClaudeProcessEnvironment = Effect.fn("mergeClaudeProcessEnvironment")(function* (
   config: Pick<ClaudeSettings, "homePath">,
   instanceEnvironment: ProviderInstanceEnvironment | undefined,
   hostEnvironment: NodeJS.ProcessEnv,
 ) {
-  // ozone-seam: an API key left in the shell must not replace the signed-in subscription.
+  // An API key left in the shell must not replace the signed-in subscription.
   const baseEnvironment: NodeJS.ProcessEnv = {
     ...withoutAmbientClaudeApiKey(hostEnvironment),
     CLAUDE_CODE_ENTRYPOINT: "t3-code",
   };
   for (const name of CLAUDE_HOST_SESSION_VARIABLES) delete baseEnvironment[name];
   // The desktop runs the server as Node through Electron. Commands Claude runs inherit its env, so
-  // an Electron app they start (T3 Code itself, VS Code) would run as Node and exit.
+  // an Electron app they start (Ozone itself, VS Code) would run as Node and exit.
   delete baseEnvironment.ELECTRON_RUN_AS_NODE;
   const environment = yield* mergeProviderInstanceEnvironment(instanceEnvironment, baseEnvironment);
   const settingsEntrypoint = (yield* readClaudeSettingsEnv(config, undefined, environment))

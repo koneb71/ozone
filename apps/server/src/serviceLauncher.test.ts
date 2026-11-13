@@ -125,10 +125,10 @@ it("rejects contradictory service state", () => {
 });
 
 const unitPlan = (root: string, version: string) => ({
-  program: [`${root}/runtime/versions/${version}/t3`, "__service-launcher"],
+  program: [`${root}/runtime/versions/${version}/ozone`, "__service-launcher"],
   baseDir: root,
   logPath: `${root}/logs/boot-service.log`,
-  unitPath: `${root}/unit/t3code.service`,
+  unitPath: `${root}/unit/ozone.service`,
 });
 
 const writeFakeRuntime = (
@@ -138,7 +138,7 @@ const writeFakeRuntime = (
   childSource: string,
 ) =>
   Effect.gen(function* () {
-    const entryPath = path.join(versionDir, "t3");
+    const entryPath = path.join(versionDir, "ozone");
     yield* fs.makeDirectory(versionDir, { recursive: true });
     yield* fs.writeFileString(entryPath, `#!${process.execPath}\n${childSource}`);
     yield* fs.chmod(entryPath, 0o755);
@@ -236,26 +236,26 @@ it.layer(NodeServices.layer)("service state persistence", (it) => {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-service-launcher-task-" });
-      const unitPath = path.join(root, "t3code-task.xml");
+      const unitPath = path.join(root, "ozone-task.xml");
       const unit = renderBootServiceTask(unitPlan(root, "1.1.0"), {
         userId: "PC\\theo",
         homeDir: "C:\\Users\\theo",
         conhostPath: "conhost.exe",
       });
       yield* fs.writeFileString(unitPath, unit);
-      // Task Scheduler's copy: `t3 doctor` disabled it to keep the service stopped.
+      // Task Scheduler's copy: `ozone doctor` disabled it to keep the service stopped.
       let task = disabledServiceTask(unit.replace("1.1.0", "1.0.0"));
       const schtasks = async (...args: ReadonlyArray<string>) => {
         if (args[0] === "/Create") task = await NodeFSP.readFile(args[2] ?? "", "utf8");
         return { stdout: task };
       };
 
-      yield* Effect.promise(() => registerServiceTask(unitPath, "t3code-PC-theo", schtasks));
+      yield* Effect.promise(() => registerServiceTask(unitPath, "ozone-PC-theo", schtasks));
       assert.equal(task, disabledServiceTask(unit));
-      assert.deepEqual(yield* fs.readDirectory(root), ["t3code-task.xml"]);
+      assert.deepEqual(yield* fs.readDirectory(root), ["ozone-task.xml"]);
 
       task = unit.replace("1.1.0", "1.0.0");
-      yield* Effect.promise(() => registerServiceTask(unitPath, "t3code-PC-theo", schtasks));
+      yield* Effect.promise(() => registerServiceTask(unitPath, "ozone-PC-theo", schtasks));
       assert.equal(task, unit);
     }),
   );
@@ -266,7 +266,7 @@ it.layer(NodeServices.layer)("service state persistence", (it) => {
       const path = yield* Path.Path;
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-service-launcher-unit-" });
       const home = path.join(root, "home");
-      const unitPath = path.join(home, "Library", "LaunchAgents", "t3code.plist");
+      const unitPath = path.join(home, "Library", "LaunchAgents", "ozone.plist");
       const render = (version: string) =>
         renderBootServicePlist(unitPlan(root, version), { homeDir: home, environmentPath: "" });
       yield* fs.makeDirectory(path.dirname(unitPath), { recursive: true });
@@ -292,7 +292,7 @@ it.layer(NodeServices.layer)("service state persistence", (it) => {
         }),
       );
       vi.stubEnv("HOME", home);
-      vi.stubEnv("T3_BOOT_SERVICE_UNIT", "t3code.plist");
+      vi.stubEnv("T3_BOOT_SERVICE_UNIT", "ozone.plist");
 
       yield* Effect.promise(() =>
         expect(runLauncher(root)).rejects.toThrow("Active child exited unexpectedly (0)."),
@@ -390,7 +390,7 @@ process.exit(0);
 
       yield* Effect.promise(() =>
         expect(runLauncher(root)).rejects.toThrow(
-          "Selected t3@1.0.0 runtime is missing or incomplete.",
+          "Selected ozone@1.0.0 runtime is missing or incomplete.",
         ),
       );
       assert.equal(yield* fs.readFileString(statePath), contents);
@@ -398,7 +398,7 @@ process.exit(0);
     }),
   );
 
-  it.effect("a fresh launcher clears a restart deferred by t3 update", () =>
+  it.effect("a fresh launcher clears a restart deferred by ozone update", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -440,7 +440,7 @@ process.exit(0);
 
   it.effect.each([
     { unitVersion: "1.0.0", replacement: "an intentional downgrade" },
-    { unitVersion: "1.2.0", replacement: "another T3 home" },
+    { unitVersion: "1.2.0", replacement: "another Ozone home" },
   ])(
     "recovers a rolled-back update with unit $unitVersion and preserves $replacement",
     ({ unitVersion, replacement }) =>
@@ -506,7 +506,7 @@ process.exit(0);
         const staleLauncher = yield* createLauncher;
         // A local install can replace the selection or service owner without stopping this launcher.
         const selectedRoot =
-          replacement === "another T3 home" ? path.join(root, "other-home") : root;
+          replacement === "another Ozone home" ? path.join(root, "other-home") : root;
         yield* writeFakeRuntime(
           fs,
           path,
@@ -537,7 +537,7 @@ process.exit(0);
       }),
   );
 
-  it.effect("stays idle instead of exiting when another server owns the T3 home", () =>
+  it.effect("stays idle instead of exiting when another server owns the Ozone home", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -559,7 +559,7 @@ process.exit(0);
       yield* Effect.acquireRelease(
         Effect.sync(() =>
           vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
-            if (String(chunk).includes("owns this T3 home")) refused.resolve();
+            if (String(chunk).includes("owns this Ozone home")) refused.resolve();
             return true;
           }),
         ),

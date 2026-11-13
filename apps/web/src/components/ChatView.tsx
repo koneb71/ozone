@@ -1310,7 +1310,7 @@ export default function ChatView(props: ChatViewProps) {
     automaticEnvironment,
     autoUpdateEnvironments,
   });
-  // ozone-seam: an app's notices join the composer's, and files picked on Home reach it.
+  // An app's notices join the composer's, and files picked on Home reach it.
   const ozoneComposerBannerItems = useOzoneComposer(activeThreadRef, activeProject?.id ?? null);
   const providerInstanceEntries = providerInstanceEntriesFor(
     providerStatuses,
@@ -2816,7 +2816,7 @@ export default function ChatView(props: ChatViewProps) {
         : serverConfig === null
           ? "Side chats are not ready yet. Try again in a moment."
           : serverConfig.environment.capabilities.sideChats !== true
-            ? "Update this environment's T3 Code server to use side chats."
+            ? "Update this environment's Ozone server to use side chats."
             : sideChatsOffered && !isServerThread
               ? "Side chats start after the first message."
               : sideChat.available &&

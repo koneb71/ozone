@@ -17,7 +17,7 @@ import {
   SOURCE_TEMPLATES_ROOT,
   TEMPLATE_BUNDLE_FILE,
   writeTemplateBundle,
-} from "../src/ozone/apps/templates.ts"; // ozone-seam
+} from "../src/ozone/apps/templates.ts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import {
@@ -103,7 +103,7 @@ const buildCmd = Command.make(
       } else {
         yield* Effect.logWarning("[cli] Web dist not found. Skipping client bundle.");
       }
-      // ozone-seam: an installed Ozone makes apps from templates bundled beside the server.
+      // An installed Ozone makes apps from templates bundled beside the server.
       yield* writeTemplateBundle(
         path.join(repoRoot, SOURCE_TEMPLATES_ROOT),
         path.join(serverDir, "dist", TEMPLATE_BUNDLE_FILE),

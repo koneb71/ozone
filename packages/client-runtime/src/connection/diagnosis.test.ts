@@ -37,7 +37,7 @@ describe("presentConnectionDiagnosis", () => {
 
   it("names the host when its server does not answer", () => {
     const diagnosis = diagnose(backoff(unreachable));
-    expect(diagnosis?.headline).toBe("T3 Code on Mac mini did not answer");
+    expect(diagnosis?.headline).toBe("Ozone on Mac mini did not answer");
     expect(results(backoff(unreachable))).toEqual(["device:ok", "server:failed"]);
     expect(diagnosis?.facts).toContainEqual(["Cause", "network"]);
     expect(diagnosis?.facts).toContainEqual(["Attempts", "3"]);
@@ -62,8 +62,8 @@ describe("presentConnectionDiagnosis", () => {
       serverUpdateRequired: true,
     });
     const diagnosis = diagnose(backoff(failure));
-    expect(diagnosis?.headline).toBe("Mac mini runs an older T3 Code");
-    expect(diagnosis?.steps).toEqual(["Update T3 Code on Mac mini."]);
+    expect(diagnosis?.headline).toBe("Mac mini runs an older Ozone");
+    expect(diagnosis?.steps).toEqual(["Update Ozone on Mac mini."]);
   });
 
   it("does not report hops as working when the failure names none", () => {

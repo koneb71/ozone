@@ -682,7 +682,6 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerOtlpTracesProxyRoute,
     ServerHttp.layerAssetRoute,
     ServerHttp.layerAttachmentUploadRoute,
-    // ozone-seam: the URL that deploys an app.
     Ozone.layerRoutes,
     DeviceHubProxy.layer,
     ServerBrowserStream.routeLayer,
@@ -690,7 +689,6 @@ const layerMakeRoutes = Layer.mergeAll(
     Ws.layer,
     speechStreamRouteLayer,
   ),
-  // ozone-seam: Ozone's tools are registered beside upstream's, on the same MCP server.
   McpHttpServer.layerMcpTransport(
     Layer.mergeAll(McpHttpServer.layerTools, McpHttpServer.layerToolSearch, Ozone.layerMcpTools),
   ).pipe(
@@ -743,7 +741,7 @@ const layerMakeRoutes = Layer.mergeAll(
 const layerMakeServer = Layer.unwrap(
   Effect.gen(function* () {
     const config = yield* ServerConfig.ServerConfig;
-    // Before anything opens the database: one server per T3 home.
+    // Before anything opens the database: one server per Ozone home.
     const ownership = yield* ServerOwnership.acquireServerOwnership(config.serverRuntimeStatePath);
     const activation = yield* Deferred.make<void>();
     const awaitActivation = Deferred.await(activation);
@@ -908,7 +906,6 @@ const layerMakeServer = Layer.unwrap(
     );
 
     return layerServerApplication.pipe(
-      // ozone-seam: Ozone's services, for its WebSocket handlers and MCP tools.
       Layer.provide(Ozone.layer),
       Layer.provideMerge(layerRuntimeServices),
       Layer.provideMerge(McpSessionRegistry.layer.pipe(Layer.provide(ServerEnvironment.layer))),

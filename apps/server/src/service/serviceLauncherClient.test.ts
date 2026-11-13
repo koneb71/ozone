@@ -63,9 +63,9 @@ it.effect.each([3, SERVICE_LAUNCHER_PROTOCOL])(
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-trial-" });
-      const baseDir = path.join(root, ".t3");
-      const exe = (version: string) => path.join(baseDir, "runtime/versions", version, "t3");
-      const installed = path.join(root, ".local/bin/t3");
+      const baseDir = path.join(root, ".ozone");
+      const exe = (version: string) => path.join(baseDir, "runtime/versions", version, "ozone");
+      const installed = path.join(root, ".local/bin/ozone");
       for (const file of [exe("1.0.0"), exe("1.1.0")]) {
         yield* fs.makeDirectory(path.dirname(file), { recursive: true });
         yield* fs.writeFileString(file, "");
@@ -215,10 +215,10 @@ it.layer(NodeServices.layer)("self-update launchers", (it) => {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-update-" });
-        const baseDir = path.join(root, ".t3");
-        const exe = (version: string) => path.join(baseDir, "runtime/versions", version, "t3");
-        const installed = path.join(root, "custom/bin/t3");
-        const onPath = path.join(root, "bin/t3");
+        const baseDir = path.join(root, ".ozone");
+        const exe = (version: string) => path.join(baseDir, "runtime/versions", version, "ozone");
+        const installed = path.join(root, "custom/bin/ozone");
+        const onPath = path.join(root, "bin/ozone");
         for (const file of [exe("1.0.0"), exe("1.5.0"), exe("2.0.0")]) {
           yield* fs.makeDirectory(path.dirname(file), { recursive: true });
           yield* fs.writeFileString(file, "");
@@ -246,10 +246,10 @@ it.layer(NodeServices.layer)("self-update launchers", (it) => {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-update-" });
-      const baseDir = path.join(root, ".t3");
-      const exe = (version: string) => path.join(baseDir, "runtime/versions", version, "t3");
-      const installed = path.join(root, ".local/bin/t3");
-      const onPath = path.join(root, "bin/t3");
+      const baseDir = path.join(root, ".ozone");
+      const exe = (version: string) => path.join(baseDir, "runtime/versions", version, "ozone");
+      const installed = path.join(root, ".local/bin/ozone");
+      const onPath = path.join(root, "bin/ozone");
       for (const file of [exe("1.0.0"), exe("2.0.0")]) {
         yield* fs.makeDirectory(path.dirname(file), { recursive: true });
         yield* fs.writeFileString(file, "");
@@ -300,11 +300,11 @@ it.layer(NodeServices.layer)("self-update launchers", (it) => {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-update-" });
-      const baseDir = path.join(root, ".t3");
-      const installed = path.join(root, ".local/bin/t3");
-      const onPath = path.join(root, "bin/t3");
-      const foreign = path.join(root, "other-home/runtime/versions/1.0.0/t3");
-      const target = path.join(baseDir, "runtime/versions/2.0.0/t3");
+      const baseDir = path.join(root, ".ozone");
+      const installed = path.join(root, ".local/bin/ozone");
+      const onPath = path.join(root, "bin/ozone");
+      const foreign = path.join(root, "other-home/runtime/versions/1.0.0/ozone");
+      const target = path.join(baseDir, "runtime/versions/2.0.0/ozone");
       for (const file of [installed, foreign, target]) {
         yield* fs.makeDirectory(path.dirname(file), { recursive: true });
         yield* fs.writeFileString(file, "user-owned file");

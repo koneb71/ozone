@@ -13,7 +13,7 @@ export interface ThreadNotificationObservation {
   readonly backgroundWake: boolean;
 }
 
-/** Matches the push relay's completion confirmation: a final wake can start right after a progress wake. */
+/** A final wake can start right after a progress wake. */
 export const RELEASED_COMPLETION_GRACE_MS = 5_000;
 
 export function createThreadNotificationGate<Key>(

@@ -19,7 +19,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as McpInvocationContext from "../mcp/McpInvocationContext.ts";
 import * as PeerLinks from "./PeerLinks.ts";
 
-/** The only MCP protocol version a T3 Code `/mcp` registers. */
+/** The only MCP protocol version an Ozone `/mcp` registers. */
 const PROTOCOL_VERSION = "2025-06-18";
 
 /** A title can be any length; the header carrying it stays well under HTTP header limits. */
@@ -32,7 +32,7 @@ export interface PeerCallLimits {
 }
 
 /**
- * Calls a linked environment's T3 MCP tools as this environment's outside
+ * Calls a linked environment's Ozone MCP tools as this environment's outside
  * agent. Each call carries the calling agent's limits in `T3-Mode-Limit`, so
  * the peer enforces the narrower of those and the link's own access.
  */

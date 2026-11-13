@@ -18,7 +18,6 @@ import * as TestClock from "effect/testing/TestClock";
 import {
   comparisonBase,
   defaultConcurrency,
-  docReaderTests,
   gitLines,
   runSteps,
   splitTests,
@@ -37,15 +36,8 @@ describe("check:changed", () => {
     assert.strictEqual(defaultConcurrency(1, 64 * GiB), 1);
   });
 
-  it("runs the server tests for the one guide they read and leaves other docs inert", () => {
-    const packages = readWorkspace();
-    assert.isTrue(
-      decide(["docs/user/t3-connect-troubleshooting.md"], packages, false).outputs.test_server,
-    );
-    assert.deepStrictEqual(docReaderTests(["docs/user/t3-connect-troubleshooting.md"]), [
-      "apps/server/src/cloud/ConnectReachability.test.ts",
-    ]);
-    assert.deepStrictEqual(decide(["docs/user/install.md"], packages, false).affected, []);
+  it("leaves docs inert", () => {
+    assert.deepStrictEqual(decide(["docs/user/install.md"], readWorkspace(), false).affected, []);
   });
 
   it.effect(
@@ -444,23 +436,6 @@ it("checks changed source paths through the Windows launcher", () => {
   expect(calls.some(({ args }) => args[0] === "install")).toBe(false);
   expect(result.stdout).toContain("fixture stdout: lint");
   expect(result.stdout).toContain("fixture stderr: lint");
-});
-
-it("lints an Astro component and runs knip when only it changed", () => {
-  using project = launcherFixture();
-  const page = "packages/example/Page.astro";
-  project.write(page, "---\nconst title = 1;\n---\n<h1>{title}</h1>\n");
-  const result = project.run();
-  expect(result.status, result.stdout + result.stderr).toBe(0);
-  const calls = project.calls();
-  expect(calls.find(({ args }) => args[0] === "lint")?.args).toEqual([
-    "lint",
-    "--no-error-on-unmatched-pattern",
-    page,
-  ]);
-  const commands = calls.map(({ args }) => args);
-  expect(commands).toContainEqual(["exec", "knip", "--include", "files"]);
-  expect(commands).toContainEqual(["exec", "knip", "--exports"]);
 });
 
 it.each(["install", "lint"])("reports a failing %s step with its output", (step) => {

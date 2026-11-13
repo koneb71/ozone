@@ -85,7 +85,6 @@ export class DesktopEnvironment extends Context.Service<
   }
 >()("@t3tools/desktop/app/DesktopEnvironment") {}
 
-// ozone-seam: the product name.
 const APP_BASE_NAME = "Ozone";
 
 function resolveDesktopAppStageLabel(input: {
@@ -229,7 +228,7 @@ const make = Effect.fn("desktop.environment.make")(function* (
     branding,
     displayName,
     appUserModelId: Option.getOrElse(config.appUserModelIdOverride, () =>
-      // ozone-seam: an identity of its own, so Windows never groups it with T3 Code.
+      // An identity of its own, so Windows never groups it with T3 Code.
       isDevelopment ? "io.github.koneb71.ozone.dev" : "io.github.koneb71.ozone",
     ),
     linuxDesktopEntryName: resolveLinuxDesktopEntryName(isDevelopment),

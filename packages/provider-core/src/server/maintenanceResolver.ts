@@ -575,7 +575,7 @@ export const resolveMiseProviderMaintenance = Effect.fn("resolveMiseProviderMain
     // Asked even off mise's usual paths, since `MISE_DATA_DIR` can put installs anywhere.
     const which = nonEmptyString(yield* runProbe(misePath, ["which", miseTool], context.env));
     const resolvedPath = which ? yield* realPath(which) : null;
-    // Through a shim T3 Code runs whatever mise resolves; otherwise the configured binary.
+    // Through a shim Ozone runs whatever mise resolves; otherwise the configured binary.
     const binaryPath = isShim ? resolvedPath : context.realCommandPath;
     if (!binaryPath) return manual(context.realCommandPath);
     const binary = normalizeCommandPath(binaryPath);
@@ -667,7 +667,7 @@ export const resolvePackageManagedProviderMaintenance = Effect.fn(
   });
   const commandPaths = [context.resolvedCommandPath, context.realCommandPath];
   const packageName = definition.npmPackageName;
-  // WinGet-managed claude update exits 0 without updating; T3 does not run winget upgrade.
+  // WinGet-managed claude update exits 0 without updating; Ozone does not run winget upgrade.
   if (
     definition.provider === "claudeAgent" &&
     context.platform === "win32" &&
@@ -1103,7 +1103,7 @@ export const makeCachedProviderMaintenanceResolution = Effect.fn(
 
 function manualUpdateMessage(latestVersion: string, installPath: string | undefined): string {
   return installPath
-    ? `Version ${latestVersion} is out. T3 Code runs ${installPath}; update it with the app or tool that installed it.`
+    ? `Version ${latestVersion} is out. Ozone runs ${installPath}; update it with the app or tool that installed it.`
     : `Version ${latestVersion} is out. Update it with the app or tool that installed it.`;
 }
 

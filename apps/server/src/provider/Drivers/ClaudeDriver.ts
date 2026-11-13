@@ -148,7 +148,6 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
       accentColor,
       continuationGroupKey,
     });
-    // ozone-seam: every Claude snapshot offers in-app sign-in.
     const stampIdentity = (snapshot: Parameters<typeof stampInstance>[0]) =>
       advertiseClaudeSignIn(stampInstance(snapshot));
 
@@ -373,7 +372,6 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
       ),
     );
 
-    // ozone-seam: sign in to a Claude subscription from the app.
     const auth = yield* makeClaudeSubscriptionAuth({
       instanceId,
       binaryPath: effectiveConfig.binaryPath,

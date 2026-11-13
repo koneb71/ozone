@@ -89,7 +89,8 @@ export const makeClaudeSubscriptionAuth = Effect.fn("makeClaudeSubscriptionAuth"
       stderr: "ignore",
     });
 
-  const signedIn = spawner.string(claude(["auth", "status", "--json"])).pipe(
+  // Suspended: building the command already counts as a spawn to a spawner that records them.
+  const signedIn = Effect.suspend(() => spawner.string(claude(["auth", "status", "--json"]))).pipe(
     Effect.map((output) =>
       Option.match(decodeAuthStatus(output.trim()), {
         onNone: () => false,

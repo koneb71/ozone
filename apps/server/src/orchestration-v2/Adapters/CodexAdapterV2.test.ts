@@ -189,7 +189,7 @@ describe("CodexAdapterV2 runtime policy", () => {
       }),
   );
 
-  it.effect("derives concrete Codex turn policies from every T3 runtime mode", () =>
+  it.effect("derives concrete Codex turn policies from every Ozone runtime mode", () =>
     Effect.gen(function* () {
       const build = (
         runtimeMode: "approval-required" | "auto-accept-edits" | "auto" | "full-access",
@@ -255,7 +255,7 @@ describe("CodexAdapterV2 runtime policy", () => {
         kind: "untrusted",
         value: "Filtered to overdue",
       });
-      assert.isDefined(withT3.additionalContext?.["t3_code_runtime"]);
+      assert.isDefined(withT3.additionalContext?.["ozone_runtime"]);
     }),
   );
 });
@@ -595,7 +595,7 @@ function codexReplayPreamble(input: {
         id: 1,
         method: "initialize",
         params: {
-          clientInfo: { name: "T3 Code", title: "T3 Code", version: packageJson.version },
+          clientInfo: { name: "Ozone", title: "Ozone", version: packageJson.version },
           capabilities: {
             experimentalApi: true,
             optOutNotificationMethods: ["turn/diff/updated"],
@@ -612,7 +612,7 @@ function codexReplayPreamble(input: {
       frame: {
         id: 1,
         result: {
-          userAgent: "T3 Code/0.156.1",
+          userAgent: "Ozone/0.156.1",
           codexHome: "/tmp/codex-home",
           platformFamily: "unix",
           platformOs: "macos",
@@ -1126,7 +1126,7 @@ describe("CodexAdapterV2 session initialize", () => {
               frame: {
                 id: 1,
                 result: {
-                  userAgent: "T3 Code/0.144.3 (Mac OS 15.5.0; x86_64) unknown (T3 Code; 0.1.5)",
+                  userAgent: "Ozone/0.144.3 (Mac OS 15.5.0; x86_64) unknown (Ozone; 0.1.5)",
                   codexHome: "/tmp/codex-home",
                   platformFamily: "unix",
                   platformOs: "macos",
@@ -1150,7 +1150,7 @@ describe("CodexAdapterV2 session initialize", () => {
       assert.instanceOf(failure.cause, ProviderSetupError);
       assert.equal(
         failure.cause.message,
-        "Codex 0.144.3 does not work with this T3 Code release. Update Codex to >=0.159.0, then retry.",
+        "Codex 0.144.3 does not work with this Ozone release. Update Codex to >=0.159.0, then retry.",
       );
     }).pipe(
       Effect.scoped,
@@ -2641,7 +2641,7 @@ describe("CodexAdapterV2 post-settle continuation", () => {
     ),
   );
 
-  it.effect("preserves T3 context on the wire and restores it after compaction", () =>
+  it.effect("preserves Ozone context on the wire and restores it after compaction", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const nativeThreadId = "context-thread";
@@ -2654,7 +2654,7 @@ describe("CodexAdapterV2 post-settle continuation", () => {
           hasT3Mcp: true,
         });
         assert.include(
-          params.additionalContext?.t3_code_orchestration_01?.value ?? "",
+          params.additionalContext?.ozone_orchestration_01?.value ?? "",
           "delegate_task",
         );
         const entries = codexReplayPreamble({ nativeThreadId, nativeTurnId, prompt: "work" });
@@ -2756,7 +2756,7 @@ describe("CodexAdapterV2 post-settle continuation", () => {
         assert.deepEqual(
           wireOrder,
           ["item/completed", "turn/completed", "thread/inject_items"],
-          "restored T3 context while the compacting native turn was still running",
+          "restored Ozone context while the compacting native turn was still running",
         );
       }).pipe(
         Effect.provide(
@@ -4679,7 +4679,7 @@ describe("CodexAdapterV2 post-settle continuation", () => {
                     id: `image-${index}`,
                     status: "completed",
                     result,
-                    revisedPrompt: "A tree shaped like T3",
+                    revisedPrompt: "A tree shaped like Ozone",
                     transparentBackground: true,
                     ...image,
                   },
@@ -4726,7 +4726,7 @@ describe("CodexAdapterV2 post-settle continuation", () => {
         assert.strictEqual(item.title, "Generate image");
         if (item.type !== "dynamic_tool") continue;
         assert.deepEqual(item.input, {
-          prompt: "A tree shaped like T3",
+          prompt: "A tree shaped like Ozone",
           transparent_background: true,
         });
         const image = images[index]!;

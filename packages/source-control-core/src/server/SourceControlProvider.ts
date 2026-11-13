@@ -161,7 +161,7 @@ export class SourceControlProvider extends Context.Service<
       readonly repository: string | null;
     }) => Effect.Effect<boolean>;
     /**
-     * Told when T3 records `baseBranch`, a branch name on the host, as the base `branch` was cut
+     * Told when Ozone records `baseBranch`, a branch name on the host, as the base `branch` was cut
      * from, for a host whose own tools keep that in git config of their own.
      */
     readonly recordBranchBase?: (input: {

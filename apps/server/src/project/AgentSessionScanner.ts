@@ -827,6 +827,11 @@ export const make = Effect.gen(function* () {
   const runtimes = yield* ProviderSessionRuntime.ProviderSessionRuntimeRepository;
   const baseDir = path.resolve(serverConfig.baseDir);
   const worktreesDir = path.resolve(serverConfig.worktreesDir);
+  // A symlink's target is a real path, which differs from these when the home is itself linked.
+  const realPathOrSelf = (target: string) =>
+    fileSystem.realPath(target).pipe(Effect.orElseSucceed(() => target));
+  const ownedRoots = [...new Set([baseDir, yield* realPathOrSelf(baseDir)])];
+  const worktreeRoots = [...new Set([worktreesDir, yield* realPathOrSelf(worktreesDir)])];
   const platform = yield* HostProcess.Platform;
   const isWindows = platform === "win32";
   const foldWorktreeCase = isWindows;
@@ -850,10 +855,12 @@ export const make = Effect.gen(function* () {
         normalizeForWorktreeMatch(ancestor, foldWorktreeCase),
       ),
     ) ||
-    normalizeForWorktreeMatch(candidatePath, foldWorktreeCase).startsWith(
-      normalizeForWorktreeMatch(baseDir, foldWorktreeCase),
+    ownedRoots.some((root) =>
+      normalizeForWorktreeMatch(candidatePath, foldWorktreeCase).startsWith(
+        normalizeForWorktreeMatch(root, foldWorktreeCase),
+      ),
     ) ||
-    isT3ManagedWorktree(candidatePath, worktreesDir, foldWorktreeCase);
+    worktreeRoots.some((root) => isT3ManagedWorktree(candidatePath, root, foldWorktreeCase));
 
   const listDirectory = (directory: string) =>
     fileSystem.readDirectory(directory).pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));

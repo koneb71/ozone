@@ -115,7 +115,7 @@ export function WelcomePage({
     environments.find((environment) => environment.environmentId === environmentId)?.label ??
     "this computer";
   const agentReady = useWelcomeAgents(environmentId).readyCount > 0;
-  // `t3` on PATH belongs to the primary computer, so only it offers it.
+  // `ozone` on PATH belongs to the primary computer, so only it offers it.
   const isPrimary = usePrimaryEnvironmentId() === environmentId;
   const scans = useProjectScans([environmentId]);
   const [storedSelection, storeSelection] = useLocalStorage(
@@ -244,7 +244,7 @@ export function WelcomePage({
         <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
           <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-6 pt-12 pb-8 sm:pt-20">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-              Welcome to T3 Code
+              Welcome to Ozone
             </h1>
             <p className="mt-1.5 text-sm text-muted-foreground">
               Setting up <span className="text-foreground">{label}</span>.
@@ -1230,7 +1230,7 @@ function useProjectImport({
       })),
     ),
   );
-  // Projects already in T3 Code stay in the list, but reopening the page does not import their
+  // Projects already in Ozone stay in the list, but reopening the page does not import their
   // history again unless the user picks them. The scan can be 30 s old, so the live list decides.
   const projects = useProjects();
   const isNewProject = isNewOnboardingProject(projects);
@@ -1674,7 +1674,7 @@ function ImportRowMeta({
   );
 }
 
-/** The desktop app links `t3` on a fresh install; this puts its folder on PATH when it is not. */
+/** The desktop app links `ozone` on a fresh install; this puts its folder on PATH when it is not. */
 function CliPathSetup() {
   const { state, busy, run } = useDesktopCliCommand();
   const setup = state?.pathSetup;
@@ -1687,11 +1687,12 @@ function CliPathSetup() {
       <p className="min-w-0 flex-1 text-sm text-muted-foreground">
         {setup.added ? (
           <>
-            Added to {setup.file}. Open a new terminal to use <code className="font-mono">t3</code>.
+            Added to {setup.file}. Open a new terminal to use{" "}
+            <code className="font-mono">ozone</code>.
           </>
         ) : (
           <>
-            Use <code className="font-mono">t3</code> from any terminal. Adds one line to{" "}
+            Use <code className="font-mono">ozone</code> from any terminal. Adds one line to{" "}
             {setup.file}.
           </>
         )}

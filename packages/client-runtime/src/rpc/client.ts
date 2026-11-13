@@ -75,7 +75,6 @@ export type EnvironmentSubscriptionRpcTag =
   | typeof WS_METHODS.subscribeProjectClones
   | typeof WS_METHODS.terminalAttach
   | typeof WS_METHODS.terminalObserve
-  // ozone-seam: Ozone's streaming methods, declared in its contracts.
   | OzoneSubscriptionMethod;
 
 export type EnvironmentStreamCommandRpcTag =

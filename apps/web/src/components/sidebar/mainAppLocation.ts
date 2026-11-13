@@ -8,7 +8,6 @@ export function isAppModalPage(pathname: string) {
     pathname === "/settings" ||
     pathname.startsWith("/settings/") ||
     pathname === "/usage" ||
-    // ozone-seam: an Ozone app's page opens the same way.
     pathname.startsWith("/apps/")
   );
 }

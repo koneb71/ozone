@@ -10,7 +10,9 @@ import { makeComponentLogger } from "./DesktopObservability.ts";
 // AppImage mounts change each run; the launcher must mount the image itself.
 const { logInfo, logWarning } = makeComponentLogger("desktop-cli-shim");
 
-export const MARKER = "Written by T3 Code: runs the desktop app's bundled t3 CLI.";
+export const MARKER = "Written by Ozone: runs the desktop app's bundled ozone CLI.";
+// Ozone 1.0 wrote its launcher as `t3` with this line; T3 Code's own launcher is in its own home.
+const LEGACY_MARKER = "Written by T3 Code: runs the desktop app's bundled t3 CLI.";
 
 const SERVER_ENTRY = "apps/server/dist/bin.mjs";
 
@@ -19,7 +21,7 @@ const shellWord = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`;
 const cmdText = (value: string) => value.replaceAll("%", "%%");
 const cmdWord = (value: string) => `"${cmdText(value)}"`;
 
-const MOVED = "T3 Code has moved or been removed. Open the app once to update this command.";
+const MOVED = "Ozone has moved or been removed. Open the app once to update this command.";
 
 export type CliShimTarget =
   | { readonly kind: "appimage"; readonly appImage: string; readonly executableName: string }
@@ -37,7 +39,7 @@ export const renderCliShim = (input: {
     const utf8 = [target.executable, target.entry, input.shimPath, input.t3Home].some((value) =>
       [...value].some((character) => character.codePointAt(0)! > 0x7f),
     );
-    const restore = utf8 ? ["chcp %t3_codepage% >nul"] : [];
+    const restore = utf8 ? ["chcp %ozone_codepage% >nul"] : [];
     return [
       "@echo off",
       `rem ${MARKER}`,
@@ -46,7 +48,7 @@ export const renderCliShim = (input: {
       // Ctrl-C skips codepage restoration, so switch to UTF-8 only for non-ASCII install paths.
       ...(utf8
         ? [
-            `for /f "tokens=2 delims=:." %%c in ('chcp') do set "t3_codepage=%%c"`,
+            `for /f "tokens=2 delims=:." %%c in ('chcp') do set "ozone_codepage=%%c"`,
             "chcp 65001 >nul",
           ]
         : []),
@@ -62,9 +64,9 @@ export const renderCliShim = (input: {
       "exit /b 127",
       ":run",
       `${cmdWord(target.executable)} ${cmdWord(target.entry)} %*`,
-      'set "t3_exit=%ERRORLEVEL%"',
+      'set "ozone_exit=%ERRORLEVEL%"',
       ...restore,
-      "exit /b %t3_exit%",
+      "exit /b %ozone_exit%",
       "",
     ].join("\r\n");
   }
@@ -114,11 +116,50 @@ export const renderCliShim = (input: {
   ].join("\n");
 };
 
+const userCandidates = (home: string) => [`${home}/.local/bin`, `${home}/bin`];
+
+// Older builds also linked into these macOS folders. Such a link is found, updated in place, and
+// removed, but no new link goes there.
+export const commandLocations = (home: string, platform: NodeJS.Platform) => ({
+  user: userCandidates(home),
+  known:
+    platform === "darwin"
+      ? [...userCandidates(home), "/opt/homebrew/bin", "/usr/local/bin"]
+      : userCandidates(home),
+});
+
+/**
+ * Replaces the `t3` launcher an earlier Ozone wrote into this home, and the links that lead to it,
+ * with `ozone`. A `t3` that leads anywhere else is T3 Code's and stays.
+ */
+export const replaceLegacyCommand = Effect.fn("desktop.cliShim.replaceLegacyCommand")(
+  function* (input: {
+    readonly shimPath: string;
+    readonly legacyPath: string;
+    readonly linkDirectories: ReadonlyArray<string>;
+  }) {
+    const fs = yield* FileSystem.FileSystem;
+    const content = yield* fs.readFileString(input.legacyPath).pipe(Effect.option);
+    if (Option.isNone(content) || !content.value.includes(LEGACY_MARKER)) return;
+    for (const directory of input.linkDirectories) {
+      const link = `${directory}/t3`;
+      const target = yield* fs.readLink(link).pipe(Effect.option);
+      if (Option.getOrUndefined(target) !== input.legacyPath) continue;
+      yield* fs.symlink(input.shimPath, `${directory}/ozone`).pipe(Effect.ignore);
+      yield* fs.remove(link).pipe(Effect.ignore);
+    }
+    yield* fs.remove(input.legacyPath).pipe(Effect.ignore);
+    yield* logInfo("replaced the t3 launcher an earlier Ozone installed", {
+      legacyPath: input.legacyPath,
+    });
+  },
+);
+
 export const launcherPath = (environment: DesktopEnvironment.DesktopEnvironment["Service"]) =>
   environment.path.join(
     environment.baseDir,
     "bin",
-    environment.platform === "win32" ? "t3.cmd" : "t3",
+    environment.platform === "win32" ? "ozone.cmd" : "ozone",
   );
 
 export const install = Effect.gen(function* () {
@@ -144,7 +185,7 @@ export const install = Effect.gen(function* () {
   return yield* Effect.gen(function* () {
     const existing = yield* fs.readFileString(shimPath).pipe(Effect.option);
     if (Option.isSome(existing) && !existing.value.includes(MARKER)) {
-      yield* logWarning("leaving a t3 launcher the app did not write", { shimPath });
+      yield* logWarning("leaving an ozone launcher the app did not write", { shimPath });
       return Option.none<string>();
     }
     if (Option.getOrUndefined(existing) !== content) {
@@ -153,12 +194,19 @@ export const install = Effect.gen(function* () {
       const staging = `${shimPath}.${process.pid}.${yield* Random.nextIntBetween(0, 0xffffff)}.tmp`;
       yield* fs.writeFileString(staging, content, { mode: 0o755 });
       yield* fs.rename(staging, shimPath);
-      yield* logInfo("installed t3 launcher", { shimPath });
+      yield* logInfo("installed ozone launcher", { shimPath });
     }
+    yield* replaceLegacyCommand({
+      shimPath,
+      legacyPath: path.join(path.dirname(shimPath), windows ? "t3.cmd" : "t3"),
+      linkDirectories: windows
+        ? []
+        : commandLocations(environment.homeDirectory, environment.platform).known,
+    });
     return Option.some(shimPath);
   }).pipe(
     Effect.catchCause((cause) =>
-      logWarning("could not install t3 launcher", { shimPath, cause: Cause.pretty(cause) }).pipe(
+      logWarning("could not install ozone launcher", { shimPath, cause: Cause.pretty(cause) }).pipe(
         Effect.as(Option.none<string>()),
       ),
     ),

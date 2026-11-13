@@ -30,7 +30,7 @@ export interface EarlyLinuxElectronOptions {
   readonly passwordStore: LinuxPasswordStoreSwitch | null;
 }
 
-// ozone-seam: Ozone's launcher name; scripts/ozone-desktop-identity.ts names the same WM_CLASS.
+// scripts/build-desktop-artifact.ts writes the same name as the launcher's StartupWMClass.
 export const resolveLinuxDesktopEntryName = (isDevelopment: boolean): string =>
   isDevelopment ? "io.github.koneb71.Ozone.Development.desktop" : "io.github.koneb71.Ozone.desktop";
 

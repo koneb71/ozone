@@ -1,11 +1,11 @@
 # Activity log
 
-On web and desktop, consecutive tool calls appear as an expandable summary. Open it to inspect
+Consecutive tool calls appear as an expandable summary. Open it to inspect
 commands, tool inputs, status, and exit codes. Expand a tool call to see its output. A running
 command's output updates live, and long output shows only its most recent part. Use **Open diff** on
 a file change to review its contents.
 
-T3 Orchestrator summaries describe the actions taken, such as **Ran 2 commands and sent messages
+Summaries of Ozone's own tools describe the actions taken, such as **Ran 2 commands and sent messages
 to 3 threads**. Repeated messages to the same destinations show both counts: **Sent 5 messages to
 2 threads**. Thread creation counts the threads returned by the tool, including batches.
 
@@ -20,8 +20,7 @@ were affected.
 
 ## Hide tool calls
 
-**Tool calls in chat** in **Settings → Chat** (web and desktop) or **Settings → Appearance**
-(mobile) hides commands, file edits, searches, and MCP tool calls
+**Tool calls in chat** in **Settings → Chat** hides commands, file edits, searches, and MCP tool calls
 from the conversation. **Hide successful** shows a call while it runs and keeps
 it only if it fails. **Hide all** hides every call and shows **Thinking** while the agent works.
 **Zen** also hides the agent's in-between messages, so each turn shows your message

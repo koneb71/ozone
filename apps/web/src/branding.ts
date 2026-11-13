@@ -10,7 +10,6 @@ function readInjectedDesktopAppBranding(): DesktopAppBranding | null {
 }
 
 const injectedDesktopAppBranding = readInjectedDesktopAppBranding();
-// ozone-seam: the product name.
 export const APP_BASE_NAME = injectedDesktopAppBranding?.baseName ?? "Ozone";
 export const APP_STAGE_LABEL =
   injectedDesktopAppBranding?.stageLabel ??

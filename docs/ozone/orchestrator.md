@@ -1,9 +1,9 @@
 # The Build Conductor
 
-Upstream gives an agent `delegate_task`: a durable child thread on any provider. It gives no plan,
-no checks, no retries and no limits above that. The conductor is that missing structure. It lives
-in [`apps/server/src/ozone/builds`](../../apps/server/src/ozone/builds) and is made only from
-upstream's public services, so upstream's orchestration core is not edited at all.
+The orchestration core gives an agent `delegate_task`: a durable child thread on any provider. It
+gives no plan, no checks, no retries and no limits above that. The conductor is that structure. It
+lives in [`apps/server/src/ozone/builds`](../../apps/server/src/ozone/builds) and is made only from
+the core's public services, so it adds no state to the orchestrator.
 
 One build belongs to one lead thread. The lead writes the plan with `ozone_build_plan` and calls
 `ozone_build_advance`; the server does everything else.
@@ -29,27 +29,27 @@ Every call may be the first after a crash, so nothing in it assumes the previous
 the app's container and probes that the app still answers.
 
 **Repair goes to a fresh worker.** It gets the failed checks' output and the last worker's summary.
-A follow-up in the same thread would carry the reasoning that produced the failure, and upstream
+A follow-up in the same thread would carry the reasoning that produced the failure, and the core
 would wake the lead for it a second time.
 
 **One writer, or many readers.** Checks must judge a tree nobody else is changing, and the preview
 must not show half of two changes. A read-only task that changed files fails, and its changes are
 set aside with `git stash`, not deleted.
 
-**A worker is tracked by its task id, not by a request key.** Upstream makes a repeated
+**A worker is tracked by its task id, not by a request key.** The core makes a repeated
 `delegate_task` the same work only within one provider session, because its command id is
 namespaced by that session. A lead that reconnects would start a second worker. So a task is
 dispatched without waiting, its id is stored at once, and every later call reads that id. The
 request key carries `dispatches`, a count that never goes down, so a retry after a ruling is a new
 worker.
 
-**Reading a finished worker acknowledges it.** Upstream wakes the parent when an async task ends.
+**Reading a finished worker acknowledges it.** The core wakes the parent when an async task ends.
 `taskStatus` acknowledges the result, so a step that saw the worker finish does not also get a wake.
 A step that ran out of patience returns, and that wake is what brings the lead back.
 
 **A step is short, and never outlives its lead's turn on purpose.** Claude Code moves a tool call
 to the background after two minutes, and the lead's turn can then end while the step still runs.
-Upstream starts a worker only for a lead whose turn is running, so a step that went on would fail
+The core starts a worker only for a lead whose turn is running, so a step that went on would fail
 at its next hand-off. A step therefore waits for at most 75 seconds (40 for harnesses that give up
 on a call within a minute), starts no more workers once that time is spent, and returns. The wake
 that follows a finished worker brings the lead back. Correctness never depends on one long call.
@@ -81,7 +81,7 @@ nothing until the person starts it from the build card, which wakes the lead, or
 reviewed again: it adds to what the person already approved.
 
 **Workers can run on another model.** The lead keeps the model of its thread. Each app can name a
-model for its workers and tester, which is passed to upstream's `delegate_task` as its target.
+model for its workers and tester, which is passed to `delegate_task` as its target.
 
 **A failed check reaches the next reader with both ends of its output.** A bundler prints its error
 first and a stack after it; a test runner ends with its summary. Evidence keeps the head and the
@@ -102,7 +102,7 @@ workers, and a worker's brief starts with `Ozone task`, which that file keys on.
 
 ## Traps
 
-- Ozone's tools are registered beside upstream's `layerTools`, not in it: a test upstream pins that
+- Ozone's tools are registered beside `McpHttpServer.layerTools`, not in it: a test pins that
   set's size against the agent's context budget.
 - The conductor is built inside the MCP server's layers, not in `Ozone.layer`. The delegation
   service it drives only exists there. The checks are in `Ozone.layer`, because their jobs must

@@ -14,7 +14,6 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
 import packageJson from "../../package.json" with { type: "json" };
-import { resolveServerInstallation } from "../cli/invocation.ts";
 import { resolveServerSelfUpdateCapability } from "../service/selfUpdate.ts";
 import { resolveServiceLauncherMode } from "../service/serviceLauncherClient.ts";
 import * as ServerConfig from "../config.ts";
@@ -197,7 +196,6 @@ export const make = Effect.gen(function* () {
     desktopManaged: serverConfig.mode === "desktop",
     launcherManaged: launcher.managed,
   });
-  const serverInstallation = serverSelfUpdate === null ? yield* resolveServerInstallation : null;
   // The desktop reports whether it can install updates; requests travel over its control fd.
   const desktopAppUpdate =
     serverSelfUpdate === "desktop-managed" &&
@@ -275,7 +273,6 @@ export const make = Effect.gen(function* () {
       voiceTranscription: isSpeechPlatformSupported(hostPlatform, hostArchitecture, hostLibc),
       cloudVoiceTranscription: true,
       ...(serverSelfUpdate === null ? {} : { serverSelfUpdate }),
-      ...(serverInstallation === null ? {} : { serverInstallation }),
       ...(serverSelfUpdate === "boot-service" || desktopAppUpdate
         ? { serverSelfUpdateProgress: true }
         : {}),

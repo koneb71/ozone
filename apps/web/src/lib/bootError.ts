@@ -201,7 +201,7 @@ function mountUpdateButton(
           : undefined;
     run?.then(
       (result) => render(result.state),
-      (error: unknown) => console.warn("Could not update T3 Code.", error),
+      (error: unknown) => console.warn("Could not update Ozone.", error),
     );
   });
   // A pushed state is newer than the initial read, so the read must not overwrite it.
@@ -221,7 +221,7 @@ function mountUpdateButton(
 }
 
 export function showBootError(error: unknown) {
-  console.error("T3 Code failed to start.", error);
+  console.error("Ozone failed to start.", error);
   const bootShell = document.getElementById("boot-shell");
   if (!bootShell) return;
 
@@ -240,7 +240,7 @@ export function showBootError(error: unknown) {
   };
 
   const message = element("div", {}, [
-    element("h1", { textContent: "T3 Code failed to start" }),
+    element("h1", { textContent: "Ozone failed to start" }),
     element("p", {
       textContent: offline
         ? "This browser appears to be offline. Check the connection, then reload."
@@ -283,7 +283,7 @@ export function showBootError(error: unknown) {
 
   const issue = new URL(ISSUE_URL);
   issue.searchParams.set("template", "bug_report.yml");
-  issue.searchParams.set("title", "T3 Code failed to start");
+  issue.searchParams.set("title", "Ozone failed to start");
   issue.searchParams.set("area", "apps/web");
   issue.searchParams.set("version", `${environment.version} (${environment.channel})`);
   issue.searchParams.set("environment", `${environment.surface}, ${environment.platform}`);
@@ -292,7 +292,7 @@ export function showBootError(error: unknown) {
 
   const more = element("details", { open: isRepeatFailure(Date.now()) }, [
     element("summary", { textContent: "More options if it keeps failing" }),
-    ...(bridge ? [link(DOWNLOAD_URL, "Download and reinstall T3 Code")] : []),
+    ...(bridge ? [link(DOWNLOAD_URL, "Download and reinstall Ozone")] : []),
     element("div", {}, [
       details,
       element("p", {

@@ -10,7 +10,6 @@ import { defineProject, type TestProjectInlineConfiguration } from "vite-plus/te
 import "vite-plus/test/config";
 import { defineConfig, type Connect, type Plugin } from "vite-plus";
 
-import { ozoneNamePlugin } from "./src/ozone/namePlugin.ts";
 import * as Hash from "effect/Hash";
 import pkg from "./package.json" with { type: "json" };
 import pdfjsPkg from "pdfjs-dist/package.json" with { type: "json" };
@@ -115,7 +114,7 @@ const browserTestProject = {
     browser: {
       enabled: true,
       headless: true,
-      // ozone-seam: a machine with another Chromium build than Playwright expects names it here.
+      // A machine with another Chromium build than Playwright expects names it here.
       provider: playwright(
         process.env.OZONE_TEST_CHROMIUM
           ? { launchOptions: { executablePath: process.env.OZONE_TEST_CHROMIUM } }
@@ -246,7 +245,7 @@ function bootstrapTitlePlugin(): Plugin {
     },
     transformIndexHtml(html) {
       const stageLabel = resolveWebAppStageLabel({ development });
-      const title = formatAppDisplayName({ baseName: "T3 Code", stageLabel });
+      const title = formatAppDisplayName({ baseName: "Ozone", stageLabel });
       return html.replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`);
     },
   };
@@ -272,8 +271,6 @@ export default defineConfig(() => {
     },
     assetsInclude: ["**/*.wasm"],
     plugins: [
-      // ozone-seam: the client says Ozone wherever upstream's source says T3 Code.
-      process.env.VITEST === undefined ? ozoneNamePlugin() : undefined,
       bootstrapTitlePlugin(),
       devCompressionPlugin(),
       chunkCycleGuardPlugin(),

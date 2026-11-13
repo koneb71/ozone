@@ -95,9 +95,9 @@ is taken after every task that passes its checks.
   upgrades an app.
 - Only `postgres` data services are snapshotted. A manifest may declare a service of kind `volume`,
   and Ozone runs it, but does not archive it.
-- Deleting an app's project from upstream's own project menu, instead of **Delete app**, leaves its
+- Deleting an app's project from the project menu, instead of **Delete app**, leaves its
   containers and volumes in Docker until someone removes them by hand.
-- A deleted app comes back without its threads: upstream deletes them with the project.
+- A deleted app comes back without its threads: they are deleted with the project.
 - A deployed app's data lives in a volume of its own (`<slug>-prod_pgdata`) that nothing in Ozone
   removes. Its snapshots are kept apart, in `backups/<slug>/production/`, on this machine even when
   the app runs on a server. Checking a server and starting its proxy were tried over real SSH; a

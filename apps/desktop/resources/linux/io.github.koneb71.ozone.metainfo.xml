@@ -15,8 +15,8 @@
       and checks every step itself.
     </p>
     <p>
-      Ozone is a fork of T3 Code and keeps what T3 Code does: threads,
-      providers, checkpoints, the preview browser and remote access.
+      It also runs your coding agents in threads, with checkpoints you can
+      restore, a preview browser and remote access.
     </p>
   </description>
   <launchable type="desktop-id">ozone.desktop</launchable>

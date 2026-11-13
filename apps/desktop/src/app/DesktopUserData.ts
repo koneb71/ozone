@@ -39,7 +39,7 @@ export const resolveUserDataPath = Effect.fn("desktop.userData.resolveUserDataPa
   }) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    // ozone-seam: a profile of its own. Sharing T3 Code's would share its single-instance lock,
+    // A profile of its own. Sharing T3 Code's would share its single-instance lock,
     // so Ozone would quit whenever T3 Code is open. Ozone has no older profile to carry over.
     const names = input.isDevelopment
       ? { current: "ozone-dev", legacy: "Ozone (Dev)" }

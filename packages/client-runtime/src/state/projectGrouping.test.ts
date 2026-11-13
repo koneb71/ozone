@@ -88,7 +88,7 @@ const repositoryIdentity = {
   provider: SourceControlProviderKind.make("github"),
   owner: "t3tools",
   name: "t3code",
-  displayName: "T3 Code",
+  displayName: "Ozone",
 };
 
 function makeProject(
@@ -227,7 +227,6 @@ describe("buildProjectGroups", () => {
       });
       expect(groups).toHaveLength(3);
       const scratch = groups.find((group) => group.representative.isScratch)!;
-      // ozone-seam: threads without a project are Ozone's chats.
       expect(scratch.label).toBe("Chats");
       expect(scratch.representative.id).toBe(projects[2]?.id);
       expect(scratch.members).toHaveLength(2);

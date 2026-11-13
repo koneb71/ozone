@@ -132,7 +132,7 @@ export function SavedBackendListRow({
       toastManager.add({
         type: "success",
         title: "MCP URL copied",
-        description: `Add it to an agent, e.g. claude mcp add --transport http t3 ${url}`,
+        description: `Add it to an agent, e.g. claude mcp add --transport http ozone ${url}`,
       });
     },
     onError: (error) => {
@@ -321,7 +321,6 @@ export function SavedBackendListRow({
           environmentId={environmentId}
           serverLabel={`${environment.label} server`}
           selfUpdate={resolveServerSelfUpdateCapability(environment.serverConfig)}
-          installation={environment.serverConfig?.environment.capabilities.serverInstallation}
           desktopAppUpdate={supportsDesktopAppUpdate(environment.serverConfig)}
           targetVersion={versionMismatch.clientVersion}
           label={serverUpdateState.status === "failed" ? "Retry update" : "Update"}

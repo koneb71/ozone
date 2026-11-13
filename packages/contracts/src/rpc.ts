@@ -2158,6 +2158,5 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationV2SubscribeThreadRpc,
   WsOrchestrationV2SubscribeCommandOutputRpc,
   WsOrchestrationV2SubscribePromptSuggestionRpc,
-  // ozone-seam: Ozone's methods, declared in ozone.ts.
   ...OzoneWsRpcs,
 ).middleware(RpcScopeAuthorization);

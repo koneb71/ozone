@@ -42,6 +42,7 @@ import {
   serviceTaskIsDisabled,
   serviceUnitBaseDirOf as bootServiceBaseDirOf,
   serviceUnitEnvironmentValueOf,
+  serviceUnitProgramOf,
   parseServiceState,
   serviceStateActiveVersion,
   serviceStateHasPendingUpdate,
@@ -53,11 +54,16 @@ export {
   serviceUnitProgramOf as bootServiceProgramOf,
 } from "./serviceProtocol.ts";
 
-const BOOT_SERVICE_NAME = "t3code";
+const BOOT_SERVICE_NAME = "ozone";
 export const BOOT_SERVICE_UNIT_FILE = `${BOOT_SERVICE_NAME}.service`;
 // `.service` suffix keeps the label distinct from the desktop app's bundle id
-// (com.t3tools.t3code), so launchd and TCC records never collide.
-export const BOOT_SERVICE_LAUNCHD_LABEL = "com.t3tools.t3code.service";
+// (io.github.koneb71.ozone), so launchd and TCC records never collide.
+export const BOOT_SERVICE_LAUNCHD_LABEL = "io.github.koneb71.ozone.service";
+// Ozone 1.0 installed its service under T3 Code's names, which a T3 Code install still uses.
+const LEGACY_SERVICE_NAME = "t3code";
+const LEGACY_UNIT_FILE = `${LEGACY_SERVICE_NAME}.service`;
+const LEGACY_LAUNCHD_LABEL = "com.t3tools.t3code.service";
+const LEGACY_TASK_FILE = `${LEGACY_SERVICE_NAME}-task.xml`;
 export const BOOT_SERVICE_PLIST_FILE = `${BOOT_SERVICE_LAUNCHD_LABEL}.plist`;
 const BOOT_SERVICE_LOG_FILE = "boot-service.log";
 /** `schtasks /Query /HRESULT` exits with this when the task is not registered. */
@@ -95,7 +101,7 @@ export function renderBootServiceUnit(plan: BootServicePlan): string {
   // The user manager has no reliable network-online target; server networking retries itself.
   return [
     "[Unit]",
-    "Description=T3 Code server",
+    "Description=Ozone server",
     "StartLimitIntervalSec=300",
     "StartLimitBurst=5",
     "",
@@ -122,7 +128,7 @@ export function renderBootServiceUnit(plan: BootServicePlan): string {
     // protection of user.slice and user@.service, which only root can grant.
     "MemoryLow=1536M",
     // A user manager's own score, the lowest it may set: below its other services (200) and agents (800).
-    // `t3 service protect` lowers it further through a drop-in.
+    // `ozone service protect` lowers it further through a drop-in.
     "OOMScoreAdjust=100",
     // systemd-oomd ignores this preference when the watched cgroup is root-owned, as user-1000.slice usually is.
     "ManagedOOMPreference=avoid",
@@ -221,7 +227,7 @@ export function renderBootServiceTask(
   return [
     `<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">`,
     `  <RegistrationInfo>`,
-    `    <Description>T3 Code server</Description>`,
+    `    <Description>Ozone server</Description>`,
     `  </RegistrationInfo>`,
     `  <Triggers>`,
     `    <LogonTrigger>`,
@@ -295,7 +301,7 @@ const defaultSystemdUnitDir = (path: Path.Path, homeDir: string, xdgConfigHome: 
   );
 
 const scheduledTaskPath = (path: Path.Path, localAppData: string) =>
-  path.join(localAppData, "t3code", BOOT_SERVICE_TASK_FILE);
+  path.join(localAppData, BOOT_SERVICE_NAME, BOOT_SERVICE_TASK_FILE);
 
 const launchdPlistPath = (path: Path.Path, homeDir: string) =>
   path.join(homeDir, "Library", "LaunchAgents", BOOT_SERVICE_PLIST_FILE);
@@ -627,7 +633,7 @@ export class BootServiceInstallError extends Schema.TaggedError<BootServiceInsta
   { cause: Schema.Defect() },
 ) {
   override get message(): string {
-    return "Could not set up the T3 Code background service.";
+    return "Could not set up the Ozone background service.";
   }
 }
 
@@ -644,17 +650,17 @@ type BootServiceProblem = typeof BootServiceProblem.Type;
 export function formatBootServiceProblem(problem: BootServiceProblem): string {
   switch (problem) {
     case "user-manager-unavailable":
-      return "Cannot reach the systemd user manager. Run `systemctl --user status` in a login session for the service user. Install your distribution's systemd user-session support if it is missing; do not run T3 with sudo.";
+      return "Cannot reach the systemd user manager. Run `systemctl --user status` in a login session for the service user. Install your distribution's systemd user-session support if it is missing; do not run Ozone with sudo.";
     case "linger-unavailable":
       return 'Cannot check whether this user can run services after logout. Run `loginctl show-user "$(id -un)" --property=Linger` and check that systemd-logind is available.';
     case "linger-disabled":
-      return 'Lingering is disabled. T3 Code will stop when your last login session ends and will not start at boot. Run `sudo loginctl enable-linger "$(id -un)"` on this machine, then retry the service command as your normal user.';
+      return 'Lingering is disabled. Ozone will stop when your last login session ends and will not start at boot. Run `sudo loginctl enable-linger "$(id -un)"` on this machine, then retry the service command as your normal user.';
     case "service-disabled":
-      return "The service is not enabled to start automatically. Run `t3 service install` to repair it.";
+      return "The service is not enabled to start automatically. Run `ozone service install` to repair it.";
     case "service-stopped":
-      return "The service is not running. Check the service log (on Linux, also `systemctl --user status t3code.service`), then run `t3 service install`.";
+      return `The service is not running. Check the service log (on Linux, also \`systemctl --user status ${BOOT_SERVICE_UNIT_FILE}\`), then run \`ozone service install\`.`;
     case "restart-pending":
-      return "A newer version is installed but the service is still running the previous one. Run `t3 service restart` to switch.";
+      return "A newer version is installed but the service is still running the previous one. Run `ozone service restart` to switch.";
   }
 }
 
@@ -687,7 +693,7 @@ export class BootServiceDowngradeRefusedError extends Schema.TaggedError<BootSer
   },
 ) {
   override get message(): string {
-    return `Refusing to replace t3@${this.installedVersion} with older t3@${this.targetVersion}. Run the command again with --allow-downgrade to continue.`;
+    return `Refusing to replace ozone@${this.installedVersion} with older ozone@${this.targetVersion}. Run the command again with --allow-downgrade to continue.`;
   }
 }
 
@@ -702,7 +708,7 @@ export class BootServiceOtherBaseDirError extends Schema.TaggedError<BootService
   },
 ) {
   override get message(): string {
-    return `The T3 Code service on this machine serves ${this.installedBaseDir}, not ${this.baseDir}. Pass ${formatBootServiceBaseDirOption(this.installedBaseDir)} to manage it, or run \`t3 service uninstall ${formatBootServiceBaseDirOption(this.installedBaseDir)}\` first to move it; both data directories are kept.`;
+    return `The Ozone service on this machine serves ${this.installedBaseDir}, not ${this.baseDir}. Pass ${formatBootServiceBaseDirOption(this.installedBaseDir)} to manage it, or run \`ozone service uninstall ${formatBootServiceBaseDirOption(this.installedBaseDir)}\` first to move it; both data directories are kept.`;
   }
 
   // A refusal the user fixes by rerunning, so the CLI prints the message, not a stack trace.
@@ -726,7 +732,7 @@ export interface BootServiceStatus {
   readonly current: boolean;
   readonly installedVersion?: string;
   readonly installedBaseDir?: string;
-  /** Set when the installed unit serves a different T3 home than this CLI. */
+  /** Set when the installed unit serves a different Ozone home than this CLI. */
   readonly otherBaseDir?: string;
   readonly problems?: ReadonlyArray<BootServiceProblem>;
   readonly unitPath: string;
@@ -790,9 +796,11 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
   // Root under sudo must not reach or start a separate root service.
   const rootUnderSudo =
     uid === 0 && (yield* Config.String("SUDO_USER").pipe(Config.withDefault(""))) !== "";
+  const serviceUnitName = yield* Config.String(SERVICE_UNIT_ENV).pipe(Config.withDefault(""));
   const runningInsideService = [BOOT_SERVICE_UNIT_FILE, BOOT_SERVICE_TASK_FILE].includes(
-    yield* Config.String(SERVICE_UNIT_ENV).pipe(Config.withDefault("")),
+    serviceUnitName,
   );
+  const legacyUnitNames = [LEGACY_UNIT_FILE, `${LEGACY_LAUNCHD_LABEL}.plist`, LEGACY_TASK_FILE];
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const processRunner = yield* ProcessRunner.ProcessRunner;
@@ -1176,6 +1184,94 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
     return problems;
   });
 
+  const legacyService = ():
+    | { readonly unitPath: string; readonly stop: BootServiceStep }
+    | undefined => {
+    const manager = detectedManager;
+    if (manager === undefined) return undefined;
+    const step = "stopping the service an earlier Ozone version installed";
+    if (manager.kind === "systemd") {
+      return {
+        unitPath: path.join(path.dirname(unitPath), LEGACY_UNIT_FILE),
+        stop: {
+          step,
+          command: "systemctl",
+          args: ["--user", "disable", "--now", LEGACY_UNIT_FILE],
+          timeout: STOP_STEP_TIMEOUT,
+        },
+      };
+    }
+    if (manager.kind === "launchd") {
+      return {
+        unitPath: path.join(path.dirname(unitPath), `${LEGACY_LAUNCHD_LABEL}.plist`),
+        stop: {
+          step,
+          command: "launchctl",
+          args: ["bootout", "--wait", `gui/${uid}/${LEGACY_LAUNCHD_LABEL}`],
+          optional: true,
+          timeout: STOP_STEP_TIMEOUT,
+        },
+      };
+    }
+    const legacyUnitPath = path.join(
+      windowsSession.localAppData,
+      LEGACY_SERVICE_NAME,
+      LEGACY_TASK_FILE,
+    );
+    const task = [
+      "/TN",
+      `${LEGACY_SERVICE_NAME}${windowsSession.taskName.slice(BOOT_SERVICE_NAME.length)}`,
+    ];
+    return {
+      unitPath: legacyUnitPath,
+      stop: {
+        step,
+        timeout: STOP_STEP_TIMEOUT,
+        run: Effect.gen(function* () {
+          const unit = yield* fs.readFileString(legacyUnitPath).pipe(Effect.option);
+          for (const args of [
+            ["/End", ...task],
+            ["/Delete", ...task, "/F"],
+          ]) {
+            yield* runner.run({ command: "schtasks", args }).pipe(Effect.ignore);
+          }
+          yield* Effect.tryPromise({
+            try: (signal) => waitForServiceLauncherExit(launcherLockPath(unit), signal),
+            catch: (cause) => new BootServiceCommandError({ step, cause }),
+          });
+        }),
+      },
+    };
+  };
+  const isWithin = (candidate: string | undefined, root: string) => {
+    if (candidate === undefined) return false;
+    const relative = path.relative(path.resolve(root), path.resolve(candidate));
+    return !relative.startsWith("..") && !path.isAbsolute(relative);
+  };
+  /** Removes only a unit that names this home or the default Ozone home; T3 Code's own stays. */
+  const removeLegacyService = Effect.gen(function* () {
+    const legacy = legacyService();
+    if (legacy === undefined) return false;
+    const unit = yield* fs.readFileString(legacy.unitPath).pipe(Effect.option);
+    if (Option.isNone(unit)) return false;
+    const ozoneHomes = [input.baseDir, ...(homeDir === "" ? [] : [path.join(homeDir, ".ozone")])];
+    const named = [bootServiceBaseDirOf(unit.value), serviceUnitProgramOf(unit.value)];
+    if (!ozoneHomes.some((home) => named.some((candidate) => isWithin(candidate, home)))) {
+      return false;
+    }
+    if (legacyUnitNames.includes(serviceUnitName)) {
+      return yield* new BootServiceCommandError({
+        step: "replacing the earlier Ozone service from inside it; run the command from a terminal outside the service",
+      });
+    }
+    yield* runSteps([legacy.stop]);
+    yield* Effect.forEach([legacy.unitPath, `${legacy.unitPath}.d`], (target) =>
+      fs.remove(target, { recursive: true, force: true }),
+    ).pipe(Effect.mapError((cause) => new BootServiceInstallError({ cause })));
+    yield* runSteps(detectedManager?.finalize ?? []);
+    return true;
+  }).pipe(Effect.withSpan("cloud.boot_service.remove_legacy"));
+
   const install = Effect.fn("cloud.boot_service.install")(function* (options?: {
     readonly allowDowngrade?: boolean;
     readonly start?: boolean;
@@ -1233,7 +1329,7 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
             Effect.mapError(
               (cause) =>
                 new PinnedRuntimeInstallError({
-                  step: "verifying the pinned t3 runtime",
+                  step: "verifying the pinned ozone runtime",
                   cause,
                 }),
             ),
@@ -1243,7 +1339,7 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
                 ? Effect.void
                 : Effect.fail(
                     new PinnedRuntimeInstallError({
-                      step: "verifying the pinned t3 runtime",
+                      step: "verifying the pinned ozone runtime",
                       exitCode: Number(result.code),
                       stdoutLength: result.stdout.length,
                       stderrLength: result.stderr.length,
@@ -1264,6 +1360,7 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
           : new BootServiceInstallError({ cause: error }),
       ),
     );
+    yield* removeLegacyService;
     const installed = yield* fs
       .exists(unitPath)
       .pipe(Effect.mapError((cause) => new BootServiceInstallError({ cause })));
@@ -1490,12 +1587,13 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
 
   const uninstall: BootService["Service"]["uninstall"] = Effect.gen(function* () {
     const manager = yield* requireManager;
+    const removedLegacy = yield* removeLegacyService;
     if (
       !(yield* fs
         .exists(unitPath)
         .pipe(Effect.mapError((cause) => new BootServiceInstallError({ cause }))))
     )
-      return false;
+      return removedLegacy;
     yield* runSteps(manager.deactivate);
     yield* fs
       .remove(unitPath)

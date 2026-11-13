@@ -1,7 +1,7 @@
 # Prompt links
 
-A prompt link opens T3 Code with a prompt ready to send. Use one to share a prompt on social
-media, or to put a one-click fix in a pull request comment.
+A prompt link opens Ozone with a prompt ready to send. Use one to keep a prompt in your notes,
+or to hand one to another device connected to the same server.
 
 A link never runs anything. It opens a draft. You read the prompt, then press Send. A link cannot
 change your permission mode, branch, or worktree. Your own defaults apply.
@@ -12,12 +12,15 @@ Open the command palette and choose **Copy prompt link**. It copies the draft in
 When the project is on GitHub, **Copy prompt link with repo and model** also adds the repository
 and the model you picked. Sent messages have a **Copy prompt link** button too.
 
-You can also write a link by hand:
+A copied link points at your own Ozone server, so it opens only where that address is reachable.
+You can also write a link by hand, with your server's address or the desktop app's `t3code://`
+scheme:
 
 ```
-https://app.t3.codes/new?prompt=Rate%20my%20swearing
-https://app.t3.codes/new?prompt=Fix%20the%20build&repo=owner/name&provider=codex&model=gpt-5.5
-https://app.t3.codes/new?pr=owner/name/123&prompt=Fix%20the%20failing%20check
+http://localhost:3737/new?prompt=Rate%20my%20swearing
+http://localhost:3737/new?prompt=Fix%20the%20build&repo=owner/name&provider=codex&model=gpt-5.5
+http://localhost:3737/new?pr=owner/name/123&prompt=Fix%20the%20failing%20check
+t3code://new?prompt=Fix%20the%20build
 ```
 
 | Parameter  | Meaning                                                                       |
@@ -32,33 +35,28 @@ Encode the prompt for a URL. In JavaScript, use `encodeURIComponent`.
 
 ## Open a link
 
-On app.t3.codes, the link first asks where to open it: the desktop or mobile app, this browser
-when it is connected to a machine, or the download page. Select **Remember my choice** to skip
-this step next time.
-
 - **No `repo`**: the draft opens without a project, on the machine you used last.
 - **`repo`**: the draft opens in your most recently used project for that repository. A fork
   counts only for its own owner. When you do not have the repository, choose **Clone** or **Use
   without project**.
 - **`provider` and `model`**: used when you have that provider set up. Otherwise your default
-  model is used, and T3 Code tells you.
+  model is used, and Ozone tells you.
 - **`pr`**: opens the thread linked to that pull request on any connected machine, with the prompt
   in its composer. When no thread is linked, the draft goes on the pull request branch in a new
-  worktree. T3 Code checks the code out only after you confirm, because the checkout runs your
+  worktree. Ozone checks the code out only after you confirm, because the checkout runs your
   setup script on it.
 
-A thread link with a prompt, such as `https://app.t3.codes/<environment>/<thread>?prompt=…`,
-puts the prompt in that thread's composer. If you already typed a draft there, T3 Code asks
+A thread link with a prompt, such as `http://localhost:3737/<environment>/<thread>?prompt=…`,
+puts the prompt in that thread's composer. If you already typed a draft there, Ozone asks
 before it replaces it.
 
-T3 Code removes characters you cannot see, such as zero-width and hidden tag characters, because
-they can hide instructions for the agent. When a prompt had them, T3 Code warns you that it may be
+Ozone removes characters you cannot see, such as zero-width and hidden tag characters, because
+they can hide instructions for the agent. When a prompt had them, Ozone warns you that it may be
 malicious.
 
 ## Share a thread
 
-**Copy thread** copies a link such as `https://app.t3.codes/threads/<environment>/<thread>`. Paste
-it anywhere, such as Slack, a GitHub comment, or your notes. On a phone with T3 Code installed, it
-opens the thread in the app. Elsewhere, opening it asks where to open it, like a prompt link, then
-opens the thread. Only someone connected to the machine that runs the thread can see it. In T3 Code,
-a thread link in a message opens the thread in the app.
+**Copy thread** copies a link such as `http://localhost:3737/threads/<environment>/<thread>`,
+using your server's address. Paste it into your notes or another thread. Only someone who can
+reach that server and is paired with it can open it. In Ozone, a thread link in a message opens
+the thread in the app.

@@ -216,7 +216,7 @@ jobs:
       - name: Write checksums
         working-directory: assets
         run: |
-          sha256sum t3-*.tar.gz t3-*.zip > SHA256SUMS
+          sha256sum ozone-*.tar.gz ozone-*.zip > SHA256SUMS
           cat SHA256SUMS
 
       - name: Draft

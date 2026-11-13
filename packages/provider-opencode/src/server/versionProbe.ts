@@ -82,7 +82,7 @@ export const probeOpenCodeBinary = Effect.fn("probeOpenCodeBinary")(function* (
   if (result) return result;
   return yield* new OpenCodeRuntime.OpenCodeRuntimeError({
     operation: "probeOpenCodeBinary",
-    detail: `Unable to determine OpenCode version from \`opencode --version\` output. T3 Code requires OpenCode v${OpenCodeRuntime.MINIMUM_OPENCODE_VERSION} or newer.`,
+    detail: `Unable to determine OpenCode version from \`opencode --version\` output. Ozone requires OpenCode v${OpenCodeRuntime.MINIMUM_OPENCODE_VERSION} or newer.`,
   });
 });
 
@@ -152,7 +152,7 @@ const probeOpenCodeServer = Effect.fn("probeOpenCodeServer")(function* (
   }
   return yield* new OpenCodeRuntime.OpenCodeRuntimeError({
     operation: "probeOpenCodeServer",
-    detail: `The server did not identify itself as OpenCode. T3 Code requires OpenCode v${OpenCodeRuntime.MINIMUM_OPENCODE_VERSION} or newer.`,
+    detail: `The server did not identify itself as OpenCode. Ozone requires OpenCode v${OpenCodeRuntime.MINIMUM_OPENCODE_VERSION} or newer.`,
   });
 });
 
@@ -172,7 +172,7 @@ export const probeOpenCodeRuntime = (
     ? probeOpenCodeServer(settings.serverUrl, settings.serverPassword)
     : probeOpenCodeBinary(settings.binaryPath, environment);
 
-// Only 2.x is kept: 1.x can be upgraded in place while T3 runs, and 2.x converts the shared
+// Only 2.x is kept: 1.x can be upgraded in place while Ozone runs, and 2.x converts the shared
 // database, so going back is unsupported.
 export const makeOpenCodeRuntimeProbe = <E>(probe: Effect.Effect<ProbedOpenCode, E>) =>
   Effect.map(

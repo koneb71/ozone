@@ -1180,7 +1180,7 @@ export const makeMuseAdapterV2 = Effect.fn("makeMuseAdapterV2")(function* (
       });
       /**
        * A workflow child's approval is runless: the turn that started the workflow
-       * may end long before the child asks, and T3 keeps a runless request on the
+       * may end long before the child asks, and Ozone keeps a runless request on the
        * thread until Muse settles it.
        */
       const publishRequest = Effect.fnUntraced(function* (native: PendingRequest["native"]) {
@@ -1308,7 +1308,7 @@ export const makeMuseAdapterV2 = Effect.fn("makeMuseAdapterV2")(function* (
                   required: true,
                 })),
               };
-        // Muse does not propagate allowAll to workflow children; T3 answers for them.
+        // Muse does not propagate allowAll to workflow children; Ozone answers for them.
         const autoApprove = child && input.runtimePolicy.runtimeMode === "full-access";
         const entry: PendingRequest = {
           native,
@@ -1720,7 +1720,7 @@ export const makeMuseAdapterV2 = Effect.fn("makeMuseAdapterV2")(function* (
             const row: MuseRetryRow = {
               method,
               nativeId: turn.retries[index]?.nativeId ?? `retry:${retry.sourceRange.first.id}`,
-              // Muse counts the first request as attempt 1; T3 counts retries.
+              // Muse counts the first request as attempt 1; Ozone counts retries.
               retry: {
                 attempt: retry.attempt,
                 maxAttempts: Math.max(1, retry.maxAttempts - 1),
@@ -1938,7 +1938,7 @@ export const makeMuseAdapterV2 = Effect.fn("makeMuseAdapterV2")(function* (
           const config = mcpSession
             ? {
                 mcpServers: {
-                  // Muse's required default fails runs if T3 tools are unreachable; make them optional.
+                  // Muse's required default fails runs if Ozone tools are unreachable; make them optional.
                   "t3-code": {
                     transport: "streamableHttp",
                     mode: "optional",
@@ -2492,7 +2492,7 @@ export const makeMuseAdapterV2 = Effect.fn("makeMuseAdapterV2")(function* (
               driver: MUSE_PROVIDER,
               providerThreadId: args.providerThread.id,
               checkpointId: args.target.checkpointId,
-              cause: "Muse Code does not support conversation rollback in T3 Code.",
+              cause: "Muse Code does not support conversation rollback in Ozone.",
             }),
           ),
         forkThread: (args) =>
@@ -2500,7 +2500,7 @@ export const makeMuseAdapterV2 = Effect.fn("makeMuseAdapterV2")(function* (
             new ProviderAdapter.ProviderAdapterForkThreadError({
               driver: MUSE_PROVIDER,
               providerThreadId: args.sourceProviderThread.id,
-              cause: "Muse Code does not support native forks in T3 Code.",
+              cause: "Muse Code does not support native forks in Ozone.",
             }),
           ),
       };

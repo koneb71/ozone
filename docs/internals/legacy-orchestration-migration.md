@@ -49,9 +49,9 @@ local or fork migration under an id this build later assigns to a different migr
 never receives this build's migration at that id. After repairing supported V2 preview ledgers,
 [`runMigrations`](../../apps/server/src/persistence/Migrations.ts) rejects history that would skip a
 requested migration at id 55 or later without its expected name. Earlier name clashes remain
-warnings for compatibility with site-local migrations. There is no safe id range for a fork inside
-this ledger: any id at or below a future upstream id masks it forever, so fork schema changes belong
-in a separate migration table or outside the migrator entirely.
+warnings for compatibility with site-local migrations. There is no safe id range for a site-local
+migration inside this ledger: any id at or below a future id masks it forever, so such schema
+changes belong in a separate migration table or outside the migrator entirely.
 
 ## Recovery
 

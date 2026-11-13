@@ -98,7 +98,10 @@ const withScratch = <A, E>(
 ) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
-    const baseDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-managed-folders-" });
+    // A symlinked scratch folder is compared by real path, and macOS links its temporary folder.
+    const baseDir = yield* fileSystem.realPath(
+      yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-managed-folders-" }),
+    );
     return yield* body({ baseDir }).pipe(Effect.provide(layer(baseDir, options)));
   }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)));
 
@@ -193,7 +196,6 @@ it.effect("creates one Scratch project, even for concurrent first requests", () 
       const root = yield* requireRoot;
       const scratchProjects = snapshot.projects.filter((project) => project.workspaceRoot === root);
       assert.lengthOf(scratchProjects, 1);
-      // ozone-seam: threads without a project are Ozone's chats.
       assert.equal(scratchProjects[0]?.title, "Chats");
       assert.deepEqual(scratchProjects[0]?.projectIcon, {
         kind: "lucide",

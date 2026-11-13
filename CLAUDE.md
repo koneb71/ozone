@@ -1,5 +1,4 @@
 @AGENTS.md
-@docs/ozone/AGENTS.md
 
 ## graphify
 

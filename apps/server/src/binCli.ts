@@ -41,16 +41,16 @@ import { statusCommand, upCommand } from "./cli/up.ts";
 
 const layerCliRuntime = Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, NetService.layer);
 
-export const cli = Command.make("t3", { ...sharedServerCommandFlags }).pipe(
+export const cli = Command.make("ozone", { ...sharedServerCommandFlags }).pipe(
   Command.withDescription(
-    "Run T3 Code in this terminal and open it in your browser. To use it from your other devices, run `t3 up`.",
+    "Run Ozone in this terminal and open it in your browser. To use it from your other devices, run `ozone up`.",
   ),
   Command.withHandler(runDefaultServerCommand),
   Command.withSubcommands([
     Command.make("help").pipe(
       Command.withDescription("Show command help."),
       Command.withHandler(() =>
-        Effect.fail(new CliError.ShowHelp({ commandPath: ["t3"], errors: [] })),
+        Effect.fail(new CliError.ShowHelp({ commandPath: ["ozone"], errors: [] })),
       ),
     ),
     acpMcpBridgeCommand,

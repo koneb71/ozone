@@ -79,7 +79,6 @@ export const ChatHeader = memo(function ChatHeader({
   onOpenProjectSettings,
   onFindInThread,
 }: ChatHeaderProps) {
-  // ozone-seam: threads without a project are Ozone's chats.
   const activeProjectName = activeProject?.isScratch ? "Chats" : activeProject?.title;
   const activeProjectCwd = activeProject?.workspaceRoot ?? null;
   const interfaceFont = useClientSettings((settings) => settings.fontFamilySans);

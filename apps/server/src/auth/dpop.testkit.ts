@@ -7,7 +7,7 @@ import {
   type DpopPublicJwk,
 } from "@t3tools/shared/dpop";
 
-/** A client's DPoP key, signing proofs the way a browser or the mobile app does. */
+/** A client's DPoP key, signing proofs the way a browser does. */
 export const makeDpopKey = () => {
   const { privateKey, publicKey } = NodeCrypto.generateKeyPairSync("ec", { namedCurve: "P-256" });
   const publicJwk = publicKey.export({ format: "jwk" }) as DpopPublicJwk;

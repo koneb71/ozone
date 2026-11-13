@@ -1528,7 +1528,7 @@ export const layerWsRpc = (
             if (importedThread !== null) {
               return yield* new AcpRegistryOperationError({
                 reason: "session_delete_failed",
-                message: "Delete the imported T3 thread before deleting its native ACP session.",
+                message: "Delete the imported Ozone thread before deleting its native ACP session.",
               });
             }
             yield* manager.deleteSession({
@@ -1796,7 +1796,6 @@ export const layerWsRpc = (
         return yield* mutateProjectWithClone(projectService, projectCloneTracker, mutation);
       });
 
-      // ozone-seam: Ozone's handlers, declared in ozone/ws.ts.
       const ozoneHandlers = yield* OzoneWs.OzoneWsHandlers;
       const handlers = ServerWsRpcGroup.of({
         ...ozoneHandlers,

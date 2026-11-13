@@ -232,7 +232,7 @@ export const expandHomePath = Effect.fn(function* (input: string) {
 export const resolveBaseDir = Effect.fn(function* (raw: string | undefined) {
   const { join, resolve } = yield* Path.Path;
   if (!raw || raw.trim().length === 0) {
-    // ozone-seam: Ozone keeps its own data directory so it can sit beside a T3 Code install.
+    // Ozone keeps its own data directory so it can sit beside a T3 Code install.
     return join(yield* HostProcess.HomeDirectory, ".ozone");
   }
   return resolve(yield* expandHomePath(raw.trim()));

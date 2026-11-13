@@ -208,7 +208,6 @@ describe("command permissions", () => {
   it.effect.each([
     WS_METHODS.scheduledTasksDelete,
     ORCHESTRATION_V2_WS_METHODS.stopWorkflow,
-    // ozone-seam: Ozone's actions are guarded like upstream's.
     OZONE_WS_METHODS.runtimeAct,
   ])("uses the target grant for both availability and execution of %s", (method) =>
     Effect.scoped(

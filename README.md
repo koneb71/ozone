@@ -4,8 +4,9 @@ Describe an app and Ozone builds it, runs it and shows it to you. It creates the
 template, starts it with Docker Compose, hands the work to coding agents, checks every step itself
 and opens a live preview beside the conversation. It also has a plain chat that takes files.
 
-Ozone is a fork of [T3 Code](https://github.com/pingdotgg/t3code) and keeps everything T3 Code
-does: threads, providers, checkpoints, the preview browser and remote access.
+Ozone is local first: it runs on your machine with your own provider accounts, and sends nothing
+to a service you did not set up. Under the app builder is a full client for coding agents, with
+threads, providers, checkpoints, a preview browser and remote access over your own network.
 
 ![A build thread: the plan with its repair task, the running app and its preview](docs/ozone/assets/build.png)
 
@@ -47,13 +48,16 @@ it as read, and see how many are left to read." This is the app it built:
     data from then if you ask.
   - **Monitoring** shows each container's CPU, memory and network, and its logs. **Set up** checks
     a server, installs Docker there if it has none, and starts the proxy.
+  - A **Dokploy** server, or a **Railway**, **Render**, **Koyeb** or **Vercel** account, can run the
+    app from its Git remote instead. The host then owns the containers and the data.
   - **Build** deploys by itself when a build completes if you ask, **Deploy** gives the app a URL
     to call from a script, and **Notifications** tells Slack, Discord, Telegram or any webhook how
     each deploy went.
 - **Chats.** Ask anything and attach PDFs, Word documents, images and other files. Ask a chat
   for an app and it starts one.
 - **Uses your subscription.** Sign in to Claude from Settings. No API key is involved, and an API
-  key left in your shell is not used by accident. The other providers T3 Code supports work too.
+  key left in your shell is not used by accident. Codex, Cursor, OpenCode and the other
+  [supported providers](docs/README.md) work too.
 
 ## Run it
 
@@ -65,16 +69,18 @@ and how to get it.
 
 Download the latest build from [Releases](https://github.com/koneb71/ozone/releases/latest):
 
-| Your computer              | File                                             |
-| -------------------------- | ------------------------------------------------ |
-| Mac with Apple silicon     | `Ozone-…-arm64.dmg`                              |
-| Linux, 64-bit Intel or AMD | `Ozone-…-x86_64.AppImage` or `Ozone-…-amd64.deb` |
+| Your computer                | File                      |
+| ---------------------------- | ------------------------- |
+| Mac with Apple silicon       | `Ozone-…-arm64.dmg`       |
+| Linux, 64-bit Intel or AMD   | `Ozone-…-x86_64.AppImage` |
+| Windows, 64-bit Intel or AMD | `Ozone-…-x64.exe`         |
 
 The builds are not signed. On a Mac, the first time, open **System Settings**, choose **Privacy &
-Security** and press **Open Anyway** after macOS refuses to open Ozone. There is no Windows build
-yet.
+Security** and press **Open Anyway** after macOS refuses to open Ozone. On Windows, SmartScreen
+warns before the installer runs; choose **More info**, then **Run anyway**.
 
-Ozone keeps its data in `~/.ozone` and can run beside T3 Code.
+Ozone keeps its data in `~/.ozone`. See [Install Ozone](docs/user/install.md) for the `ozone`
+command and for running it on a server.
 
 If no release is published yet, build the installers yourself: on GitHub, open **Actions**, choose
 **Ozone release** and press **Run workflow**. The files are attached to the finished run.
@@ -99,28 +105,13 @@ Open the pairing URL the dev runner prints.
 
 ## How it works
 
-Ozone's code lives in its own modules beside T3 Code's, and touches T3 Code's files only at small
-tagged seams, so upstream changes keep merging.
-
-- [Ozone and the fork](docs/ozone/README.md): how the parts fit, the fork rules, how to sync.
+- [Using Ozone](docs/README.md): the user guides, from the composer to remote access.
+- [How Ozone is built](docs/ozone/README.md): how the parts fit and the decisions behind them.
 - [The Build Conductor](docs/ozone/orchestrator.md): the orchestrator and the decisions behind it.
 - [Data safety](docs/ozone/data-safety.md): the contract that keeps an app's data.
-- [Seams](docs/ozone/SEAMS.md): every upstream file Ozone edits, and why.
-
-Everything else under [docs](docs/) is T3 Code's documentation, and it still applies.
-
-## What is not Ozone yet
-
-- The mobile app carries T3 Code's name and has no build of Ozone's own. It shows a thread's app,
-  its controls, its build and its preview, and lists your apps under Settings, but this has not
-  been tried on a device yet.
-- The command-line tool is still called `t3`, and messages that come from the server can still say
-  T3 Code.
-- There is no Windows build, and Ozone is untested on Windows.
-- Deploy is on the desktop and web apps only, and notifications cannot go to email yet.
-- Ozone collects no usage data. The privacy policy and a few help links still lead to T3 Code's
-  site.
+- [AGENTS.md](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md): how to work on Ozone.
 
 ## License
 
-MIT, like T3 Code. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). Ozone started as a fork of
+[T3 Code](https://github.com/pingdotgg/t3code), which is MIT licensed too.

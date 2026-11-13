@@ -182,7 +182,7 @@ it.effect.skipIf(windowsHost)(
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
 
-// A project opened from T3 must not replace the editor's last active window.
+// A project opened from Ozone must not replace the editor's last active window.
 it.effect.skipIf(windowsHost)(
   "opens a project folder in a new VS Code window and a file in the existing one",
   () =>
@@ -763,11 +763,13 @@ it.effect("keeps the macOS VS Code Insiders bundle out of stable VS Code", () =>
       yield* fs.chmod(path.join(bin, name), 0o755);
     }
 
-    let spawned: ChildProcess.StandardCommand | undefined;
+    const spawned: Array<string> = [];
     const editors = yield* Effect.gen(function* () {
       const launcher = yield* ExternalLauncher.ExternalLauncher;
       const available = yield* launcher.resolveAvailableEditors();
       yield* launcher.launchEditor({ editor: "vscode-insiders", cwd: "/workspace/file.ts" });
+      // This machine's own /Applications may hold a stable VS Code, so launch it or fail.
+      yield* Effect.exit(launcher.launchEditor({ editor: "vscode", cwd: "/workspace/file.ts" }));
       return available;
     }).pipe(
       Effect.provide(
@@ -775,15 +777,15 @@ it.effect("keeps the macOS VS Code Insiders bundle out of stable VS Code", () =>
           platform: "darwin",
           env: { HOME: home, PATH: path.join(home, "empty") },
           onSpawn: (command) => {
-            spawned = command;
+            spawned.push(command.command);
           },
         }),
       ),
     );
 
-    assert.notInclude(editors, "vscode");
     assert.include(editors, "vscode-insiders");
-    assert.equal(spawned?.command, path.join(bin, "code-insiders"));
+    assert.equal(spawned[0], path.join(bin, "code-insiders"));
+    assert.notInclude(spawned, path.join(bin, "code"));
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
 

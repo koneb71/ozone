@@ -39,7 +39,7 @@ export class ScratchUnavailableError extends Schema.TaggedError<ScratchUnavailab
     if (this.repositoryRoot === undefined) {
       return "Threads without a project are not available on this environment.";
     }
-    return `Threads without a project are off because the T3 home ${this.baseDir} is inside the Git repository ${this.repositoryRoot}. If that repository was created by mistake, move ${this.repositoryRoot}/.git out of the way; otherwise point T3CODE_HOME (or --base-dir) at a folder outside it. Then restart T3 Code.`;
+    return `Threads without a project are off because the Ozone home ${this.baseDir} is inside the Git repository ${this.repositoryRoot}. If that repository was created by mistake, move ${this.repositoryRoot}/.git out of the way; otherwise point T3CODE_HOME (or --base-dir) at a folder outside it. Then restart Ozone.`;
   }
 }
 
@@ -196,7 +196,7 @@ function namedProjectReadme(name: string): string {
     "",
     `# ${name}`,
     "",
-    "Created in [T3 Code](https://t3.codes).",
+    "Created in Ozone.",
     "",
   ].join("\n");
 }
@@ -311,7 +311,7 @@ const make = Effect.gen(function* () {
         .bootstrap({
           commandId: CommandId.make(`scratch-project:${id}`),
           projectId: ProjectId.make(id),
-          title: "Chats", // ozone-seam: threads without a project are Ozone's chats.
+          title: "Chats",
           workspaceRoot,
         })
         .pipe(
@@ -381,7 +381,7 @@ const make = Effect.gen(function* () {
                 Effect.mapError((cause) => new ScratchFolderError({ folder: fullFolder, cause })),
               ),
       (folder, cause) => new ScratchFolderError({ folder, cause }),
-      // ozone-seam: a chat's folder starts with Ozone's instructions for its agent.
+      // A chat's folder starts with Ozone's instructions for its agent.
     ).pipe(Effect.tap(ChatPersona.writeInto(fileSystem, path)));
   });
 

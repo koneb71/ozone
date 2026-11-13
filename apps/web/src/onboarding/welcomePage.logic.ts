@@ -85,7 +85,7 @@ export function turnedOnInstance(instance: ProviderInstanceConfig): ProviderInst
   };
 }
 
-/** A CLI the server knows is too old or otherwise broken for T3 Code; Settings updates it. */
+/** A CLI the server knows is too old or otherwise broken for Ozone; Settings updates it. */
 export function isBrokenVersion(provider: ServerProvider) {
   return provider.installed && provider.compatibilityAdvisory?.status === "broken";
 }

@@ -78,7 +78,7 @@ function antigravityWritesRunWorkflowSkill(version: string | null | undefined): 
 }
 
 /**
- * Releases T3 qualified for native range reads and linked video. On 1.4.5 the client-read path
+ * Releases Ozone qualified for native range reads and linked video. On 1.4.5 the client-read path
  * sends a whole file to serve one line, and the native reader keeps diff edits.
  */
 export function isQualifiedAntigravityRelease(version: string | null | undefined): boolean {
@@ -115,7 +115,7 @@ export function antigravitySessionMeta(
 export function antigravityClientInfo(version: string | null | undefined) {
   const parsed = parseAntigravityVersion(version);
   return parsed !== undefined && compareVersions(parsed, OPEN_MODEL_ACCESS_RELEASE) >= 0
-    ? { name: "t3-code", title: "T3 Code", version: packageJson.version }
+    ? { name: "t3-code", title: "Ozone", version: packageJson.version }
     : { name: "zed", version: "0.0.0" };
 }
 
@@ -176,7 +176,7 @@ export function antigravityPermissionMode(runtimeMode: RuntimeMode): string {
 
 /**
  * The agy CLI rejects the managed runtime's `yolo` and `auto_edit`. It stays in `default`, where
- * it asks before acting and T3 answers from the live runtime policy, so permission changes apply
+ * it asks before acting and Ozone answers from the live runtime policy, so permission changes apply
  * on the next turn without a restart.
  */
 export function antigravityCliSessionMode(modeId: string): string {

@@ -1,10 +1,4 @@
 export const BRAND_ASSET_PATHS = {
-  developmentIconComposerProject: "assets/dev/app-icon.icon",
-  developmentIosIconPng: "assets/dev/blueprint-ios-1024.png",
-  developmentUniversalIconPng: "assets/dev/blueprint-universal-1024.png",
-
-  productionIconComposerProject: "assets/prod/app-icon.icon",
-  productionIosIconPng: "assets/prod/black-ios-1024.png",
   productionMacIconPng: "assets/prod/black-macos-1024.png",
   productionLinuxIconPng: "assets/prod/black-universal-1024.png",
   productionWindowsIconIco: "assets/prod/t3-black-windows.ico",
@@ -15,8 +9,6 @@ export const BRAND_ASSET_PATHS = {
   productionWebIcon192Png: "assets/prod/t3-black-web-icon-192x192.png",
   productionWebIcon512Png: "assets/prod/t3-black-web-icon-512x512.png",
 
-  nightlyIconComposerProject: "assets/nightly/app-icon.icon",
-  nightlyIosIconPng: "assets/nightly/nightly-ios-1024.png",
   nightlyMacIconPng: "assets/nightly/nightly-macos-1024.png",
   nightlyLinuxIconPng: "assets/nightly/nightly-universal-1024.png",
   nightlyWindowsIconIco: "assets/nightly/nightly-windows.ico",
@@ -27,8 +19,6 @@ export const BRAND_ASSET_PATHS = {
   nightlyWebIcon192Png: "assets/nightly/nightly-web-icon-192x192.png",
   nightlyWebIcon512Png: "assets/nightly/nightly-web-icon-512x512.png",
 
-  developmentDesktopIconPng: "assets/dev/blueprint-macos-1024.png",
-  developmentWindowsIconIco: "assets/dev/blueprint-windows.ico",
   developmentWebFaviconIco: "assets/dev/blueprint-web-favicon.ico",
   developmentWebFavicon16Png: "assets/dev/blueprint-web-favicon-16x16.png",
   developmentWebFavicon32Png: "assets/dev/blueprint-web-favicon-32x32.png",
@@ -122,8 +112,3 @@ export function resolveWebIconOverrides(
 }
 
 export const DEVELOPMENT_ICON_OVERRIDES = resolveWebIconOverrides("development", "dist/client");
-
-export const DEVELOPMENT_PUBLIC_ICON_OVERRIDES = resolveWebIconOverrides(
-  "development",
-  "apps/web/public",
-);

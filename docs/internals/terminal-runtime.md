@@ -29,8 +29,8 @@ bound during startup.
 
 ## Renderer ownership
 
-Android and web use the same `libghostty-vt` C ABI for terminal behavior. Platform
-adapters own drawing and input integration, and React stays out of terminal frames.
+The web client uses the `libghostty-vt` C ABI for terminal behavior. Its
+adapter owns drawing and input integration, and React stays out of terminal frames.
 The web adapter shares one WebAssembly instance per browser tab while each terminal
 owns and frees its own handles. The canonical upstream pin is
 [`native/libghostty-vt/VERSION`](../../native/libghostty-vt/VERSION); both native and

@@ -1,8 +1,8 @@
 # Security policy
 
-Report security vulnerabilities affecting T3 Code or T3 Tools-operated infrastructure to
-[security@t3.codes](mailto:security@t3.codes). Please do not disclose them publicly until we have had
-a reasonable opportunity to investigate and remediate them.
+Report a vulnerability in Ozone privately through GitHub: open the
+[Security tab](https://github.com/koneb71/ozone/security) of `koneb71/ozone` and choose
+**Report a vulnerability**. Do not open a public issue for it.
 
-See the [full security policy](https://t3.codes/security-policy) for reporting details, scope,
-and safe harbor terms for good-faith research.
+Say what is affected, how to reproduce it, and what an attacker gains. Please give the report a
+reasonable time to be investigated and fixed before disclosing it.

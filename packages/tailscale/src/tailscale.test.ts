@@ -100,7 +100,7 @@ function layerMockSpawner(
 }
 
 describe("tailscale", () => {
-  it.effect("does not treat a non-T3 response on the HTTPS probe path as reachable", () =>
+  it.effect("does not treat a non-Ozone response on the HTTPS probe path as reachable", () =>
     Effect.gen(function* () {
       for (const [body, status] of [
         ["<!doctype html><title>Other application</title>", 200],
@@ -116,7 +116,7 @@ describe("tailscale", () => {
             ),
           ),
         );
-        assert.isFalse(reachable, `HTTP ${status} without a T3 descriptor`);
+        assert.isFalse(reachable, `HTTP ${status} without an Ozone descriptor`);
       }
     }),
   );

@@ -82,7 +82,7 @@ export interface McpClientSession {
   readonly sessionId: AuthSessionId;
   readonly label: string;
   readonly access: AuthMcpClientAccess;
-  /** Another T3 Code environment's link, whose work here stays within it. */
+  /** Another Ozone environment's link, whose work here stays within it. */
   readonly peerLink: boolean;
 }
 
@@ -1335,7 +1335,7 @@ const mcpApprovalLevel = (subject: string): AuthMcpClientAccess | undefined => {
 };
 
 const PAIRING_LINK_SUBJECT = "one-time-token";
-/** Sessions the removed T3 Connect link minted; nothing issues them now, so none may stay. */
+/** Sessions the removed hosted link minted; nothing issues them now, so none may stay. */
 const CONNECT_SUBJECT = "cloud-connect";
 
 /**

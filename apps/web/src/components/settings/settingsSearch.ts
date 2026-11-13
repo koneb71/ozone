@@ -34,7 +34,7 @@ export type SettingsPath =
   | "/settings/worktrees"
   | "/settings/connections"
   | "/settings/access"
-  | "/settings/servers" // ozone-seam: Settings › Servers
+  | "/settings/servers"
   | "/settings/secrets"
   | "/settings/maintenance"
   | "/settings/labs"
@@ -106,7 +106,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/worktrees": msg("Worktrees"),
   "/settings/connections": msg("Environments"),
   "/settings/access": msg("Sharing & access"),
-  "/settings/servers": msg("Servers"), // ozone-seam
+  "/settings/servers": msg("Servers"),
   "/settings/secrets": msg("Secrets"),
   "/settings/maintenance": msg("Maintenance"),
   "/settings/labs": msg("Labs"),
@@ -151,7 +151,7 @@ export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
     paths: [
       "/settings/connections",
       "/settings/access",
-      "/settings/servers", // ozone-seam
+      "/settings/servers",
       ...(isSecretsFeatureEnabled ? (["/settings/secrets"] as const) : []),
     ],
   },
@@ -848,7 +848,7 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "cli-command",
-    title: "t3 command",
+    title: "ozone command",
     to: "/settings/about",
     searchTerms: ["cli terminal shell path install command line"],
     desktopOnly: true,
@@ -1056,7 +1056,7 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "pull-request-links-open-in-app",
-    title: "Open pull requests in T3 Code",
+    title: "Open pull requests in Ozone",
     to: "/settings/diffs",
     searchTerms: [
       `pr commit links ${SOURCE_CONTROL_HOST_LABELS} browser external click default pull request view panel`,
@@ -1274,7 +1274,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["new 1password vault op cli account"],
     secretsFeatureOnly: true,
   },
-  // ozone-seam: Settings › Servers is found by what people deploy to.
+  // Settings › Servers is found by what people deploy to.
   {
     id: "ozone-servers",
     title: "Servers",
@@ -1311,7 +1311,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/worktrees": "project-defaults",
   "/settings/connections": "connections",
   "/settings/access": "connections",
-  "/settings/servers": null, // ozone-seam
+  "/settings/servers": null,
   "/settings/secrets": null,
   "/settings/scheduled-tasks": null,
   "/settings/maintenance": null,

@@ -138,8 +138,9 @@ const WINDOW: UsageSummaryInput = {
 };
 
 const setup = Effect.gen(function* () {
-  const home = yield* Effect.promise(() =>
-    NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "usage-service-test-")),
+  // Sources report real paths, and macOS links its temporary folder.
+  const home = yield* Effect.promise(async () =>
+    NodeFSP.realpath(await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "usage-service-test-"))),
   );
   yield* Effect.addFinalizer(() =>
     Effect.promise(() => NodeFSP.rm(home, { recursive: true, force: true })),
@@ -1576,7 +1577,7 @@ describe("UsageService", () => {
     }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
   );
 
-  it.live("reads the Cursor account of an API key or T3 sign-in instead of a CLI login", () =>
+  it.live("reads the Cursor account of an API key or Ozone sign-in instead of a CLI login", () =>
     Effect.gen(function* () {
       const { settings, home } = yield* setup;
       const signIn = new TextEncoder().encode(

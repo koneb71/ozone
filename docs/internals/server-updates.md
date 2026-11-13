@@ -8,7 +8,7 @@ may replace the launcher and state, optionally deferring the restart. Foreground
 CLI processes do not self-update.
 
 Both writers serialize state and unit writes through
-[file leases](../../apps/server/src/cloud/serviceSelectionLock.ts). The installer
+[file leases](../../apps/server/src/service/serviceSelectionLock.ts). The installer
 takes the state lease before the unit lease; the launcher never holds both, so a
 unit failure cannot block a durable commit. Manager stop/start commands run outside
 both leases, since stopping a launcher that waits on a lease would deadlock. A
@@ -31,7 +31,7 @@ After a commit or rollback the launcher points the unit at the selected runtime 
 reloads the manager, so the next service start runs that version's launcher; the
 protocol check is what makes that safe. Each start after a finished update retries this, because
 a previous reload may have failed, and leaves a unit naming a newer runtime or another
-T3 home alone. A protocol-3 launcher does none of this: its unit keeps naming the
+data home alone. A protocol-3 launcher does none of this: its unit keeps naming the
 runtime that installed it. Until a deferred local upgrade restarts, systemd (before
 daemon-reload) and launchd (before bootstrap) can respawn the old launcher, which
 rejects the state the new installer wrote.

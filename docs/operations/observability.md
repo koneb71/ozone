@@ -1,8 +1,8 @@
 # Observability
 
-> For maintainers. Using T3 Code? See [docs/user](../user/).
+> For maintainers. Using Ozone? See [docs/user](../user/).
 
-T3 Code has one server-side observability model:
+Ozone has one server-side observability model:
 
 - pretty logs go to stdout for humans
 - completed spans go to a local NDJSON trace file
@@ -10,7 +10,7 @@ T3 Code has one server-side observability model:
 
 The local trace file is the persisted source of truth for normal local launches. Those launches do not
 write a separate server log file, but SSH-managed launches also persist the remote process's
-stdout/stderr at `~/.t3/ssh-launch/<state>/server.log`.
+stdout/stderr at `~/.ozone/ssh-launch/<state>/server.log`.
 
 ## Where To Find Things
 
@@ -21,7 +21,7 @@ Logs are human-facing:
 - destination: stdout
 - format: `Logger.consolePretty()`
 - normal local persistence: none
-- SSH-managed launch persistence: `~/.t3/ssh-launch/<state>/server.log`
+- SSH-managed launch persistence: `~/.ozone/ssh-launch/<state>/server.log`
 - remote export: OTLP only, when configured
 
 If you want a log message to show up in the trace file, emit it inside an active span with `Effect.log...`. `Logger.tracerLogger` will attach it as a span event.
@@ -36,10 +36,10 @@ SSH-managed launch persistence stay unchanged either way.
 
 Completed spans are written as NDJSON records to `serverTracePath`. The default depends on how the
 server starts: production and explicitly configured homes use
-`<home>/userdata/logs/server.trace.ndjson` (so `~/.t3/userdata/...` by default, or
+`<home>/userdata/logs/server.trace.ndjson` (so `~/.ozone/userdata/...` by default, or
 `/custom/path/userdata/...` with `--home-dir /custom/path`), a linked worktree dev run uses
 `<worktree>/.t3/userdata/logs/server.trace.ndjson`, and an implicit dev run outside a linked
-worktree uses `~/.t3/dev/logs/server.trace.ndjson`.
+worktree uses `~/.ozone/dev/logs/server.trace.ndjson`.
 
 Important fields common to both record types:
 
@@ -76,12 +76,12 @@ request.
 
 #### Summarize the trace file
 
-`t3 trace summary` reads the trace file and its rotated backups directly, so it works while the
+`ozone trace summary` reads the trace file and its rotated backups directly, so it works while the
 server is stalled or stopped. It prints counts, rates, and latency percentiles per span name. Use
 it to measure background work or to compare two builds.
 
 ```bash
-t3 trace summary --since 30m --limit 40
+ozone trace summary --since 30m --limit 40
 ```
 
 It reads `T3CODE_TRACE_FILE` if set, else `<home>/userdata/logs/server.trace.ndjson` for
@@ -156,15 +156,15 @@ You do not need any extra env vars. Just run the app normally and inspect `serve
 Examples:
 
 ```bash
-t3
+ozone
 ```
 
 ```bash
-node --run dev
+vp run dev
 ```
 
 ```bash
-node --run dev:desktop
+vp run dev:desktop
 ```
 
 ### Option 2: Run With A Local LGTM Stack
@@ -191,7 +191,7 @@ Default Grafana login:
 
 For endpoint settings and startup precedence, see the
 [diagnostics export guide](../user/diagnostics-export.md).
-In a worktree, use `vp run dev` instead of `t3` to keep state isolated.
+In a worktree, use `vp run dev` instead of `ozone` to keep state isolated.
 
 ```bash
 export T3CODE_OTLP_TRACES_URL=http://localhost:4318/v1/traces
@@ -212,19 +212,19 @@ export T3CODE_TRACE_TIMING_ENABLED=true
 CLI:
 
 ```bash
-t3
+ozone
 ```
 
 Monorepo web/server dev:
 
 ```bash
-node --run dev
+vp run dev
 ```
 
 Monorepo desktop dev:
 
 ```bash
-node --run dev:desktop
+vp run dev:desktop
 ```
 
 Packaged desktop app:
@@ -237,7 +237,7 @@ macOS app bundle example:
 T3CODE_OTLP_TRACES_URL=http://localhost:4318/v1/traces \
 T3CODE_OTLP_METRICS_URL=http://localhost:4318/v1/metrics \
 T3CODE_OTLP_LOGS_URL=http://localhost:4318/v1/logs \
-"/Applications/T3 Code.app/Contents/MacOS/T3 Code"
+"/Applications/Ozone.app/Contents/MacOS/Ozone"
 ```
 
 Direct binary example:
@@ -265,7 +265,7 @@ Resolve the path for the launch mode once. Production and explicitly configured 
 state under the base directory's `userdata` folder:
 
 ```bash
-TRACE_FILE="${T3CODE_HOME:-$HOME/.t3}/userdata/logs/server.trace.ndjson"
+TRACE_FILE="${T3CODE_HOME:-$HOME/.ozone}/userdata/logs/server.trace.ndjson"
 ```
 
 A dev server started from a linked worktree defaults to that worktree's local home:
@@ -277,7 +277,7 @@ TRACE_FILE="$WORKTREE/.t3/userdata/logs/server.trace.ndjson"
 Only an implicit dev run outside a linked worktree uses the shared dev directory:
 
 ```bash
-TRACE_FILE="$HOME/.t3/dev/logs/server.trace.ndjson"
+TRACE_FILE="$HOME/.ozone/dev/logs/server.trace.ndjson"
 ```
 
 Tail the selected file:
@@ -411,22 +411,19 @@ Counters tell you volume and failure rate:
 
 Webhooks have their own families:
 
-- `t3_webhook_deliveries_total` by `outcome` and `source` (`relay` or `direct`). Beyond what the
-  sender sees, `queue_full` means a task already had its limit of deliveries waiting,
-  `prompt_too_long` means the filled-in prompt passed the provider limit, and `duplicate` means
-  the relay delivered a request this environment had already run.
+- `t3_webhook_deliveries_total` by `outcome`. Beyond what the sender sees, `queue_full` means a
+  task already had its limit of deliveries waiting, and `prompt_too_long` means the filled-in
+  prompt passed the provider limit.
 - `t3_webhook_runs_total` by `outcome` (`started`, `skipped`, `failed`) for the runs those
   deliveries start, which happen after the sender has its answer.
-- `t3_webhook_held_delay` for how long requests the relay held waited before arriving.
 
 - `t3_secret_requests_total` by `status` (`saved`, `declined`, `cancelled`, `timed_out`) for secrets
   agents asked users for, and `t3_secret_refs_consumed_total` by `result` (`used`, `rejected`) for
   tools redeeming them. Neither ever carries a value.
 
 `ScheduledTaskService.triggerWebhook` spans carry the same outcome per request, and each run
-started from a delivery is its own `ScheduledTaskService.runWebhookDelivery` trace. For a request
-the relay forwarded, the span also goes to the T3 Connect trace export as a child of the relay's
-span; requests that reach the environment directly never join a sender's trace.
+started from a delivery is its own `ScheduledTaskService.runWebhookDelivery` trace. A request
+never joins its sender's trace.
 
 Use metrics when the question is:
 
@@ -634,27 +631,23 @@ process, both in `service.namespace` `t3code`. `OTEL_SERVICE_NAME` and a `servic
 `service.namespace` in `OTEL_RESOURCE_ATTRIBUTES` are ignored. Tell installations apart with other
 resource attributes, such as `OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=staging`.
 
-Each process reports its own build, not the one it talks to: the server, the desktop main process,
-the UI, and the mobile app each carry `t3code.release.channel` (`dev`, `stable`, `nightly`, or
-`preview`, from their own version; desktop PR builds count as `preview`, and a server not built by a
-release workflow reports `dev`) and `deployment.environment.name` (`development`, `production`, or
-`staging` for `preview`). On the server and the desktop main process either key in
-`OTEL_RESOURCE_ATTRIBUTES` wins. The UI and mobile app never read that variable: Vercel PR previews
-set `VITE_RELEASE_CHANNEL=preview` because their `APP_VERSION` must stay comparable with the
-server's, and the mobile app maps its build variant (`development`, `preview`, `production`), or
-reports `dev` from a development bundle.
+Each process reports its own build, not the one it talks to: the server, the desktop main process
+and the UI each carry `t3code.release.channel`, derived from their own version (a server not built
+by the release workflow reports `dev`), and `deployment.environment.name`. On the server and the
+desktop main process either key in `OTEL_RESOURCE_ATTRIBUTES` wins. The UI never reads that
+variable.
 
-Attributes specific to T3 Code use the `t3code.` prefix. The UI runs as `t3code-web` in both a
+Attributes specific to Ozone use the `t3code.` prefix. The UI runs as `t3code-web` in both a
 browser and the desktop window, since it is the same code, and `t3code.client.surface` is `desktop`
 or `web`. The server's `t3code.server.managed_by` is `desktop` when the desktop app launched it and
 `standalone` otherwise. The desktop main process reports `t3code.desktop.mode` as `development` or
-`packaged` (formerly `service.mode`; dashboards filtering on that key must switch). Node processes
+`packaged`. Node processes
 also report the semantic `process.runtime.name`, `process.runtime.version`, and
 `process.runtime.description`, and UI traces report `browser.language`, `user_agent.original`, and,
 in Chromium, `browser.platform`, `browser.mobile`, and `browser.brands`.
 
 Every resource also carries a `service.instance.id`: random per process for the server and desktop,
-per page load for the UI, and the Expo session on mobile. A `service.instance.id` in
+and per page load for the UI. A `service.instance.id` in
 `OTEL_RESOURCE_ATTRIBUTES` replaces the generated one on the server and desktop.
 
 If the OTLP URLs are unset, local tracing still works, metrics stay in-process only, and logs stay
@@ -701,7 +694,7 @@ Current high-value span and metric boundaries include:
 ## Heap Snapshots
 
 To see what a long-running server holds in memory, send it `SIGUSR2`. The server writes a V8 heap
-snapshot to its logs dir and logs the path. This works for desktop, `npx t3`, and service installs
+snapshot to its logs dir and logs the path. This works for desktop, `ozone`, and service installs
 on macOS and Linux. Windows has no `SIGUSR2`.
 
 Send the signal to the server pid in `server-runtime.json`, which sits in the server's state dir
@@ -711,11 +704,11 @@ handler exits on `SIGUSR2`. After a crash the file can keep a stale pid that now
 different process, so check the pid first.
 
 ```bash
-pid="$(jq .pid "${T3CODE_HOME:-$HOME/.t3}/userdata/server-runtime.json")"
+pid="$(jq .pid "${T3CODE_HOME:-$HOME/.ozone}/userdata/server-runtime.json")"
 ps -p "$pid" -o command=
 ```
 
-If `ps` shows the T3 Code server, send the signal:
+If `ps` shows the Ozone server, send the signal:
 
 ```bash
 kill -USR2 "$pid"

@@ -45,7 +45,7 @@ jobs:
         run: vp run knip:check
 
       - name: Ozone tests
-        run: vp test run apps/server/src/ozone apps/web/src/ozone packages/client-runtime/src/state/ozone.test.ts scripts/ozone-desktop-identity.test.ts
+        run: vp test run apps/server/src/ozone apps/web/src/ozone packages/client-runtime/src/state/ozone.test.ts
 
   # The whole web suite runs in headless Chromium, split across jobs to fit a standard runner.
   web:

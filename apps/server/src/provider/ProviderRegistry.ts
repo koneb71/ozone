@@ -85,7 +85,7 @@ export class ProviderRegistry extends Context.Service<
     }) => Effect.Effect<ReadonlyArray<ServerProvider>>;
 
     /**
-     * Drop T3-owned model caches before an explicit model refresh. Pass the
+     * Drop Ozone-owned model caches before an explicit model refresh. Pass the
      * target of the refresh that follows. Background and ordinary refreshes
      * keep their cache timers and must not call this.
      */

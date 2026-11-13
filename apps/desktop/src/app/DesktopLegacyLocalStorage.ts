@@ -21,7 +21,7 @@ export class DesktopLegacyLocalStorage extends Context.Service<
 >()("@t3tools/desktop/app/DesktopLegacyLocalStorage") {}
 
 const MARKER_FILE_NAME = "v1-local-storage-imported";
-// ozone-seam: T3 Code's old profiles are not Ozone's to import.
+// T3 Code's old profiles are not Ozone's to import.
 const V1_PROFILE_NAMES: ReadonlyArray<string> = [];
 
 const make = Effect.gen(function* () {

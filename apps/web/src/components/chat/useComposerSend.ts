@@ -1369,7 +1369,6 @@ export function useComposerSend(input: ComposerSendInput) {
         ) {
           handleNewThreadInActiveProject();
         }
-        // ozone-seam: no star prompt here; it asks for a star on upstream's repository.
       }
     }
 

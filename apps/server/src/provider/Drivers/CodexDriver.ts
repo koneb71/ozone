@@ -362,7 +362,7 @@ export const CodexDriver: ProviderDriver<
           ),
         );
 
-    // `codex login` and `codex logout` rewrite auth.json outside T3.
+    // `codex login` and `codex logout` rewrite auth.json outside Ozone.
     if (effectiveConfig.enabled) {
       yield* fileSystem.watch(accountKey).pipe(
         Stream.filter((event) => pathService.basename(event.path) === "auth.json"),

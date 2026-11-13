@@ -768,10 +768,12 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("Antigravity inst
           const windowsDirectory = path.join(baseDir, `windows-${name}`);
           yield* fs.makeDirectory(windowsDirectory);
           yield* fs.writeFileString(path.join(windowsDirectory, name), "cli");
-          expect(yield* windows.resolve("agy", { PATH: windowsDirectory })).toMatchObject({
-            executablePath: path.join(windowsDirectory, name),
-            harnessPath: null,
-          });
+          const resolved = yield* windows.resolve("agy", { PATH: windowsDirectory });
+          // Windows ignores case, and so does macOS, which finds the file under PATHEXT's spelling.
+          expect(resolved.executablePath.toLowerCase()).toBe(
+            path.join(windowsDirectory, name).toLowerCase(),
+          );
+          expect(resolved.harnessPath).toBeNull();
         }
       }),
   );

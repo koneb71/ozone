@@ -1,6 +1,6 @@
 # Keybindings
 
-Customize shortcuts in **Settings → Keybindings** on web and desktop. That page
+Customize shortcuts in **Settings → Keybindings**. That page
 also lists the command IDs and defaults available in your version.
 
 ## Composer controls
@@ -12,7 +12,7 @@ Dictation**, and the hold or toggle behavior in **Settings → Voice**. See
 
 In **Settings → Chat → Send shortcut**, choose whether Enter sends, requires
 `mod+Enter` for multiline prompts, or always requires `mod+Enter`. `Shift+Enter`
-inserts a new line. This applies to the web and desktop composer at desktop widths.
+inserts a new line.
 
 **Follow-up behavior** chooses Queue or Steer while the agent runs. Use
 `mod+Enter` to do the opposite for one message, even when the send shortcut
@@ -46,7 +46,7 @@ model search. Right at the end of the search moves to the highlighted model's ef
 levels, and Left comes back. Choosing a model keeps the picker open on its effort. `mod+shift+up` and `mod+shift+down` switch providers directly and clear the
 search. These provider shortcuts can also be changed in Settings.
 
-These shortcuts run inside the focused web or desktop client. `mod` uses Command
+These shortcuts run inside the focused client. `mod` uses Command
 on macOS and Ctrl on Windows and Linux, including GNOME, KDE Plasma, Niri, and
 Hyprland. If a custom desktop shortcut takes the same keys, choose another binding
 in Settings.
@@ -69,31 +69,10 @@ match in a folded file opens it. Escape closes the search. This shortcut is not
 configurable. A very large uncommitted diff loads its files as you scroll, and
 find only searches the files loaded so far.
 
-## iPad
-
-With a hardware keyboard, use `Cmd+1` through `Cmd+9` to open the first nine
-displayed threads. The shortcuts follow the current list filters and order.
-`Cmd+K` opens the command palette to search commands, projects, and threads.
-Use the arrow keys and Return to choose a result, or `Cmd+1` through `Cmd+9` to
-choose directly. Escape or `Cmd+K` closes the palette. Start a search with `>`
-to show only actions.
-
-In a new thread, `Cmd+Shift+H` moves the draft to the next machine.
-
-In the composer, Return sends and `Shift+Return` inserts a new line. While a
-turn is running, `Cmd+Return` sends with the other follow-up action. To make
-Return insert a new line instead, change the Return key behavior in Settings →
-Keyboard; `Cmd+Return` then sends.
-
-## Android
-
-With a hardware keyboard, the composer handles Return as on iPad, with `Ctrl` in
-place of `Cmd`. The on-screen keyboard's Return always inserts a new line.
-
 ## Edit the configuration file
 
 Keybindings live on the environment's machine, in
-`~/.t3/userdata/keybindings.json` by default. You can edit this file directly.
+`~/.ozone/userdata/keybindings.json` by default. You can edit this file directly.
 It is a JSON array of rules:
 
 ```json
@@ -103,10 +82,10 @@ It is a JSON array of rules:
 ]
 ```
 
-T3 Code creates the file with its defaults and adds new defaults on later startups.
+Ozone creates the file with its defaults and adds new defaults on later startups.
 New defaults do not replace commands you customized. If a new default overlaps one
 of your shortcuts, [rule order](#precedence) decides which runs.
-Invalid rules are ignored; if the file cannot be parsed, T3 Code uses defaults.
+Invalid rules are ignored; if the file cannot be parsed, Ozone uses defaults.
 
 ## Rule shape
 
@@ -158,7 +137,7 @@ and **Escape** to close find.
 `preview.find` (`mod+f` while a browser has focus) searches the open page in the desktop app. It
 is also in the browser's **⋮** menu and the command palette. A page that handles `mod+f` itself,
 such as a code editor, keeps its own find. Use the **⋮** menu to reach the browser's find there.
-Streamed browser tabs and T3 Code in a web browser do not support it.
+Streamed browser tabs and Ozone in a web browser do not support it.
 
 ## Precedence
 

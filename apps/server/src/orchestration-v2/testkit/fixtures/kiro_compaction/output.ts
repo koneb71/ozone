@@ -28,9 +28,9 @@ export function assertKiroCompactionOutput(
     outbound.filter((frame) => field(frame, "method") === "_kiro/session/compact"),
     1,
   );
-  // Compaction drops T3's instructions from Kiro's context, so the next prompt carries them again.
+  // Compaction drops Ozone's instructions from Kiro's context, so the next prompt carries them again.
   assert.deepEqual(
-    prompts.map((frame) => promptText(frame).startsWith("<t3_code_instructions>")),
+    prompts.map((frame) => promptText(frame).startsWith("<ozone_instructions>")),
     [true, true],
   );
 
