@@ -19,7 +19,7 @@ These files contain a comment with `ozone-seam` at each edit.
 | `apps/desktop/src/app/DesktopStatePaths.ts`                             | the desktop app keeps its data in `~/.ozone`                                                           |
 | `apps/desktop/src/app/DesktopUserData.test.ts`                          | expects Ozone's profile folders                                                                        |
 | `apps/desktop/src/app/DesktopUserData.ts`                               | a browser profile of its own, so it can run beside T3 Code                                             |
-| `scripts/build-desktop-artifact.ts`                                     | product name, and the staged package rewritten for Ozone                                               |
+| `scripts/build-desktop-artifact.ts`                                     | product name, the staged package rewritten for Ozone, and the Windows file limit                       |
 | `apps/mobile/src/Stack.tsx`                                             | registers the Apps page and the build's task list                                                      |
 | `apps/mobile/src/features/layout/workspace-overlay-routes.ts`           | the build's task list opens over the thread                                                            |
 | `apps/mobile/src/features/settings/SettingsRouteScreen.tsx`             | Settings lists Apps first                                                                              |
