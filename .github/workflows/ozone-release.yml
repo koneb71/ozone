@@ -85,6 +85,11 @@ jobs:
       - name: Setup dependencies
         uses: ./.github/actions/setup-ci-deps
 
+      # A cached Vite+ goes on PATH as /c/Users/..., which only bash reads; Node's spawn needs C:\.
+      - name: Put Vite+ on the Windows PATH
+        if: matrix.platform == 'win'
+        run: cygpath -w "$HOME/.vite-plus/bin" >> "$GITHUB_PATH"
+
       # The secret helper links libsecret; the rest is what Electron needs to open for the launch
       # check. patchelf points the command-line archive at the libatomic it carries.
       - name: Install Linux build libraries
