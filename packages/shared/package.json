@@ -487,10 +487,6 @@
       "types": "./src/proposedPlanText.ts",
       "import": "./src/proposedPlanText.ts"
     },
-    "./markdownWindowsPaths": {
-      "types": "./src/markdownWindowsPaths.ts",
-      "import": "./src/markdownWindowsPaths.ts"
-    },
     "./generatedImageMarkdown": {
       "types": "./src/generatedImageMarkdown.ts",
       "import": "./src/generatedImageMarkdown.ts"

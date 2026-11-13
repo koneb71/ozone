@@ -1,7 +1,6 @@
 name: Ozone CI
 
-# Upstream's workflows are parked in .github/workflows-upstream: they need upstream's runners and
-# secrets. This is the only workflow that runs in the fork.
+# The checks every change gets. ozone-release.yml builds what people install.
 on:
   pull_request:
   push:
@@ -30,16 +29,6 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
 
-      # An upstream merge can add a workflow here. It must be parked, not run.
-      - name: Only Ozone workflows may run
-        run: |
-          extra=$(ls .github/workflows | grep -v '^ozone-' || true)
-          if [ -n "$extra" ]; then
-            echo "Move these to .github/workflows-upstream/:"
-            echo "$extra"
-            exit 1
-          fi
-
       - name: Setup dependencies
         uses: ./.github/actions/setup-ci-deps
 
@@ -58,21 +47,7 @@ jobs:
       - name: Ozone tests
         run: vp test run apps/server/src/ozone apps/web/src/ozone packages/client-runtime/src/state/ozone.test.ts scripts/ozone-desktop-identity.test.ts
 
-      # A seam can break the upstream test that sits beside the file it edits. Browser tests need
-      # Chromium, so the web job runs those.
-      - name: Tests beside seams
-        run: |
-          tests=$(git grep -l ozone-seam -- 'apps/*.ts' 'apps/*.tsx' 'packages/*.ts' 'scripts/*.ts' \
-            | grep -v '/ozone/' \
-            | grep -v '\.browser\.test\.' \
-            | sed -E 's/\.test\.(ts|tsx)$/.\1/; s/\.(ts|tsx)$/.test.\1/' \
-            | sort -u \
-            | while read -r file; do if [ -f "$file" ]; then echo "$file"; fi; done)
-          echo "$tests"
-          vp test run $tests
-
-  # Ozone's seams in the web client change what upstream's React tests render, so the whole web
-  # suite runs in headless Chromium, split across jobs to fit a standard runner.
+  # The whole web suite runs in headless Chromium, split across jobs to fit a standard runner.
   web:
     name: Web tests (${{ matrix.shard }}/4)
     runs-on: ubuntu-24.04

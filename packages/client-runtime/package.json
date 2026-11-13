@@ -391,10 +391,6 @@
       "types": "./src/state/contextWindow.ts",
       "default": "./src/state/contextWindow.ts"
     },
-    "./state/thread-subagents": {
-      "types": "./src/state/threadSubagents.ts",
-      "default": "./src/state/threadSubagents.ts"
-    },
     "./state/thread-undo": {
       "types": "./src/state/threadUndo.ts",
       "default": "./src/state/threadUndo.ts"

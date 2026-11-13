@@ -1,18 +1,18 @@
-# Ozone fork rules
+# Ozone rules
 
-This repository is Ozone, a tracked fork of T3 Code. Everything in the root `AGENTS.md` applies.
-These rules come first where they differ.
+Ozone began as a fork of T3 Code and is now its own project: nothing is merged from T3 Code any
+more. Everything in the root `AGENTS.md` applies. These rules come first where they differ.
 
-- Read [docs/ozone/README.md](./README.md) before changing an upstream file.
-- New behaviour goes in an Ozone module: `apps/server/src/ozone/`, `apps/web/src/ozone/`,
-  `apps/mobile/src/ozone/`, `packages/contracts/src/ozone*.ts`,
-  `packages/client-runtime/src/state/ozone.ts`, `packages/ozone-templates/`, or a script or
-  workflow named `ozone-*`.
-- An edit to any other file is a seam. Keep it to the registration itself, tag it with a comment
-  containing `ozone-seam`, and add the file to [docs/ozone/SEAMS.md](./SEAMS.md).
-- Never rename upstream packages, `T3CODE_*` variables, the `t3-code` MCP key, URL schemes or
-  storage keys.
-- User-facing copy says Ozone. Identifiers keep upstream's names.
+- Ozone is local first. Nothing it does by itself may send data to a service the user did not
+  set up: no analytics, no hosted relay, no lookups against third parties for convenience.
+- Ozone's own features live in `apps/server/src/ozone/`, `apps/web/src/ozone/`,
+  `packages/contracts/src/ozone*.ts`, `packages/client-runtime/src/state/ozone.ts` and
+  `packages/ozone-templates/`. Read [docs/ozone/README.md](./README.md) for why they are shaped
+  as they are.
+- Everything a person reads says Ozone. Internal names from before the fork stay as they are:
+  the `@t3tools/*` packages, `T3CODE_*` variables, storage keys, the `t3code://` scheme,
+  `t3.json`, the `t3_*` MCP tool names and the `t3code/` lint rules. Renaming them would break
+  what existing installs have saved.
 
 ## Vocabulary
 
