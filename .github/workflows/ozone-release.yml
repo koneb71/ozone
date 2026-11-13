@@ -146,8 +146,12 @@ jobs:
             executable=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$app/Contents/Info.plist")
             "${check[@]}" --executable "$app/Contents/MacOS/$executable"
           elif [[ "${{ matrix.platform }}" == "win" ]]; then
-            # The installer's own contents, unpacked beside it by electron-builder.
-            "${check[@]}" --executable "$(ls "$GITHUB_WORKSPACE"/release/win-unpacked/*.exe | head -n 1)"
+            # Installs silently into a scratch folder, so this also checks the installer people run.
+            installer=$(cygpath -w "$(ls release/*.exe | head -n 1)")
+            target=$(cygpath -w "$RUNNER_TEMP/launch-install")
+            powershell -NoProfile -Command "Start-Process -Wait -FilePath '$installer' -ArgumentList '/S','/D=$target'"
+            app=$(ls "$RUNNER_TEMP"/launch-install/*.exe | grep -iv uninstall | head -n 1)
+            "${check[@]}" --executable "$app"
           else
             appimage=$(ls "$GITHUB_WORKSPACE"/release/*.AppImage)
             chmod +x "$appimage"
