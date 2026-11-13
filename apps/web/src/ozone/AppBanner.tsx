@@ -12,8 +12,10 @@ import { openPreviewSession } from "~/components/preview/openPreviewSession";
 import { dispatchPreviewAction } from "~/components/preview/previewActionBus";
 import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
+import { Switch } from "~/components/ui/switch";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { readThreadPreviewState } from "~/previewStateStore";
+import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { useRightPanelStore } from "~/rightPanelStore";
 import { useQuietThreadShell } from "~/state/entities";
 import { previewEnvironment } from "~/state/preview";
@@ -70,6 +72,7 @@ export function useAppBanners(
   const runAction = useAtomCommand(ozoneEnvironment.runtimeAct, { reportFailure: false });
   const openPage = useOpenAppPage();
   const approveBuild = useAtomCommand(ozoneEnvironment.approveBuild, { reportFailure: false });
+  const configureApp = useAtomCommand(ozoneEnvironment.configureApp, { reportFailure: false });
   const sentThread = useQuietThreadShell(threadRef);
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
   const build = useEnvironmentQuery(
@@ -171,6 +174,20 @@ export function useAppBanners(
     }
   };
 
+  const planFirst = async (reviewPlans: boolean) => {
+    const result = await configureApp({
+      environmentId: threadRef.environmentId,
+      input: { projectId: app.projectId, settings: { reviewPlans } },
+    });
+    if (result._tag === "Failure") {
+      reportFailure("Could not save the setting", squashAtomCommandFailure(result));
+      return;
+    }
+    appAtomRegistry.refresh(
+      ozoneEnvironment.apps({ environmentId: threadRef.environmentId, input: {} }),
+    );
+  };
+
   const copy = appNotice(app, status);
   const phase = status?.phase;
   const busy = phase === "starting";
@@ -219,6 +236,15 @@ export function useAppBanners(
       ...(copy.description === undefined ? {} : { description: copy.description }),
       actions: (
         <>
+          {/* The same setting as "Show me the plan first" on the app's Build page. */}
+          <label className="me-1 flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-muted-foreground text-xs">
+            <Switch
+              size="sm"
+              checked={app.settings.reviewPlans}
+              onCheckedChange={(checked) => void planFirst(checked)}
+            />
+            Plan first
+          </label>
           {phase === "running" ? (
             <Button size="xs" variant="ghost" onClick={() => void preview()}>
               <MonitorIcon />

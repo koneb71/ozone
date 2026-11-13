@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import type { OzoneSavedServer } from "@t3tools/contracts";
+
 import {
   channelFromDraft,
+  remoteNeedOf,
   serverFromDraft,
   type ChannelDraft,
   type ServerDraft,
@@ -87,5 +90,56 @@ describe("serverFromDraft", () => {
     ).toEqual({
       server: { kind: "dokploy", name: "dokploy.io", url: "https://dokploy.io", apiKey: "k" },
     });
+    // A hosting platform takes only a token, and is named after itself.
+    expect(serverFromDraft(server({ method: "railway" }))).toHaveProperty("problem");
+    expect(serverFromDraft(server({ method: "railway", apiKey: " t " }))).toEqual({
+      server: { kind: "host", name: "Railway", provider: "railway", token: "t" },
+    });
+  });
+});
+
+describe("remoteNeedOf", () => {
+  const dokploy: OzoneSavedServer = {
+    id: "d",
+    name: "Dokploy",
+    kind: "dokploy",
+    url: "https://d.io",
+    keyHint: "…1",
+  };
+  const host = (provider: "railway" | "vercel"): OzoneSavedServer => ({
+    id: provider,
+    name: provider,
+    kind: "host",
+    provider,
+    keyHint: "…1",
+  });
+  const ssh: OzoneSavedServer = {
+    id: "s",
+    name: "Prod",
+    kind: "ssh",
+    host: "root@1.2.3.4",
+    access: "own-keys",
+  };
+  const ready = { hasRemote: false, signedIn: true, repository: "me/notes" };
+
+  it("asks for a repository only where the server clones one and the app has none", () => {
+    expect(remoteNeedOf({ ...ready, server: dokploy })).toEqual({
+      kind: "create",
+      repository: "me/notes",
+    });
+    expect(remoteNeedOf({ ...ready, server: host("railway") }).kind).toBe("create");
+    // Ozone sends these the files itself.
+    expect(remoteNeedOf({ ...ready, server: host("vercel") }).kind).toBe("none");
+    expect(remoteNeedOf({ ...ready, server: ssh }).kind).toBe("none");
+    expect(remoteNeedOf({ ...ready, server: null }).kind).toBe("none");
+    expect(remoteNeedOf({ ...ready, server: dokploy, hasRemote: true }).kind).toBe("none");
+  });
+
+  it("sends a person to sign in first, and waits while it does not know", () => {
+    expect(
+      remoteNeedOf({ server: dokploy, hasRemote: false, signedIn: false, repository: null }).kind,
+    ).toBe("sign-in");
+    expect(remoteNeedOf({ ...ready, server: dokploy, hasRemote: null }).kind).toBe("checking");
+    expect(remoteNeedOf({ ...ready, server: dokploy, signedIn: null }).kind).toBe("checking");
   });
 });

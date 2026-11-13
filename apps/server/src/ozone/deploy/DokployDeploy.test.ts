@@ -17,6 +17,7 @@ import * as ServerConfig from "../../config.ts";
 import * as ProcessRunner from "../../processRunner.ts";
 import * as Dokploy from "./Dokploy.ts";
 import * as DokployDeploy from "./DokployDeploy.ts";
+import * as GitHubDeployKeys from "./GitHubDeployKeys.ts";
 import * as SavedServers from "./SavedServers.ts";
 
 const manifest: OzoneAppManifest = {
@@ -43,7 +44,13 @@ const app = {
 const REMOTE = "https://git.example.com/notes.git";
 
 /** A Dokploy that remembers what it was asked, and finishes every deploy at once. */
-const makeHarness = (options: { readonly remote: boolean }) =>
+const makeHarness = (options: {
+  readonly remote: boolean;
+  /** The remote Dokploy clones, when it is not the default one. */
+  readonly url?: string;
+  /** Whether GitHub lets Ozone add a deploy key to a private repository. */
+  readonly grants?: boolean;
+}) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -65,6 +72,14 @@ const makeHarness = (options: { readonly remote: boolean }) =>
             return { composeId: "c1", appName: "ozone-notes-a1b2c3", composeStatus: "done" };
           case "mounts.create":
             return { mountId: "m1" };
+          case "sshKey.generate":
+            return {
+              privateKey:
+                "-----BEGIN OPENSSH PRIVATE KEY-----\nx\n-----END OPENSSH PRIVATE KEY-----",
+              publicKey: "ssh-ed25519 AAAAkey dokploy",
+            };
+          case "sshKey.all":
+            return [{ sshKeyId: "key-1", publicKey: "ssh-ed25519 AAAAkey dokploy\n" }];
           case "domain.create":
             return { domainId: "d1" };
           case "compose.deploy":
@@ -96,6 +111,10 @@ const makeHarness = (options: { readonly remote: boolean }) =>
               query: (_access, procedure, input) => answer(procedure, input ?? {}),
               mutate: (_access, procedure, input) => answer(procedure, input),
             }),
+            Layer.mock(GitHubDeployKeys.GitHubDeployKeys)({
+              visibility: () => Effect.succeed("private" as const),
+              add: () => Effect.succeed(options.grants ?? true),
+            }),
             Layer.mock(SavedServers.SavedServers)({
               dokploy: () =>
                 Effect.succeed({
@@ -121,7 +140,7 @@ const makeHarness = (options: { readonly remote: boolean }) =>
     yield* git(workspaceRoot, ["config", "user.email", "test@example.com"]);
     if (options.remote) {
       // Dokploy clones the URL; this machine pushes to the folder standing in for it.
-      yield* git(workspaceRoot, ["remote", "add", "origin", REMOTE]);
+      yield* git(workspaceRoot, ["remote", "add", "origin", options.url ?? REMOTE]);
       yield* git(workspaceRoot, ["config", "remote.origin.pushurl", bare]);
     }
     yield* fs.writeFileString(path.join(workspaceRoot, "compose.prod.yaml"), "services: {}\n");
@@ -132,7 +151,7 @@ const makeHarness = (options: { readonly remote: boolean }) =>
     const deployOnce = (domain: string | null) =>
       Context.get(context, DokployDeploy.DokployDeploy).deploy({
         app: { app, workspaceRoot, manifest },
-        target: { host: null, dokploy: "dokploy", publicUrl: null, domain },
+        target: { host: null, dokploy: "dokploy", hosted: null, publicUrl: null, domain },
         commitSha: head,
         title: "Scaffold",
         overrideFor: (publicUrl) => `services: {} # ${publicUrl}\n`,
@@ -223,3 +242,46 @@ it("accepts only a remote Dokploy can clone", () => {
   assert.isFalse(DokployDeploy.cloneableUrl("/Users/me/notes"));
   assert.isFalse(DokployDeploy.cloneableUrl("../notes.git"));
 });
+
+it.live("lets Dokploy read a private GitHub repository with a key of its own, made once", () =>
+  Effect.gen(function* () {
+    const { calls, deployOnce } = yield* makeHarness({
+      remote: true,
+      url: "https://github.com/me/notes.git",
+    });
+    yield* deployOnce(null);
+    const first = yield* calls;
+    const update = first.find((call) => call.procedure === "compose.update")?.input as Record<
+      string,
+      unknown
+    >;
+    // Cloned over SSH, which is the only form Dokploy uses a key for.
+    assert.strictEqual(update["customGitUrl"], "git@github.com:me/notes.git");
+    assert.strictEqual(update["customGitSSHKeyId"], "key-1");
+
+    yield* deployOnce(null);
+    const second = (yield* calls).slice(first.length);
+    assert.isFalse(second.some((call) => call.procedure === "sshKey.create"));
+    const again = second.find((call) => call.procedure === "compose.update")?.input as Record<
+      string,
+      unknown
+    >;
+    assert.strictEqual(again["customGitSSHKeyId"], "key-1");
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
+
+it.live("hands over the key to add by hand when GitHub will not take it from Ozone", () =>
+  Effect.gen(function* () {
+    const { calls, deployOnce } = yield* makeHarness({
+      remote: true,
+      url: "git@github.com:me/notes.git",
+      grants: false,
+    });
+    const error = yield* Effect.flip(deployOnce(null));
+    assert.instanceOf(error, OzoneAppError);
+    assert.include(error.message, "https://github.com/me/notes/settings/keys/new");
+    assert.include(error.message, "ssh-ed25519 AAAAkey dokploy");
+    // Nothing is deployed against a repository Dokploy cannot read.
+    assert.isFalse((yield* calls).some((call) => call.procedure === "compose.deploy"));
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);

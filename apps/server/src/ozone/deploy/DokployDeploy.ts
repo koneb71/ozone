@@ -13,6 +13,8 @@ import * as ProcessRunner from "../../processRunner.ts";
 import type { ResolvedApp } from "../apps/AppRegistry.ts";
 import { ENV_FILE_MODE } from "../env/envFile.ts";
 import * as Dokploy from "./Dokploy.ts";
+import * as GitHubDeployKeys from "./GitHubDeployKeys.ts";
+import { githubRepoOf, publishCommit } from "./gitPublish.ts";
 import * as SavedServers from "./SavedServers.ts";
 
 /** Ozone's settings for the app, written by Dokploy beside the clone it builds from. */
@@ -73,6 +75,14 @@ const Link = Schema.Struct({
   mountId: Schema.NullOr(Schema.String),
   domainId: Schema.NullOr(Schema.String),
   domain: Schema.NullOr(Schema.String),
+  /** The SSH key Dokploy clones a private repository with, and the repository that lets it in. */
+  cloneKey: Schema.optionalKey(
+    Schema.Struct({
+      sshKeyId: Schema.String,
+      publicKey: Schema.String,
+      grantedOn: Schema.NullOr(Schema.String),
+    }),
+  ),
 });
 type Link = typeof Link.Type;
 const LinkFile = Schema.fromJsonString(Link);
@@ -100,6 +110,12 @@ type Deployment = typeof Deployment.Type;
 const decodeDeployments = Schema.decodeUnknownEffect(Schema.Array(Deployment));
 const decodeMount = Schema.decodeUnknownEffect(Schema.Struct({ mountId: Schema.String }));
 const decodeDomain = Schema.decodeUnknownEffect(Schema.Struct({ domainId: Schema.String }));
+const decodeGeneratedKey = Schema.decodeUnknownEffect(
+  Schema.Struct({ privateKey: Schema.String, publicKey: Schema.String }),
+);
+const decodeSshKeys = Schema.decodeUnknownEffect(
+  Schema.Array(Schema.Struct({ sshKeyId: Schema.String, publicKey: Schema.String })),
+);
 const Container = Schema.Struct({ containerId: Schema.String, name: Schema.String });
 const decodeContainers = Schema.decodeUnknownEffect(Schema.Array(Container));
 
@@ -136,13 +152,12 @@ const dokployEnv = (input: { readonly port: number; readonly domain: string | nu
     "",
   ].join("\n");
 
-/** A remote Dokploy can clone: a path on this machine is not one. */
-export const cloneableUrl = (url: string): boolean =>
-  /^(?:https?:\/\/|ssh:\/\/|git:\/\/|[\w.-]+@[\w.-]+:)/.test(url);
+export { cloneableUrl } from "./gitPublish.ts";
 
 const make = Effect.gen(function* () {
   const api = yield* Dokploy.Dokploy;
   const saved = yield* SavedServers.SavedServers;
+  const github = yield* GitHubDeployKeys.GitHubDeployKeys;
   const runner = yield* ProcessRunner.ProcessRunner;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -169,54 +184,6 @@ const make = Effect.gen(function* () {
       return yield* failed("Ozone has not deployed this app to that Dokploy server yet.");
     }
     return { link, access: yield* saved.dokploy(serverId) };
-  });
-
-  const git = (root: string, args: ReadonlyArray<string>, timeout = Duration.seconds(30)) =>
-    runner
-      .run({
-        command: "git",
-        args: ["-C", root, ...args],
-        timeout,
-        timeoutBehavior: "timedOutResult",
-        maxOutputBytes: 64 * 1024,
-        outputMode: "truncate",
-      })
-      .pipe(Effect.mapError(() => failed("Ozone could not run git.")));
-
-  /** Where Dokploy clones from: the branch's remote, pushed up to the commit. */
-  const publish = Effect.fn("DokployDeploy.publish")(function* (
-    root: string,
-    commitSha: string,
-    note: DokployDeployInput["note"],
-  ) {
-    const branch = (yield* git(root, ["symbolic-ref", "--quiet", "--short", "HEAD"])).stdout.trim();
-    if (branch.length === 0) {
-      return yield* failed("The app is not on a branch, so Dokploy has nothing to clone.");
-    }
-    const configured = (yield* git(root, ["config", `branch.${branch}.remote`])).stdout.trim();
-    const remote = configured.length > 0 ? configured : "origin";
-    const url = (yield* git(root, ["remote", "get-url", remote])).stdout.trim();
-    if (url.length === 0 || !cloneableUrl(url)) {
-      return yield* failed(
-        "Dokploy builds the app from a Git remote it can clone, and this app has none. Add one, such as a GitHub repository, as its origin, then deploy again.",
-      );
-    }
-    yield* note(`$ git push ${remote} ${commitSha.slice(0, 7)}:refs/heads/${branch}`);
-    const pushed = yield* git(
-      root,
-      ["push", remote, `${commitSha}:refs/heads/${branch}`],
-      Duration.minutes(3),
-    );
-    const said = `${pushed.stdout}\n${pushed.stderr}`.trim();
-    yield* note(said.slice(-4_000));
-    if (pushed.code !== 0 || pushed.timedOut) {
-      return yield* failed(
-        /rejected|non-fast-forward|fetch first/i.test(said)
-          ? `${remote} has commits this app does not, so Ozone did not push. Bring them in, then deploy again.\n${said.slice(-1_000)}`
-          : `Ozone could not push to ${remote}, which Dokploy clones from. Check that git can push there from this computer.\n${said.slice(-1_000)}`,
-      );
-    }
-    return { branch, url };
   });
 
   /** The Dokploy service the app runs as, made the first time. */
@@ -273,6 +240,77 @@ const make = Effect.gen(function* () {
     return next;
   });
 
+  /**
+   * What Dokploy clones, and with which key. A repository anyone can read is cloned as it is. A
+   * private one on GitHub gets a key made in Dokploy and added to the repository as a read-only
+   * deploy key, and is then cloned over SSH with it.
+   */
+  const cloneSource = Effect.fn("DokployDeploy.cloneSource")(function* (
+    access: Dokploy.DokployAccess,
+    app: ResolvedApp,
+    link: Link,
+    url: string,
+  ) {
+    const plain = { url, sshKeyId: null, link };
+    const repository = githubRepoOf(url);
+    if (repository === null) return plain;
+    const visibility = yield* github.visibility(repository);
+    if (visibility === "public") return plain;
+
+    let key = link.cloneKey;
+    if (key === undefined) {
+      const generated = yield* api
+        .mutate(access, "sshKey.generate", { type: "ed25519" })
+        .pipe(
+          Effect.flatMap((body) =>
+            decodeGeneratedKey(body).pipe(Effect.mapError(malformed("a new key"))),
+          ),
+        );
+      yield* api.mutate(access, "sshKey.create", {
+        name: `ozone-${app.app.slug}`.slice(0, 63),
+        description: "Lets Dokploy clone the app's repository. Made by Ozone.",
+        privateKey: generated.privateKey,
+        publicKey: generated.publicKey,
+        // Dokploy takes the organization from the API key and ignores this.
+        organizationId: "ozone",
+      });
+      // Dokploy answers the creation with nothing, so the key is found by its public half.
+      const made = (yield* api
+        .query(access, "sshKey.all")
+        .pipe(
+          Effect.flatMap((body) =>
+            decodeSshKeys(body).pipe(Effect.mapError(malformed("its keys"))),
+          ),
+        )).find((row) => row.publicKey.trim() === generated.publicKey.trim());
+      if (made === undefined) {
+        return yield* failed("Dokploy did not keep the key Ozone made for the repository.");
+      }
+      key = { sshKeyId: made.sshKeyId, publicKey: generated.publicKey.trim(), grantedOn: null };
+      yield* writeLink(app, { ...link, cloneKey: key });
+    }
+    if (key.grantedOn !== repository) {
+      const granted = yield* github.add({
+        repository,
+        title: `Dokploy (${app.app.name})`,
+        publicKey: key.publicKey,
+      });
+      if (!granted) {
+        // GitHub would not say: the clone is tried as it is, and Dokploy reports what happens.
+        if (visibility === "unknown") return { ...plain, link: { ...link, cloneKey: key } };
+        return yield* failed(
+          `${repository} is private, and Dokploy cannot read it yet. Ozone adds the key with the gh command line's sign-in, which this computer does not have for that repository. Add this as a read-only deploy key at https://github.com/${repository}/settings/keys/new, or make the repository public, then deploy again:\n${key.publicKey}`,
+        );
+      }
+      key = { ...key, grantedOn: repository };
+      yield* writeLink(app, { ...link, cloneKey: key });
+    }
+    return {
+      url: `git@github.com:${repository}.git`,
+      sshKeyId: key.sshKeyId,
+      link: { ...link, cloneKey: key },
+    };
+  });
+
   const latestDeployment = (access: Dokploy.DokployAccess, composeId: string) =>
     api.query(access, "deployment.allByCompose", { composeId }).pipe(
       Effect.flatMap((body) =>
@@ -289,7 +327,13 @@ const make = Effect.gen(function* () {
       const { app, target } = input;
       const access = yield* saved.dokploy(target.dokploy);
       yield* input.step("Pushing the commit for Dokploy to clone.");
-      const source = yield* publish(app.workspaceRoot, input.commitSha, input.note);
+      const source = yield* publishCommit({
+        runner,
+        root: app.workspaceRoot,
+        commitSha: input.commitSha,
+        builder: "Dokploy",
+        note: input.note,
+      });
 
       const url =
         target.domain !== null
@@ -297,11 +341,14 @@ const make = Effect.gen(function* () {
           : (target.publicUrl ?? `http://${new URL(access.url).hostname}:${input.port}`);
       const override = input.overrideFor(url);
       yield* input.step(`Preparing the app on ${access.name}.`);
-      let link = yield* ensureCompose(access, app, target.dokploy);
+      const ensured = yield* ensureCompose(access, app, target.dokploy);
+      const clone = yield* cloneSource(access, app, ensured, source.url);
+      let link: Link = clone.link;
       yield* api.mutate(access, "compose.update", {
         composeId: link.composeId,
         sourceType: "git",
-        customGitUrl: source.url,
+        customGitUrl: clone.url,
+        ...(clone.sshKeyId === null ? {} : { customGitSSHKeyId: clone.sshKeyId }),
         customGitBranch: source.branch,
         composePath: `./${PROD_COMPOSE_FILE}`,
         command: dokployCommand({

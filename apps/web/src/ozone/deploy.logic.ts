@@ -1,8 +1,10 @@
 import type {
   OzoneDeployTrigger,
   OzoneDeploymentEntry,
+  OzoneHostProvider,
   OzoneNotifyChannel,
   OzoneNotifyEvent,
+  OzoneSavedServer,
   OzoneServerAddInput,
 } from "@t3tools/contracts";
 
@@ -88,7 +90,68 @@ export const DEFAULT_NAME: Record<ChannelKind, string> = {
   webhook: "Webhook",
 };
 
-export type ServerMethod = "own-keys" | "ozone-key" | "password" | "dokploy";
+export type ServerMethod = "own-keys" | "ozone-key" | "password" | "dokploy" | OzoneHostProvider;
+
+/** What a person should know about a hosting platform before picking it. */
+export const HOST_INFO: Record<
+  OzoneHostProvider,
+  { readonly label: string; readonly token: string; readonly note: string }
+> = {
+  railway: {
+    label: "Railway",
+    token: "An account token from Railway's Account Settings → Tokens, with no workspace chosen.",
+    note: "Builds from the app's GitHub repository, which Railway must be connected to. Railway gives a trial credit, then charges.",
+  },
+  render: {
+    label: "Render",
+    token: "An API key from Render's Account Settings → API Keys.",
+    note: "Builds from the app's Git repository. Render's free app sleeps when idle, and Render deletes a free database after about a month.",
+  },
+  koyeb: {
+    label: "Koyeb",
+    token: "An API access token from Koyeb's Organization Settings → API.",
+    note: "Builds from the app's GitHub repository, which Koyeb's GitHub app must be installed for. One free app and one small free database per organization.",
+  },
+  vercel: {
+    label: "Vercel",
+    token: "A token from Vercel's Account Settings → Tokens.",
+    note: "Vercel runs no database, so it is only for an app that keeps no data. Ozone uploads the app's files; no Git remote is needed.",
+  },
+};
+/** Whether a server builds the app from its Git remote, rather than from files Ozone sends. */
+function buildsFromRemote(server: OzoneSavedServer | null): boolean {
+  if (server === null) return false;
+  return server.kind === "dokploy" || (server.kind === "host" && server.provider !== "vercel");
+}
+
+/** What stands between an app and a server that builds from its remote. */
+export type RemoteNeed =
+  | { readonly kind: "none" }
+  | { readonly kind: "checking" }
+  | { readonly kind: "sign-in" }
+  | { readonly kind: "create"; readonly repository: string };
+
+export function remoteNeedOf(input: {
+  readonly server: OzoneSavedServer | null;
+  /** Null until the app's Git status is known. */
+  readonly hasRemote: boolean | null;
+  /** Null until GitHub's sign-in state is known. */
+  readonly signedIn: boolean | null;
+  /** The name a new repository would get, as `owner/name`. */
+  readonly repository: string | null;
+}): RemoteNeed {
+  if (!buildsFromRemote(input.server) || input.hasRemote === true) return { kind: "none" };
+  if (input.hasRemote === null || input.signedIn === null) return { kind: "checking" };
+  return input.signedIn && input.repository !== null
+    ? { kind: "create", repository: input.repository }
+    : { kind: "sign-in" };
+}
+
+const HOST_PROVIDERS = Object.keys(HOST_INFO) as ReadonlyArray<OzoneHostProvider>;
+
+export function isHostMethod(method: ServerMethod): method is OzoneHostProvider {
+  return (HOST_PROVIDERS as ReadonlyArray<string>).includes(method);
+}
 
 export interface ServerDraft {
   readonly method: ServerMethod;
@@ -106,6 +169,12 @@ export function serverFromDraft(
   draft: ServerDraft,
 ): { readonly server: OzoneServerAddInput } | { readonly problem: string } {
   const host = draft.host.trim();
+  if (isHostMethod(draft.method)) {
+    const token = draft.apiKey.trim();
+    if (token.length === 0) return { problem: "Paste the token." };
+    const name = (draft.name.trim() || HOST_INFO[draft.method].label).slice(0, 64);
+    return { server: { kind: "host", name, provider: draft.method, token } };
+  }
   if (draft.method === "dokploy") {
     const url = draft.url.trim().replace(/\/+$/, "");
     const apiKey = draft.apiKey.trim();
@@ -135,4 +204,8 @@ export const SERVER_METHOD_LABEL: Record<ServerMethod, string> = {
   "ozone-key": "Paste Ozone's key on it",
   password: "Sign in with a password once",
   dokploy: "Dokploy, with an API key",
+  railway: "Railway, with a token",
+  render: "Render, with an API key",
+  koyeb: "Koyeb, with a token",
+  vercel: "Vercel, with a token",
 };

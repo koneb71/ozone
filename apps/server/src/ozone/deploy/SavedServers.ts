@@ -1,5 +1,6 @@
 import {
   OzoneAppError,
+  OzoneHostProvider,
   OzoneServerHost,
   OzoneServerId,
   OzoneSshAccess,
@@ -21,6 +22,7 @@ import * as ServerConfig from "../../config.ts";
 import { ENV_FILE_MODE } from "../env/envFile.ts";
 import * as AppServers from "./AppServers.ts";
 import * as Dokploy from "./Dokploy.ts";
+import { HostDrivers } from "./hosts/HostDriver.ts";
 import * as SshAccess from "./SshAccess.ts";
 
 const StoredServer = Schema.Union([
@@ -38,9 +40,17 @@ const StoredServer = Schema.Union([
     url: Schema.String,
     apiKey: Schema.String,
   }),
+  Schema.Struct({
+    id: OzoneServerId,
+    name: Schema.String,
+    kind: Schema.Literal("host"),
+    provider: OzoneHostProvider,
+    token: Schema.String,
+  }),
 ]);
 export type StoredServer = typeof StoredServer.Type;
 export type DokployServer = Extract<StoredServer, { readonly kind: "dokploy" }>;
+export type HostServer = Extract<StoredServer, { readonly kind: "host" }>;
 
 const ServersFile = Schema.fromJsonString(Schema.Struct({ servers: Schema.Array(StoredServer) }));
 const decodeServers = Schema.decodeUnknownEffect(ServersFile);
@@ -49,8 +59,8 @@ const failed = (message: string) => new OzoneAppError({ reason: "failed", messag
 
 /**
  * The servers a person added once and deploys to by name: SSH hosts, which Ozone runs apps on
- * itself, and Dokploy instances, which run the apps Ozone hands them. API keys live in one file
- * only the server reads; clients never see them again.
+ * itself, and Dokploy instances and hosting accounts, which run the apps Ozone hands them. API
+ * keys and tokens live in one file only the server reads; clients never see them again.
  */
 export class SavedServers extends Context.Service<
   SavedServers,
@@ -63,19 +73,33 @@ export class SavedServers extends Context.Service<
     readonly key: Effect.Effect<OzoneServerKeyResult, OzoneAppError>;
     /** A Dokploy server with its API key, for the deploys that run there. */
     readonly dokploy: (id: string) => Effect.Effect<DokployServer, OzoneAppError>;
+    /** A hosting account with its token, for the deploys that run there. */
+    readonly host: (id: string) => Effect.Effect<HostServer, OzoneAppError>;
   }
 >()("t3/ozone/deploy/SavedServers") {}
 
-const summaryOf = (server: StoredServer): OzoneSavedServer =>
-  server.kind === "ssh"
-    ? server
-    : {
+const summaryOf = (server: StoredServer): OzoneSavedServer => {
+  switch (server.kind) {
+    case "ssh":
+      return server;
+    case "dokploy":
+      return {
         id: server.id,
         name: server.name,
         kind: "dokploy",
         url: server.url,
         keyHint: `…${server.apiKey.slice(-4)}`,
       };
+    case "host":
+      return {
+        id: server.id,
+        name: server.name,
+        kind: "host",
+        provider: server.provider,
+        keyHint: `…${server.token.slice(-4)}`,
+      };
+  }
+};
 
 /** A short id from the name, unique among `taken`. */
 const idFor = (name: string, taken: ReadonlySet<string>): string => {
@@ -102,6 +126,7 @@ const make = Effect.gen(function* () {
   const access = yield* SshAccess.SshAccess;
   const shell = yield* AppServers.ServerShell;
   const dokploy = yield* Dokploy.Dokploy;
+  const drivers = yield* HostDrivers;
   const file = path.join(config.stateDir, "ozone", "servers.json");
   const writing = yield* Semaphore.make(1);
 
@@ -172,6 +197,16 @@ const make = Effect.gen(function* () {
         yield* dokploy.verify({ url, apiKey: input.apiKey });
         return { id, name: input.name, kind: "dokploy", url, apiKey: input.apiKey };
       }
+      case "host": {
+        yield* drivers.of(input.provider).verify(input.token);
+        return {
+          id,
+          name: input.name,
+          kind: "host",
+          provider: input.provider,
+          token: input.token,
+        };
+      }
     }
   });
 
@@ -179,11 +214,20 @@ const make = Effect.gen(function* () {
     list: Effect.map(read, listed),
     add: Effect.fn("SavedServers.add")(function* (input) {
       const before = yield* read;
-      const same = before.find((server) =>
-        input.kind === "dokploy"
-          ? server.kind === "dokploy" && server.url === input.url.replace(/\/+$/, "")
-          : server.kind === "ssh" && server.host === input.host,
-      );
+      const same = before.find((server) => {
+        switch (input.kind) {
+          case "dokploy":
+            return server.kind === "dokploy" && server.url === input.url.replace(/\/+$/, "");
+          case "host":
+            return (
+              server.kind === "host" &&
+              server.provider === input.provider &&
+              server.token === input.token
+            );
+          default:
+            return server.kind === "ssh" && server.host === input.host;
+        }
+      });
       if (same !== undefined)
         return yield* failed(`That server is already in the list as ${same.name}.`);
       // Signing in can take a while; the list is only locked to save.
@@ -234,6 +278,15 @@ const make = Effect.gen(function* () {
       if (server?.kind !== "dokploy") {
         return yield* failed(
           "That Dokploy server is no longer in Ozone's list. Add it again under Servers.",
+        );
+      }
+      return server;
+    }),
+    host: Effect.fn("SavedServers.host")(function* (id) {
+      const server = (yield* read).find((entry) => entry.id === id);
+      if (server?.kind !== "host") {
+        return yield* failed(
+          "That hosting account is no longer in Ozone's list. Add it again under Servers.",
         );
       }
       return server;

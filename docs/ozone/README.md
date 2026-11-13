@@ -46,7 +46,26 @@ starts its lead thread.
   branch's remote, and gives Dokploy its settings as a file mount, which Dokploy writes beside the
   clone and the deploy command adds with `-f`. Dokploy then owns the containers, the domain and
   the volumes, so snapshots, rollback, moving data and monitoring stay in Dokploy, and Ozone
-  refuses a migration that can lose data there: it could not take a snapshot first.
+  refuses a migration that can lose data there: it could not take a snapshot first. A private
+  GitHub repository is cloned with an SSH key Ozone makes in Dokploy and adds to the repository as
+  a read-only deploy key; Dokploy only uses a key for an SSH address, so Ozone hands it that form.
+  The key is added with the `gh` command line's sign-in or a token in the environment, because
+  upstream's GitHub credential is private to its driver; without one, the deploy stops and shows
+  the key to add by hand.
+- **An app gets its Git remote from the Deploy page.** Apps start with no remote, and every
+  target that clones one would fail on its first deploy. The page sees that before the deploy and
+  offers upstream's publish flow as one button, private or public. The server still refuses a
+  deploy with no remote, since agents and the deploy URL do not pass through the page.
+- **A hosting platform runs the app from a token, one driver per host.** Railway, Render and Koyeb
+  build the app's Dockerfile from its Git remote and run Postgres themselves; Vercel takes the
+  commit's files as an upload and runs no database, so Ozone refuses it for an app that keeps data.
+  The production image cannot run migrations, and hosts differ on running a command before a
+  release, so Ozone applies them from this machine: the commit's own `migrate` service, pointed at
+  the host's database through its outside address. That keeps the hold on a migration that can
+  lose data. The host owns the service and the database, so the Dokploy rules apply: no snapshot,
+  nothing deleted, no rollback or monitoring. What a host made is kept by id in the app's
+  `hosted.json`, so a deploy never makes it twice. None of the four drivers has deployed to a real
+  account yet; they follow each host's published API.
 - **A domain goes through one proxy per host.** Ozone runs Traefik there as its own Compose
   project, `ozone-proxy`, on ports 80 and 443; an app with a domain drops its published port, joins
   the proxy's network and is routed by its labels. Without a port of its own, a second copy can

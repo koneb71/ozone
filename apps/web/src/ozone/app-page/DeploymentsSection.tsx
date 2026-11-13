@@ -96,9 +96,11 @@ export function DeploymentsSection(props: {
                         entry.target.domain ??
                           (entry.target.dokploy !== null
                             ? "Dokploy"
-                            : entry.target.host === null
-                              ? "this computer"
-                              : entry.target.host),
+                            : entry.target.hosted !== null
+                              ? "a hosting platform"
+                              : entry.target.host === null
+                                ? "this computer"
+                                : entry.target.host),
                       ])}
                     </span>
                     {entry.outcome === "failed" && entry.message !== null ? (

@@ -21,6 +21,9 @@ import * as AppServers from "./deploy/AppServers.ts";
 import * as AutoDeploy from "./deploy/AutoDeploy.ts";
 import * as Dokploy from "./deploy/Dokploy.ts";
 import * as DokployDeploy from "./deploy/DokployDeploy.ts";
+import * as GitHubDeployKeys from "./deploy/GitHubDeployKeys.ts";
+import * as HostedDeploy from "./deploy/HostedDeploy.ts";
+import * as HostDrivers from "./deploy/hosts/drivers.ts";
 import * as Notifier from "./deploy/Notifier.ts";
 import * as SavedServers from "./deploy/SavedServers.ts";
 import * as SshAccess from "./deploy/SshAccess.ts";
@@ -50,9 +53,17 @@ export const layer = Layer.mergeAll(OzoneWs.layer, AutoDeploy.layer).pipe(
       BuildPreview.layer,
     ),
   ),
-  Layer.provideMerge(DokployDeploy.layer),
+  Layer.provideMerge(Layer.mergeAll(DokployDeploy.layer, HostedDeploy.layer)),
   Layer.provideMerge(SavedServers.layer),
-  Layer.provideMerge(Layer.mergeAll(AppServers.layer, Notifier.layer, Dokploy.layer)),
+  Layer.provideMerge(
+    Layer.mergeAll(
+      AppServers.layer,
+      Notifier.layer,
+      Dokploy.layer,
+      HostDrivers.layer,
+      GitHubDeployKeys.layer,
+    ),
+  ),
   Layer.provideMerge(BuildGates.layer),
   Layer.provideMerge(AppRuntime.layer),
   Layer.provideMerge(AppData.layer),

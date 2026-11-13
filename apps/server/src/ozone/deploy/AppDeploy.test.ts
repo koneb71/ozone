@@ -25,10 +25,11 @@ import * as DockerCli from "../runtime/DockerCli.ts";
 import * as AppDeploy from "./AppDeploy.ts";
 import * as AppServers from "./AppServers.ts";
 import * as DokployDeploy from "./DokployDeploy.ts";
+import * as HostedDeploy from "./HostedDeploy.ts";
 import * as Notifier from "./Notifier.ts";
 
 const projectId = ProjectId.make("project-notes");
-const here = { host: null, dokploy: null, publicUrl: null, domain: null };
+const here = { host: null, dokploy: null, hosted: null, publicUrl: null, domain: null };
 const manifest: OzoneAppManifest = {
   version: 1,
   runtime: {
@@ -198,6 +199,7 @@ const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: bool
             }),
             // Only a target that names a Dokploy server reaches Dokploy.
             Layer.mock(DokployDeploy.DokployDeploy)({}),
+            Layer.mock(HostedDeploy.HostedDeploy)({}),
             Layer.mock(Notifier.Notifier)({
               notify: (notice) => Ref.update(notices, (all) => [...all, notice]),
             }),
@@ -336,6 +338,14 @@ it.effect("runs a migration that can lose data only when the person applies it",
     });
     assert.strictEqual(onDokploy.state, "failed");
     assert.include(onDokploy.message ?? "", "cannot reach the data Dokploy keeps");
+    // A hosting platform keeps its data out of reach in the same way.
+    const onHost = yield* deploy.deploy({
+      projectId,
+      target: { ...here, hosted: "railway" },
+      acceptMigrations: true,
+    });
+    assert.strictEqual(onHost.state, "failed");
+    assert.include(onHost.message ?? "", "a hosting platform keeps");
   }).pipe(Effect.provide(layerTest)),
 );
 
@@ -372,7 +382,13 @@ it.effect("backs up and restores production from the commit it runs", () =>
 it.effect("moves to a server with its data, and stops what ran before", () =>
   Effect.gen(function* () {
     const { deploy, calls, steps, forget } = yield* makeHarness();
-    const server = { host: "deploy@example.com", dokploy: null, publicUrl: null, domain: null };
+    const server = {
+      host: "deploy@example.com",
+      dokploy: null,
+      hosted: null,
+      publicUrl: null,
+      domain: null,
+    };
     yield* deploy.deploy({ projectId, target: here });
     yield* forget;
     yield* Ref.set(calls, []);
@@ -426,6 +442,7 @@ it.effect("reaches a Docker host over SSH, and says which step failed", () =>
     const target = {
       host: "deploy@example.com:2222",
       dokploy: null,
+      hosted: null,
       publicUrl: null,
       domain: null,
     };
@@ -454,6 +471,7 @@ it.effect("serves a domain through the proxy, and switches versions without goin
     const domain = {
       host: "deploy@example.com",
       dokploy: null,
+      hosted: null,
       publicUrl: null,
       domain: "notes.example.com",
     };

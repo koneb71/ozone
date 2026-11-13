@@ -46,6 +46,7 @@ import * as DockerCli from "../runtime/DockerCli.ts";
 import { hostCaPath } from "../runtime/hostCa.ts";
 import * as AppServers from "./AppServers.ts";
 import * as DokployDeploy from "./DokployDeploy.ts";
+import * as HostedDeploy from "./HostedDeploy.ts";
 import { historyEntries, withDeployment } from "./deployments.ts";
 import { containerMetrics, parseComposePs } from "./metrics.ts";
 import * as Notifier from "./Notifier.ts";
@@ -158,6 +159,22 @@ const NOT_DEPLOYED: OzoneDeployStatus = {
   migration: null,
 };
 
+/** The variables the app runs with in production: Ozone's own first, then the app's over them. */
+const prodEnv = (input: {
+  readonly authSecret: string;
+  readonly publicUrl: string;
+  readonly databaseUrl: string | null;
+  readonly variables: ReadonlyArray<{ readonly name: string; readonly value: string }>;
+}): Map<string, string> => {
+  const environment = new Map<string, string>([
+    ["BETTER_AUTH_SECRET", input.authSecret],
+    ["BETTER_AUTH_URL", input.publicUrl],
+    ...(input.databaseUrl === null ? [] : [["DATABASE_URL", input.databaseUrl] as const]),
+  ]);
+  for (const variable of input.variables) environment.set(variable.name, variable.value);
+  return environment;
+};
+
 interface ProdDatabase {
   readonly service: string;
   readonly user: string;
@@ -185,12 +202,7 @@ const prodOverride = (input: {
     database === null
       ? null
       : `postgres://${database.user}:${encodeURIComponent(database.password)}@${database.service}:5432/${database.database}`;
-  const appEnvironment = new Map<string, string>([
-    ["BETTER_AUTH_SECRET", input.authSecret],
-    ["BETTER_AUTH_URL", input.publicUrl],
-    ...(databaseUrl === null ? [] : [["DATABASE_URL", databaseUrl] as const]),
-  ]);
-  for (const variable of input.variables) appEnvironment.set(variable.name, variable.value);
+  const appEnvironment = prodEnv({ ...input, databaseUrl });
   const environment = (values: ReadonlyMap<string, string>) => [
     "    environment:",
     ...[...values].map(([name, value]) => `      ${name}: ${composeValue(value)}`),
@@ -228,10 +240,16 @@ const prodOverride = (input: {
 const hostName = (host: string) => host.replace(/^[^@]*@/, "").replace(/:\d+$/, "");
 /** Whether two targets are the same place, whose volumes are the same data. */
 const samePlace = (left: OzoneDeployTarget, right: OzoneDeployTarget) =>
-  left.host === right.host && left.dokploy === right.dokploy;
+  left.host === right.host && left.dokploy === right.dokploy && left.hosted === right.hosted;
 /** What Ozone cannot do for an app Dokploy runs. */
 const onDokploy = (what: string) =>
   failed(`${what} is not available for an app Dokploy runs. Use Dokploy for it.`);
+/** What Ozone cannot do for an app a hosting platform runs. */
+const onHost = (what: string) =>
+  failed(`${what} is not available for an app a hosting platform runs. Use the host for it.`);
+/** Whether something other than Ozone runs the app there, and keeps its data. */
+const runsElsewhere = (target: OzoneDeployTarget) =>
+  target.dokploy !== null || target.hosted !== null;
 
 const make = Effect.gen(function* () {
   const docker = yield* DockerCli.DockerCli;
@@ -241,6 +259,7 @@ const make = Effect.gen(function* () {
   const servers = yield* AppServers.AppServers;
   const notifier = yield* Notifier.Notifier;
   const dokploy = yield* DokployDeploy.DokployDeploy;
+  const hosted = yield* HostedDeploy.HostedDeploy;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const config = yield* ServerConfig.ServerConfig;
@@ -338,6 +357,10 @@ const make = Effect.gen(function* () {
         const state = yield* dokploy.state(app, last.target.dokploy);
         return { ...base, state, message: null };
       }
+      if (last.target.hosted !== null) {
+        const state = yield* hosted.state(app, last.target.hosted);
+        return { ...base, state, message: null };
+      }
       const ps = yield* docker
         .run({
           args: [
@@ -375,9 +398,11 @@ const make = Effect.gen(function* () {
   const placeOf = (target: OzoneDeployTarget) =>
     target.dokploy !== null
       ? "Dokploy"
-      : target.host === null
-        ? "this machine"
-        : hostName(target.host);
+      : target.hosted !== null
+        ? "the hosting platform"
+        : target.host === null
+          ? "this machine"
+          : hostName(target.host);
 
   /** The files of a commit, in a folder that lasts as long as the scope. */
   const exportCommit = Effect.fn("AppDeploy.exportCommit")(function* (
@@ -481,6 +506,7 @@ const make = Effect.gen(function* () {
     use: (prod: Production) => Effect.Effect<A, OzoneAppError>,
   ) {
     if (record.target.dokploy !== null) return yield* onDokploy("Reaching its data");
+    if (record.target.hosted !== null) return yield* onHost("Reaching its data");
     if (record.commitSha === null) {
       return yield* failed(
         "Ozone does not know which commit production runs. Deploy the app again first.",
@@ -511,6 +537,56 @@ const make = Effect.gen(function* () {
     if (held !== null) {
       heldBack.set(app.app.projectId, held);
       return yield* failed(`${heldBackMeans}\n${held.statements.join("\n")}`);
+    }
+    if (output.code !== 0 || output.timedOut) {
+      return yield* failed(
+        output.timedOut
+          ? "The migrations could not be applied: they did not finish in time."
+          : `The migrations could not be applied:\n${said.slice(-OUTPUT_TAIL)}`,
+      );
+    }
+    heldBack.delete(app.app.projectId);
+  });
+
+  /**
+   * Applies a commit's migrations to a database that runs somewhere else, from this machine: the
+   * commit's own `migrate` service, pointed at that database. It is a Compose project of its own
+   * and starts no database, so it touches nothing a deploy on this machine keeps.
+   */
+  const migrateElsewhere = Effect.fn("AppDeploy.migrateElsewhere")(function* (
+    app: ResolvedApp,
+    root: string,
+    databaseUrl: string,
+    note: Note,
+  ) {
+    const args = [
+      "compose",
+      "--project-name",
+      `${app.app.slug}-migrate`,
+      "--project-directory",
+      root,
+      "-f",
+      path.join(root, PROD_COMPOSE_FILE),
+    ];
+    yield* note("$ docker compose run --rm --no-deps migrate");
+    const output = yield* docker
+      .run({
+        args: [...args, "run", "--rm", "--no-deps", "--build", "-T", "migrate"],
+        cwd: root,
+        // Through the environment, so the password is in no command line.
+        env: { DATABASE_URL: databaseUrl },
+        timeout: BUILD_TIMEOUT,
+        maxOutputBytes: 2 * 1024 * 1024,
+      })
+      .pipe(Effect.mapError((error) => failed(error.detail)));
+    const said = `${output.stdout}\n${output.stderr}`.trim();
+    yield* note(said.slice(-NOTE_TAIL));
+    const held = output.code === 0 ? null : parseHeldBack(said);
+    if (held !== null) {
+      heldBack.set(app.app.projectId, held);
+      return yield* failed(
+        `A migration that can lose data was held back, and production was not changed:\n${held.statements.join("\n")}`,
+      );
     }
     if (output.code !== 0 || output.timedOut) {
       return yield* failed(
@@ -709,6 +785,45 @@ const make = Effect.gen(function* () {
       yield* options.note(`Running at ${outcome.url}.`);
       return { url: outcome.url, commitSha };
     }
+    if (target.hosted !== null) {
+      // The host's database is out of a snapshot's reach, as Dokploy's is.
+      if (input.acceptMigrations === true) {
+        return yield* failed(
+          "Ozone takes a snapshot before running a migration that can lose data, and it cannot take one of the data a hosting platform keeps. Back up the database on the host and apply the migration there.",
+        );
+      }
+      const variables = yield* readEnvFile(fs, envFilePath(path, config.stateDir, app.app.slug));
+      // The commit's folder lasts as long as this deploy, whichever step asks for it first.
+      const deployScope = yield* Scope.Scope;
+      const files = yield* Effect.cached(
+        exportCommit(app, commitSha).pipe(Scope.provide(deployScope)),
+      );
+      const outcome = yield* hosted.deploy({
+        app,
+        target: { ...target, hosted: target.hosted },
+        commitSha,
+        envFor: (publicUrl, databaseUrl) =>
+          prodEnv({ authSecret: secrets.authSecret, publicUrl, databaseUrl, variables }),
+        migrate: migrates(app)
+          ? (databaseUrl) =>
+              Effect.flatMap(files, (root) =>
+                migrateElsewhere(app, root, databaseUrl, options.note),
+              )
+          : null,
+        files,
+        note: options.note,
+        step,
+      });
+      if (!outcome.ok) {
+        return yield* failed(
+          `The host could not deploy the app:\n${outcome.log.slice(-OUTPUT_TAIL)}`,
+        );
+      }
+      heldBack.delete(projectId);
+      yield* succeeded(outcome.url, null);
+      yield* options.note(`Running at ${outcome.url}.`);
+      return { url: outcome.url, commitSha };
+    }
     const root = yield* exportCommit(app, commitSha);
     const prod = yield* production(app, target, root, options.note);
     const here = known.find((record) => samePlace(record.target, target)) ?? null;
@@ -719,7 +834,7 @@ const make = Effect.gen(function* () {
       here === null &&
       database !== null &&
       stored?.last != null &&
-      stored.last.target.dokploy === null
+      !runsElsewhere(stored.last.target)
         ? stored.last
         : null;
     const moved =
@@ -944,6 +1059,10 @@ const make = Effect.gen(function* () {
         yield* dokploy.stop(app, last.target.dokploy);
         return yield* statusOf(app);
       }
+      if (last.target.hosted !== null) {
+        yield* hosted.stop(app, last.target.hosted);
+        return yield* statusOf(app);
+      }
       const output = yield* docker
         .run({
           args: [...composeArgs(app, last.target), "stop"],
@@ -1040,6 +1159,8 @@ const make = Effect.gen(function* () {
       });
       // Dokploy builds the branch's tip; an older commit would mean rewriting the branch.
       if (last.target.dokploy !== null) return yield* onDokploy("Deploying an earlier version");
+      // A host builds the branch's tip too.
+      if (last.target.hosted !== null) return yield* onHost("Deploying an earlier version");
       const chosen = entries.find((entry) => entry.id === input.deploymentId);
       if (chosen === undefined || chosen.outcome !== "succeeded" || chosen.commitSha === null) {
         return yield* failed("Only a deploy that succeeded can be deployed again.");
@@ -1099,6 +1220,9 @@ const make = Effect.gen(function* () {
           input.tail ?? 300,
         );
       }
+      if (last.target.hosted !== null) {
+        return yield* hosted.logs(app, last.target.hosted, input.tail ?? 300);
+      }
       const output = yield* docker
         .run({
           args: [
@@ -1120,6 +1244,7 @@ const make = Effect.gen(function* () {
     metrics: Effect.fn("AppDeploy.metrics")(function* (projectId) {
       const { app, last } = yield* deployed(projectId);
       if (last.target.dokploy !== null) return yield* onDokploy("Monitoring");
+      if (last.target.hosted !== null) return yield* onHost("Monitoring");
       const ps = yield* docker
         .run({
           args: [...composeArgs(app, last.target), "ps", "--all", "--format", "json"],

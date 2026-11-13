@@ -34,22 +34,43 @@ import { useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
 
 import { metaLine } from "../appPage.logic";
-import { SERVER_METHOD_LABEL, serverFromDraft, type ServerMethod } from "../deploy.logic";
+import {
+  HOST_INFO,
+  isHostMethod,
+  SERVER_METHOD_LABEL,
+  serverFromDraft,
+  type ServerMethod,
+} from "../deploy.logic";
 import { ozoneEnvironment } from "../state";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { EmptyRow, SectionRows } from "../ui/SectionRows";
 import { useOzoneCommand } from "../ui/useOzoneCommand";
 import { ServerSection } from "./ServerRows";
 
-const METHODS: ReadonlyArray<ServerMethod> = ["own-keys", "ozone-key", "password", "dokploy"];
+const METHODS: ReadonlyArray<ServerMethod> = [
+  "own-keys",
+  "ozone-key",
+  "password",
+  "dokploy",
+  "railway",
+  "render",
+  "koyeb",
+  "vercel",
+];
 
-const serverLine = (server: OzoneSavedServer) =>
-  server.kind === "ssh"
-    ? metaLine([
+const serverLine = (server: OzoneSavedServer) => {
+  switch (server.kind) {
+    case "ssh":
+      return metaLine([
         server.host,
         server.access === "ozone-key" ? "Ozone's key" : "This computer's SSH keys",
-      ])
-    : metaLine(["Dokploy", server.url.replace(/^https?:\/\//, ""), `key ${server.keyHint}`]);
+      ]);
+    case "dokploy":
+      return metaLine(["Dokploy", server.url.replace(/^https?:\/\//, ""), `key ${server.keyHint}`]);
+    case "host":
+      return metaLine([HOST_INFO[server.provider].label, `token ${server.keyHint}`]);
+  }
+};
 
 /** The servers every app can be deployed to, added once. */
 export function ServersSection(props: { readonly environmentId: EnvironmentId }) {
@@ -96,7 +117,7 @@ export function ServersSection(props: { readonly environmentId: EnvironmentId })
           empty={
             <EmptyRow
               title="No servers yet"
-              description="Add a server over SSH, or a Dokploy instance, and deploy any app to it."
+              description="Add a server over SSH, a Dokploy instance, or a hosting account such as Railway or Vercel, and deploy any app to it."
             />
           }
         >
@@ -162,9 +183,11 @@ export function ServersSection(props: { readonly environmentId: EnvironmentId })
         description={
           removing?.kind === "dokploy"
             ? "Apps deployed there keep running in Dokploy, but Ozone can no longer deploy or stop them. Its API key is forgotten."
-            : removing?.kind === "ssh" && removing.access === "ozone-key"
-              ? "Ozone takes its key off the server. Apps deployed there keep running."
-              : "Apps deployed there keep running."
+            : removing?.kind === "host"
+              ? "Apps deployed there keep running on the host, but Ozone can no longer deploy or stop them. Its token is forgotten."
+              : removing?.kind === "ssh" && removing.access === "ozone-key"
+                ? "Ozone takes its key off the server. Apps deployed there keep running."
+                : "Apps deployed there keep running."
         }
         confirmLabel="Remove server"
         destructive
@@ -217,7 +240,8 @@ function AddServerDialog(props: {
     if (result._tag === "Success") props.onSaved();
   };
 
-  const ssh = method !== "dokploy";
+  const hosted = isHostMethod(method);
+  const ssh = method !== "dokploy" && !hosted;
   return (
     <Dialog
       open
@@ -275,6 +299,22 @@ function AddServerDialog(props: {
                 <p className="text-muted-foreground text-xs">
                   As user@host, with :port when it is not 22.
                 </p>
+              </div>
+            ) : hosted ? (
+              <div className="grid gap-1.5">
+                <Label htmlFor="ozone-server-key">Token</Label>
+                <Input
+                  id="ozone-server-key"
+                  autoComplete="off"
+                  spellCheck={false}
+                  type="password"
+                  value={apiKey}
+                  onChange={(event) => setApiKey(event.target.value)}
+                />
+                <p className="text-muted-foreground text-xs">
+                  {HOST_INFO[method].token} Ozone keeps it and never shows it again.
+                </p>
+                <p className="text-muted-foreground text-xs">{HOST_INFO[method].note}</p>
               </div>
             ) : (
               <>
@@ -365,7 +405,7 @@ function AddServerDialog(props: {
               <Input
                 id="ozone-server-name"
                 autoComplete="off"
-                placeholder={ssh ? "Production" : "Dokploy"}
+                placeholder={ssh ? "Production" : hosted ? HOST_INFO[method].label : "Dokploy"}
                 value={name}
                 onChange={(event) => setName(event.target.value)}
               />

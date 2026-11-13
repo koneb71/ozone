@@ -166,7 +166,7 @@ export function MonitoringSection(props: {
         />
       </SettingsSection>
 
-      {deployedTo?.dokploy == null ? (
+      {deployedTo?.dokploy == null && deployedTo?.hosted == null ? (
         <ServerSection environmentId={props.environmentId} host={host} />
       ) : null}
     </SettingsPageContainer>

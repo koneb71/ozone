@@ -105,6 +105,11 @@ is taken after every task that passes its checks.
 - An app deployed through Dokploy keeps its data in volumes Dokploy owns, out of Ozone's reach:
   Ozone takes no snapshot there, never deletes the Dokploy service, and does not run a migration
   that can lose data. Backups are Dokploy's.
+- An app on a hosting platform (Railway, Render, Koyeb, Vercel) is in the same position: the host
+  keeps the database, Ozone takes no snapshot of it, never deletes the service, the database or
+  the project, and does not run a migration that can lose data. Stopping the app suspends it and
+  keeps everything. Some free plans delete data on their own: Render removes a free database after
+  about a month, and Railway removes a trial's volumes after its credit runs out.
 - Routine snapshots, the one after each task and the one before a rebuild, are pruned to the newest
   20 per app. A person's own snapshots and the undo points of a restore or a delete are kept until
   removed by hand.

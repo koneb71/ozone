@@ -35,6 +35,7 @@ export type SettingsPath =
   | "/settings/worktrees"
   | "/settings/connections"
   | "/settings/access"
+  | "/settings/servers" // ozone-seam: Settings › Servers
   | "/settings/secrets"
   | "/settings/maintenance"
   | "/settings/labs"
@@ -110,6 +111,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/worktrees": msg("Worktrees"),
   "/settings/connections": msg("Environments"),
   "/settings/access": msg("Sharing & access"),
+  "/settings/servers": msg("Servers"), // ozone-seam
   "/settings/secrets": msg("Secrets"),
   "/settings/maintenance": msg("Maintenance"),
   "/settings/labs": msg("Labs"),
@@ -154,6 +156,7 @@ export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
     paths: [
       "/settings/connections",
       "/settings/access",
+      "/settings/servers", // ozone-seam
       ...(isSecretsFeatureEnabled ? (["/settings/secrets"] as const) : []),
     ],
   },
@@ -1331,6 +1334,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["new 1password vault op cli account"],
     secretsFeatureOnly: true,
   },
+  // ozone-seam: Settings › Servers is found by what people deploy to.
+  {
+    id: "ozone-servers",
+    title: "Servers",
+    to: "/settings/servers",
+    searchTerms: ["deploy ssh host vps dokploy api key production"],
+  },
   {
     id: "archive",
     title: "Archived threads",
@@ -1361,6 +1371,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/worktrees": "project-defaults",
   "/settings/connections": "connections",
   "/settings/access": "connections",
+  "/settings/servers": null, // ozone-seam
   "/settings/secrets": null,
   "/settings/scheduled-tasks": null,
   "/settings/maintenance": null,

@@ -35,6 +35,8 @@ export const OzoneDeployTarget = Schema.Struct({
   host: Schema.NullOr(OzoneServerHost),
   /** A saved Dokploy server that runs the app instead of Ozone. Null: Ozone runs it. */
   dokploy: Schema.NullOr(OzoneServerId).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
+  /** A saved hosting account, such as Railway, that runs the app instead. Null: not hosted. */
+  hosted: Schema.NullOr(OzoneServerId).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
   /** Where people reach the app, for sign-in links. Null: the domain, or the host and its port. */
   publicUrl: Schema.NullOr(
     TrimmedNonEmptyString.check(Schema.isMaxLength(512), Schema.isPattern(/^https?:\/\/\S+$/)),
@@ -208,6 +210,10 @@ const DokployUrl = TrimmedNonEmptyString.check(
 export const OzoneSshAccess = Schema.Literals(["own-keys", "ozone-key"]);
 export type OzoneSshAccess = typeof OzoneSshAccess.Type;
 
+/** A hosting platform that builds and runs the app from an API token. */
+export const OzoneHostProvider = Schema.Literals(["railway", "render", "koyeb", "vercel"]);
+export type OzoneHostProvider = typeof OzoneHostProvider.Type;
+
 /** A server in Ozone's list, as clients see it: never with its secret. */
 export const OzoneSavedServer = Schema.Union([
   Schema.Struct({
@@ -223,6 +229,13 @@ export const OzoneSavedServer = Schema.Union([
     kind: Schema.Literal("dokploy"),
     url: DokployUrl,
     /** The API key's last characters, so a person can tell keys apart. */
+    keyHint: Schema.String,
+  }),
+  Schema.Struct({
+    id: OzoneServerId,
+    name: ServerName,
+    kind: Schema.Literal("host"),
+    provider: OzoneHostProvider,
     keyHint: Schema.String,
   }),
 ]);
@@ -252,6 +265,12 @@ export const OzoneServerAddInput = Schema.Union([
     name: ServerName,
     url: DokployUrl,
     apiKey: TrimmedNonEmptyString.check(Schema.isMaxLength(1_024)),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("host"),
+    name: ServerName,
+    provider: OzoneHostProvider,
+    token: TrimmedNonEmptyString.check(Schema.isMaxLength(1_024)),
   }),
 ]);
 export type OzoneServerAddInput = typeof OzoneServerAddInput.Type;
