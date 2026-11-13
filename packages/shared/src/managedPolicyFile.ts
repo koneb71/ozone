@@ -116,7 +116,6 @@ export const WINDOWS_POLICY_VALUES = {
   Settings: { type: "json", path: ["settings"] },
   MaxRuntimeMode: { type: "string", path: ["limits", "maxRuntimeMode"] },
   WebhookTasks: { type: "boolean", path: ["limits", "webhookTasks"] },
-  Telemetry: { type: "boolean", path: ["limits", "telemetry"] },
   BrowserCookieImport: { type: "boolean", path: ["limits", "browserCookieImport"] },
   ProviderInstances: { type: "json", path: ["limits", "providers", "instances"] },
   UpdatesMode: { type: "string", path: ["limits", "updates", "mode"] },
@@ -127,6 +126,7 @@ export const WINDOWS_POLICY_VALUES = {
 /** Values no template control writes any more. A machine that still has one set keeps its policy. */
 const WINDOWS_POLICY_RETIRED_VALUES = {
   Connect: { type: "boolean", path: ["limits", "connect"] },
+  Telemetry: { type: "boolean", path: ["limits", "telemetry"] },
 } as const satisfies WindowsPolicyValues;
 const WINDOWS_POLICY_READ_VALUES = { ...WINDOWS_POLICY_VALUES, ...WINDOWS_POLICY_RETIRED_VALUES };
 

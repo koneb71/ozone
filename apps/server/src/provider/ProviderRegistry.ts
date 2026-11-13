@@ -575,26 +575,13 @@ export const layer = Layer.effect(
       return providers;
     });
 
-    const compatibilityRefreshRunning = yield* Ref.make(false);
-    // Reclassify the current model after fetch; republishing the old probe could overwrite newer health results.
-    const refreshCompatibility = Effect.gen(function* () {
-      if (!(yield* Ref.getAndSet(compatibilityRefreshRunning, true))) {
-        yield* manifestService.refresh.pipe(
-          Effect.andThen(upsertProviders([], { persist: false })),
-          Effect.ensuring(Ref.set(compatibilityRefreshRunning, false)),
-          Effect.forkIn(serviceScope),
-        );
-      }
-    });
     const syncProvider = Effect.fn("syncProvider")(function* (
       provider: ServerProvider,
       options?: {
         readonly publish?: boolean;
       },
     ) {
-      const providers = yield* upsertProviders([provider], options);
-      yield* refreshCompatibility;
-      return providers;
+      return yield* upsertProviders([provider], options);
     });
 
     const setProviderMaintenanceActionState = Effect.fn("setProviderMaintenanceActionState")(
@@ -743,7 +730,6 @@ export const layer = Layer.effect(
       provider: ProviderDriverKind,
       selectedInstanceId: ProviderInstanceId,
     ) {
-      yield* manifestService.forceRefresh;
       const instances = (yield* instanceRegistry.listInstances).filter(
         (instance) =>
           instance.driverKind === provider &&
@@ -894,7 +880,7 @@ export const layer = Layer.effect(
                 awaitingBootInstances.has(instance) &&
                 (yield* instance.snapshot.isAwaitingFirstCheck ?? Effect.succeed(false))
               ) {
-                return yield* refreshCompatibility;
+                return;
               }
               yield* correlateSnapshotWithSource(source, provider).pipe(
                 Effect.flatMap(syncProvider),
@@ -1115,7 +1101,6 @@ export const layer = Layer.effect(
     const invalidateModelCaches = Effect.fn("ProviderRegistry.invalidateModelCaches")(function* (
       input: Parameters<ProviderRegistry["Service"]["invalidateModelCaches"]>[0],
     ) {
-      yield* manifestService.forceRefresh;
       const instances = yield* instanceRegistry.listInstances;
       yield* Effect.forEach(
         instances.filter(
@@ -1141,8 +1126,8 @@ export const layer = Layer.effect(
     });
 
     const refreshModelCatalog = Effect.fn("ProviderRegistry.refreshModelCatalog")(function* () {
-      const { updatedAt } = yield* manifestService.refreshOnDemand;
-      // The first pass can be one that started before the fetch, so allow one more.
+      const { updatedAt } = yield* manifestService.current;
+      // The first pass can be one that started before this call, so allow one more.
       for (let pass = 0; pass < 2; pass++) {
         if ((yield* Ref.get(probedManifestUpdatedAt)) === updatedAt) return;
         // A new model usually ships with the CLI release that supports it.

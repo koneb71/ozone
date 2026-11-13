@@ -30,16 +30,6 @@ export function firstManagedDenial(
   return undefined;
 }
 
-/** What usage-data notices say when the policy turns product analytics off. */
-export function managedTelemetryOffMessage(
-  policy: ManagedPolicySummary | undefined,
-): string | undefined {
-  // ozone-seam: Ozone reports nothing by default, so its notices must not say it collects data.
-  return policy?.limits?.telemetry === false
-    ? `${policy.organization} turned off anonymous usage data.`
-    : "Ozone does not collect usage data.";
-}
-
 export interface ManagedInstanceLocks {
   /** Keys inside the instance's `config` users cannot change. */
   readonly configKeys: ReadonlySet<string>;

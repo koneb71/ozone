@@ -1649,14 +1649,6 @@ export function createServerEnvironmentAtoms<R, E>(
           JSON.stringify([environmentId, input.threadId, input.turnItemId]),
       },
     }),
-    refreshUsageRates: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:server:refresh-usage-rates",
-      tag: WS_METHODS.serverRefreshUsageRates,
-      concurrency: {
-        mode: "singleFlight",
-        key: ({ environmentId }) => environmentId,
-      },
-    }),
     checkOtlpEndpoint: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:check-otlp-endpoint",
       tag: WS_METHODS.serverCheckOtlpEndpoint,

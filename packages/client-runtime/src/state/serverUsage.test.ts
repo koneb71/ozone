@@ -87,7 +87,6 @@ const makeHarness = Effect.fn("ServerUsageTest.makeHarness")(function* (
   let requests = 0;
   const inputs: UsageSummaryInput[] = [];
   const client = {
-    [WS_METHODS.serverRefreshUsageRates]: () => Effect.succeed(PRICING),
     [WS_METHODS.subscribeServerConfig]: () =>
       Stream.concat(
         Stream.make({ version: 1 as const, type: "snapshot" as const, config: CONFIG }),

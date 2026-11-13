@@ -1701,7 +1701,6 @@ it.layer(
 
     it.effect("invalidates model caches only for an explicit model refresh", () =>
       Effect.gen(function* () {
-        const forceRefreshCalls = yield* Ref.make(0);
         const manifest = yield* Ref.make(ModelManifest.BUNDLED_MODEL_MANIFEST);
         const makeInstance = (name: string) =>
           Effect.gen(function* () {
@@ -1770,12 +1769,6 @@ it.layer(
         );
         const layerModelManifest = Layer.succeed(ModelManifest.ModelManifest, {
           current: Ref.get(manifest),
-          refresh: Effect.succeed(ModelManifest.BUNDLED_MODEL_MANIFEST),
-          forceRefresh: Ref.update(forceRefreshCalls, (count) => count + 1).pipe(
-            Effect.as(ModelManifest.BUNDLED_MODEL_MANIFEST),
-          ),
-          refreshOnDemand: Ref.get(manifest),
-          refreshInBackground: Effect.void,
         });
         const layerLatestVersions = Layer.effect(
           ProviderLatestVersions.ProviderLatestVersions,
@@ -1794,7 +1787,6 @@ it.layer(
 
           yield* registry.refreshInstance(first.instance.instanceId);
           yield* registry.refresh();
-          assert.strictEqual(yield* Ref.get(forceRefreshCalls), 0);
           assert.strictEqual(yield* Ref.get(first.invalidations), 0);
           assert.strictEqual(yield* readCachedVersion("codex_first-package"), "1.0.0");
           yield* first.takeMaintenanceReads;
@@ -1802,7 +1794,6 @@ it.layer(
           yield* registry.invalidateModelCaches({ instanceId: first.instance.instanceId });
           // The instance refresh that follows resolves installer metadata fresh itself.
           assert.deepStrictEqual(yield* first.takeMaintenanceReads, [false]);
-          assert.strictEqual(yield* Ref.get(forceRefreshCalls), 1);
           assert.strictEqual(yield* Ref.get(first.invalidations), 1);
           assert.strictEqual(yield* Ref.get(second.invalidations), 0);
           assert.strictEqual(yield* readCachedVersion("codex_first-package"), "2.0.0");

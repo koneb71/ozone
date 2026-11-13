@@ -257,10 +257,6 @@ const makeTestRunner = (
             Layer.succeed(ProviderRegistry.ProviderRegistry, registry),
             Layer.succeed(ModelManifest.ModelManifest, {
               current: Effect.succeed(manifest),
-              refresh: Effect.succeed(manifest),
-              forceRefresh: Effect.succeed(manifest),
-              refreshOnDemand: Effect.succeed(manifest),
-              refreshInBackground: Effect.void,
             }),
             latestVersions,
             // Layers memoize by reference, so a test that provides the gate shares it.

@@ -7,7 +7,7 @@ import {
   type UsageSummaryInput,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
+import { Atom, AtomRegistry } from "effect/reactivity";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { EnvironmentPresentation } from "../connection/presentation.ts";
@@ -38,9 +38,6 @@ function harness(ids = ["a"], modelFilters: Record<string, UsageModelFilter> = {
   registries.push(registry);
   const environments = ids.map((id) => {
     const environmentId = EnvironmentId.make(id);
-    const rates = Promise.withResolvers<
-      AsyncResult.Success<typeof pricing> | AsyncResult.Failure<never, unknown>
-    >();
     const scan = Promise.withResolvers<UsageSummary>();
     const scanStarted = Promise.withResolvers<void>();
     const presentation = Atom.make({
@@ -52,7 +49,7 @@ function harness(ids = ["a"], modelFilters: Record<string, UsageModelFilter> = {
         return scan.promise;
       }),
     );
-    return { environmentId, rates, scan, scanStarted, presentation, query };
+    return { environmentId, scan, scanStarted, presentation, query };
   });
   function get(environmentId: EnvironmentId) {
     const environment = environments.find((entry) => entry.environmentId === environmentId);
@@ -71,15 +68,6 @@ function harness(ids = ["a"], modelFilters: Record<string, UsageModelFilter> = {
       },
       usageModelFilterAtom: (environmentId: EnvironmentId) =>
         Atom.make<UsageModelFilter | undefined>(modelFilters[environmentId]),
-      refreshUsageRates: {
-        label: "test:rates",
-        requiredScopes: () => [],
-        permissionAtom: () => Atom.make(true),
-        run: (
-          _registry: AtomRegistry.AtomRegistry,
-          { environmentId }: { environmentId: EnvironmentId },
-        ) => get(environmentId).rates.promise,
-      },
     },
     presentations: {
       presentationAtom: (environmentId: EnvironmentId) => get(environmentId).presentation,
@@ -89,7 +77,7 @@ function harness(ids = ["a"], modelFilters: Record<string, UsageModelFilter> = {
 }
 
 describe("manual usage refresh", () => {
-  it.each(["success", "failure"])("waits for the rescan after a pricing %s", async (result) => {
+  it("waits for the rescan", async () => {
     const {
       environments: [environment],
       refresh,
@@ -100,11 +88,6 @@ describe("manual usage refresh", () => {
       finished = true;
     });
     expect(finished).toBe(false);
-    entry.rates.resolve(
-      result === "success"
-        ? AsyncResult.success(pricing)
-        : AsyncResult.fail(new Error("Pricing offline")),
-    );
     await entry.scanStarted.promise;
     expect(finished).toBe(false);
     entry.scan.resolve(summary);
@@ -119,7 +102,6 @@ describe("manual usage refresh", () => {
     });
     const refreshing = refresh();
     for (const entry of environments) {
-      entry.rates.resolve(AsyncResult.success(pricing));
       entry.scan.resolve(summary);
     }
     await refreshing;
@@ -137,7 +119,6 @@ describe("manual usage refresh", () => {
     } = harness();
     const entry = environment!;
     const refreshing = refresh();
-    entry.rates.resolve(AsyncResult.success(pricing));
     await entry.scanStarted.promise;
     registry.set(entry.presentation, null);
     await refreshing;
@@ -151,7 +132,6 @@ describe("manual usage refresh", () => {
     const refreshing = refresh().then(() => {
       finished = true;
     });
-    for (const entry of environments) entry.rates.resolve(AsyncResult.success(pricing));
     await healthy!.scanStarted.promise;
     expect(finished).toBe(false);
     healthy!.scan.resolve(summary);
@@ -159,7 +139,7 @@ describe("manual usage refresh", () => {
     expect(finished).toBe(true);
   });
 
-  it("replaces a scan that started before pricing was refreshed", async () => {
+  it("replaces a scan that was already running", async () => {
     const {
       registry,
       environments: [environment],
@@ -182,7 +162,6 @@ describe("manual usage refresh", () => {
     const unmount = registry.mount(query);
     expect(reads).toBe(1);
     const refreshing = refresh();
-    entry.rates.resolve(AsyncResult.success(pricing));
     await rescanned.promise;
     await refreshing;
     expect(reads).toBe(2);

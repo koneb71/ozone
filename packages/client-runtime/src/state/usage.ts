@@ -1,13 +1,9 @@
 import type { EnvironmentId, UsageModelFilter, UsageSummaryInput } from "@t3tools/contracts";
-import * as Schema from "effect/Schema";
 import type { AtomRegistry } from "effect/reactivity";
 
-import { EnvironmentRpcUnavailableError } from "../rpc/client.ts";
 import type { createEnvironmentPresentationAtoms } from "./presentation.ts";
-import { executeAtomQuery, runAtomCommand, squashAtomCommandFailure } from "./runtime.ts";
+import { executeAtomQuery } from "./runtime.ts";
 import type { createServerEnvironmentAtoms } from "./server.ts";
-
-const isEnvironmentRpcUnavailable = Schema.is(EnvironmentRpcUnavailableError);
 
 /** The Usage tab asks each environment with that environment's configured model filter. */
 export function usageSummaryInput(
@@ -53,7 +49,7 @@ export async function refreshUsage({
   registry: AtomRegistry.AtomRegistry;
   server: Pick<
     ReturnType<typeof createServerEnvironmentAtoms>,
-    "usageSummary" | "refreshUsageRates" | "usageModelFilterAtom"
+    "usageSummary" | "usageModelFilterAtom"
   >;
   presentations: Pick<ReturnType<typeof createEnvironmentPresentationAtoms>, "presentationAtom">;
   environmentIds: readonly EnvironmentId[];
@@ -73,17 +69,8 @@ export async function refreshUsage({
       const unsubscribe = registry.subscribe(presentation, abortWhenDisconnected);
       abortWhenDisconnected();
       try {
-        const ratesResult = await runAtomCommand(
-          registry,
-          server.refreshUsageRates,
-          { environmentId, input: {} },
-          { reportFailure: false },
-        );
-        const sessionUnavailable =
-          ratesResult._tag === "Failure" &&
-          isEnvironmentRpcUnavailable(squashAtomCommandFailure(ratesResult));
         registry.refresh(query);
-        if (sessionUnavailable || controller.signal.aborted) return;
+        if (controller.signal.aborted) return;
         await executeAtomQuery(registry, query, {
           reportFailure: false,
           signal: controller.signal,

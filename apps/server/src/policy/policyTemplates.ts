@@ -114,12 +114,6 @@ const policies = (): ReadonlyArray<Policy> => [
     toggle: "BrowserCookieImport",
   },
   {
-    id: "Telemetry",
-    title: "Allow usage data",
-    help: "Disabled stops T3 Code from sending product usage data. Enabled cannot turn them on for a user who turned them off.",
-    toggle: "Telemetry",
-  },
-  {
     id: "AllowedDrivers",
     title: "Allowed providers",
     help: "Only the checked providers may run. Threads on other providers stay, marked unavailable.\n\nDisabled or Not Configured: no restriction.",

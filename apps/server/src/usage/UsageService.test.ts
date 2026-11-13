@@ -37,7 +37,6 @@ import * as Scheduler from "effect/Scheduler";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 import * as SqlClient from "effect/sql/SqlClient";
-import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http";
 
 import * as ServerConfig from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -50,7 +49,9 @@ import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as AntigravityUsage from "../provider/Drivers/AntigravityUsage.ts";
 import * as ProviderHostLive from "../provider/ProviderHostLive.ts";
 import { totalTokens, type UsageRecord } from "@t3tools/provider-core/server/usage";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import * as UsageService from "./UsageService.ts";
+import { parseRateTable } from "./usagePricing.ts";
 import * as MuseSdk from "../../../../packages/provider-muse/src/server/sdk.ts";
 import { MuseUsageHome } from "@t3tools/provider-muse/server";
 import { makeScanCacheWriter, SCAN_CACHE_FILE_NAME } from "./usageScanCache.ts";
@@ -184,12 +185,7 @@ const layerService = (input: {
   readonly prefix: string;
   readonly home: string;
   readonly settings: Parameters<typeof ServerSettings.layerTest>[0];
-  readonly onRatesFetch?: (request: HttpClientRequest.HttpClientRequest) => void;
   readonly ratesDocument?: unknown;
-  readonly ratesStatus?: () => number;
-  readonly ratesResponse?: (
-    request: HttpClientRequest.HttpClientRequest,
-  ) => Effect.Effect<Response, HttpClientError.HttpClientError>;
   readonly environment?: NodeJS.ProcessEnv;
   readonly platform?: NodeJS.Platform;
   readonly hostname?: string;
@@ -215,22 +211,13 @@ const layerService = (input: {
     Layer.provideMerge(Layer.succeed(HostProcess.Hostname, input.hostname ?? "usage-test-host")),
     Layer.provideMerge(ServerSettings.layerTest(input.settings)),
     Layer.provideMerge(
+      Layer.succeed(UsageService.UsageRates, parseRateTable(input.ratesDocument ?? {})),
+    ),
+    Layer.provideMerge(
       Layer.succeed(
         HttpClient.HttpClient,
         HttpClient.make((request) =>
-          Effect.suspend(() => {
-            input.onRatesFetch?.(request);
-            const response = input.ratesResponse
-              ? input.ratesResponse(request)
-              : Effect.succeed(
-                  Response.json(input.ratesDocument ?? {}, {
-                    status: input.ratesStatus?.() ?? 200,
-                  }),
-                );
-            return response.pipe(
-              Effect.map((response) => HttpClientResponse.fromWeb(request, response)),
-            );
-          }),
+          Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({}))),
         ),
       ),
     ),
@@ -3241,7 +3228,6 @@ describe("UsageService", () => {
         const fileSystem = yield* FileSystem.FileSystem;
         const firstScanStarted = yield* Deferred.make<void>();
         const secondScanStarted = yield* Deferred.make<void>();
-        const releaseRates = yield* Deferred.make<void>();
         let homeProbes = 0;
         const service = yield* UsageService.make.pipe(
           Effect.provideService(FileSystem.FileSystem, {
@@ -3258,14 +3244,6 @@ describe("UsageService", () => {
                 }),
               ),
           }),
-          Effect.provideService(
-            HttpClient.HttpClient,
-            HttpClient.make((request) =>
-              Deferred.await(releaseRates).pipe(
-                Effect.as(HttpClientResponse.fromWeb(request, Response.json({}))),
-              ),
-            ),
-          ),
         );
 
         const first = yield* service.readSummary(WINDOW).pipe(Effect.forkChild);
@@ -3277,7 +3255,6 @@ describe("UsageService", () => {
         });
         const second = yield* service.readSummary(WINDOW).pipe(Effect.forkChild);
         yield* Deferred.await(secondScanStarted);
-        yield* Deferred.succeed(releaseRates, undefined);
 
         const original = yield* Fiber.join(first);
         const updated = yield* Fiber.join(second);
@@ -3287,65 +3264,6 @@ describe("UsageService", () => {
         Effect.provide(layerService({ prefix: "usage-service-price-race-test", home, settings })),
       );
     }).pipe(Effect.scoped),
-  );
-
-  it.live.each(["network", "http", "invalidJson", "empty"] as const)(
-    "recovers pricing through the GitHub API after a %s failure",
-    (failure) =>
-      Effect.gen(function* () {
-        const { transcript, settings, home } = yield* setup;
-        yield* Effect.promise(() => NodeFSP.writeFile(transcript, claudeLine(1, 5)));
-        const requests: HttpClientRequest.HttpClientRequest[] = [];
-        const ratesDocument = {
-          "claude-fable-5": { input_cost_per_token: 1e-5, output_cost_per_token: 5e-5 },
-        };
-        const serviceLayer = layerService({
-          prefix: `usage-service-rates-fallback-${failure}-test`,
-          home,
-          settings,
-          onRatesFetch: (request) => requests.push(request),
-          ratesResponse: (request) => {
-            if (request.url.startsWith("https://api.github.com/")) {
-              return Effect.succeed(Response.json(ratesDocument));
-            }
-            if (failure === "network") {
-              return Effect.fail(
-                new HttpClientError.HttpClientError({
-                  reason: new HttpClientError.TransportError({
-                    request,
-                    cause: new Error("getaddrinfo ENOTFOUND raw.githubusercontent.com"),
-                  }),
-                }),
-              );
-            }
-            return Effect.succeed(
-              failure === "invalidJson"
-                ? new Response("not JSON")
-                : Response.json({}, { status: failure === "http" ? 503 : 200 }),
-            );
-          },
-        });
-        const service = yield* UsageService.make.pipe(Effect.provide(serviceLayer));
-
-        const summary = yield* service.readSummary(WINDOW);
-        assert.strictEqual(summary.pricing.status, "fresh");
-        assert.strictEqual(summary.pricing.knownModels, 1);
-        assert.closeTo(summary.buckets[0]?.costUsd ?? -1, 0.00035, 1e-12);
-        assert.deepStrictEqual(
-          requests.map((request) => request.url),
-          [
-            "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
-            "https://api.github.com/repos/BerriAI/litellm/contents/model_prices_and_context_window.json?ref=main",
-          ],
-        );
-        assert.strictEqual(requests[1]?.headers.accept, "application/vnd.github.raw+json");
-
-        const restarted = yield* UsageService.make.pipe(Effect.provide(serviceLayer));
-        const cached = yield* restarted.readSummary(WINDOW);
-        assert.strictEqual(cached.pricing.status, "cached");
-        assert.deepStrictEqual(cached.buckets, summary.buckets);
-        assert.strictEqual(requests.length, 2);
-      }).pipe(Effect.scoped),
   );
 
   it.live("does not orphan an in-flight scan when its first caller is interrupted", () =>

@@ -8,7 +8,6 @@ import { ProjectToolkit } from "../../mcp/toolkits/project/tools.ts";
 import { ThreadToolkit } from "../../mcp/toolkits/thread/tools.ts";
 import * as ThreadManagementService from "../../orchestration-v2/ThreadManagementService.ts";
 import * as ProviderRegistry from "../../provider/ProviderRegistry.ts";
-import * as AnalyticsService from "../../telemetry/AnalyticsService.ts";
 import { OZONE_APP_INSTRUCTIONS } from "../apps/appInstructions.ts";
 import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as OzoneApps from "../apps/OzoneApps.ts";
@@ -36,7 +35,6 @@ it.effect("every Ozone tool registers with the MCP server", () =>
             Layer.mock(OzoneApps.OzoneApps)({}),
             Layer.mock(ThreadManagementService.ThreadManagementService)({}),
             Layer.mock(ProviderRegistry.ProviderRegistry)({}),
-            Layer.mock(AnalyticsService.AnalyticsService)({}),
           ),
         ),
       ),

@@ -492,6 +492,8 @@ export const make = Effect.gen(function* () {
         nodeIntegration: false,
         sandbox: true,
         webviewTag: true,
+        // Off macOS, Electron downloads spellcheck dictionaries from Google's CDN; macOS uses the system checker.
+        spellcheck: environment.platform === "darwin",
         // Guest fullscreen propagates to the embedder; both must opt out to keep it inside the webview.
         // The app's own fullscreen elements reach OS fullscreen through syncHtmlFullscreen.
         disableHtmlFullscreenWindowResize: true,

@@ -166,6 +166,8 @@ export default defineConfig({
       "packages/source-control-github/schema/**",
       "apps/server/schema/**",
       "*.icon/**",
+      // One model per line keeps the price snapshot diffable.
+      "apps/server/src/usage/model-rates.json",
     ],
     sortPackageJson: {},
     overrides: [

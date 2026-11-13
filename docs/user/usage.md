@@ -54,8 +54,8 @@ environments are selected by default. The dropdown shows which environments are 
 results appear as each one responds, and figures still updating are dimmed. Cursor shows its last
 saved totals first, then updates them when Cursor's API responds.
 
-If recent work is missing or a new model shows no cost, refresh to rescan session history and
-update model pricing.
+If recent work is missing, refresh to rescan session history. Model prices ship with Ozone
+and change only when you update it; set a custom price for a model that shows no cost.
 
 ## Set custom model prices
 

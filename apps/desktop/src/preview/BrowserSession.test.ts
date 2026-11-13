@@ -63,6 +63,7 @@ describe("BrowserSession", () => {
         setPermissionRequestHandler: vi.fn(),
         setPermissionCheckHandler: vi.fn(),
         setUserAgent: vi.fn(),
+        setSpellCheckerEnabled: vi.fn(),
         webRequest: { onBeforeSendHeaders: vi.fn() },
       };
       sessions.set(partition, browserSession);
@@ -132,6 +133,7 @@ describe("BrowserSession", () => {
           getUserAgent: vi.fn(() => userAgent),
           setPermissionRequestHandler: vi.fn(),
           setPermissionCheckHandler: vi.fn(),
+          setSpellCheckerEnabled: vi.fn(),
           setUserAgent: vi.fn((next: string) => {
             userAgent = next;
           }),
