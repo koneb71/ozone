@@ -1,4 +1,3 @@
-import { HOSTED_APP_CHANNEL } from "~/branding";
 import { isElectron, isSecretsFeatureEnabled } from "~/env";
 import { isMacPlatform, isWindowsPlatform, normalizeSearchText } from "~/lib/utils";
 import { STATIC_KEYBINDING_COMMANDS, type KeybindingCommand } from "@t3tools/contracts";
@@ -62,14 +61,12 @@ export interface SettingsSearchItem {
   readonly windowsOnly?: boolean;
   readonly releaseChannelOnly?: boolean;
   readonly secretsFeatureOnly?: boolean;
-  readonly cloudOnly?: boolean;
   readonly environmentOnly?: boolean;
   readonly providerSettingsOnly?: boolean;
   readonly localBackendManagementOnly?: boolean;
   readonly localEnvironmentOnly?: boolean;
   readonly primaryEnvironmentOnly?: boolean;
   readonly wslAvailableOnly?: boolean;
-  readonly managedTunnelOnly?: boolean;
   readonly peerLinksOnly?: boolean;
   readonly fastWorktreeCheckoutOnly?: boolean;
   readonly textGeneratorsOnly?: boolean;
@@ -79,13 +76,11 @@ export interface SettingsSearchItem {
 
 export interface SettingsSearchAvailability {
   readonly localEnvironmentDisabled?: boolean;
-  readonly hasCloudPublicConfig: boolean;
   readonly hasEnvironment: boolean;
   readonly hasProviderSettingsEnvironment: boolean;
   readonly canManageLocalBackend: boolean;
   readonly isWslSettingsRowVisible: boolean;
   readonly hasThreadAutoSettlement: boolean;
-  readonly managedTunnelActive?: boolean;
   readonly hasPeerLinkHost?: boolean;
   readonly hasFastWorktreeCheckoutEnvironment?: boolean;
   /** An environment without a provider allow-list, which hides text generators. */
@@ -496,13 +491,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     ],
   },
   {
-    id: "guest-links",
-    title: "Guest links",
-    to: "/settings/labs",
-    scope: "environment",
-    searchTerms: ["beta share guest invite link teammate watch t3 connect tunnel"],
-  },
-  {
     id: "linked-environments-beta",
     title: "Linked environments",
     to: "/settings/labs",
@@ -859,13 +847,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["about check for updates download install upgrade release"],
   },
   {
-    id: "update-track",
-    title: "Update track",
-    to: "/settings/about",
-    searchTerms: ["release channel stable latest nightly prerelease"],
-    releaseChannelOnly: true,
-  },
-  {
     id: "cli-command",
     title: "t3 command",
     to: "/settings/about",
@@ -878,12 +859,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/about",
     primaryEnvironmentOnly: true,
     searchTerms: ["onboarding setup first run getting started agents import projects"],
-  },
-  {
-    id: "privacy-policy",
-    title: "Privacy policy",
-    to: "/settings/about",
-    searchTerms: ["telemetry analytics usage data tracking legal opt out"],
   },
   {
     id: "telemetry-export",
@@ -1247,35 +1222,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     wslAvailableOnly: true,
   },
   {
-    id: "t3-connect",
-    localEnvironmentOnly: true,
-    title: "T3 Connect",
-    to: "/settings/access",
-    targetId: "connections-environment",
-    searchTerms: ["managed tunnel cloud other devices remote tunnels limit t3 chat"],
-    desktopOnly: true,
-    cloudOnly: true,
-  },
-  {
-    id: "hold-webhooks-while-offline",
-    localEnvironmentOnly: true,
-    title: "Hold webhooks while offline",
-    to: "/settings/access",
-    targetId: "connections-environment",
-    searchTerms: ["webhook automations offline queue mailbox t3 connect"],
-    cloudOnly: true,
-    managedTunnelOnly: true,
-  },
-  {
-    id: "publish-agent-activity",
-    localEnvironmentOnly: true,
-    title: "Publish agent activity",
-    to: "/settings/access",
-    targetId: "connections-environment",
-    searchTerms: ["mobile push notifications live activities cloud tunnel"],
-    cloudOnly: true,
-  },
-  {
     id: "connections-environment",
     title: "This machine",
     to: "/settings/access",
@@ -1295,7 +1241,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "remote-environments",
     title: "Environments",
     to: "/settings/connections",
-    searchTerms: ["add pair backend host code ssh config agent tunnel saved t3 connect"],
+    searchTerms: ["add pair backend host code ssh config agent tunnel saved"],
   },
   {
     id: "load-balancing",
@@ -1486,7 +1432,6 @@ export function filterAvailableSettingsSearchItems(
   const items: ReadonlyArray<SettingsSearchItem> = SETTINGS_SEARCH_ITEMS;
   return items.filter(
     (item) =>
-      (!item.cloudOnly || availability.hasCloudPublicConfig) &&
       (!item.environmentOnly || availability.hasEnvironment) &&
       (!item.providerSettingsOnly || availability.hasProviderSettingsEnvironment) &&
       (!item.localBackendManagementOnly || availability.canManageLocalBackend) &&
@@ -1494,7 +1439,6 @@ export function filterAvailableSettingsSearchItems(
       (!item.primaryEnvironmentOnly || availability.hasPrimaryEnvironment === true) &&
       (!item.wslAvailableOnly || availability.isWslSettingsRowVisible) &&
       (!item.requiresThreadAutoSettlement || availability.hasThreadAutoSettlement) &&
-      (!item.managedTunnelOnly || availability.managedTunnelActive === true) &&
       (!item.peerLinksOnly || availability.hasPeerLinkHost === true) &&
       (!item.fastWorktreeCheckoutOnly ||
         availability.hasFastWorktreeCheckoutEnvironment === true) &&
@@ -1510,7 +1454,7 @@ export function settingsForThisPlatform(
   return items.filter(
     (item) =>
       (isElectron || item.desktopOnly !== true) &&
-      (!item.releaseChannelOnly || isElectron || HOSTED_APP_CHANNEL !== null) &&
+      (!item.releaseChannelOnly || isElectron) &&
       (!item.secretsFeatureOnly || isSecretsFeatureEnabled) &&
       (!item.macOnly || isMacPlatform(platform)) &&
       (!item.windowsOnly || isWindowsPlatform(platform)),

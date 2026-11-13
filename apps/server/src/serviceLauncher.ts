@@ -7,7 +7,7 @@ import * as NodeFS from "node:fs";
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 import * as NodeUtil from "node:util";
-import { acquireServiceSelectionLock } from "./cloud/serviceSelectionLock.ts";
+import { acquireServiceSelectionLock } from "./service/serviceSelectionLock.ts";
 
 import type {
   PendingServiceUpdate,
@@ -16,7 +16,7 @@ import type {
   ServiceLauncherParentMessage,
   ServiceState,
   ServiceUpdateRecord,
-} from "./cloud/serviceProtocol.ts";
+} from "./service/serviceProtocol.ts";
 import {
   compareExactServiceVersions,
   decodeServiceLauncherChildMessage,
@@ -34,7 +34,7 @@ import {
   SERVICE_RESTART_PENDING_FILE,
   SERVICE_STOP_MARKER_FILE,
   SERVICE_UNIT_ENV,
-} from "./cloud/serviceProtocol.ts";
+} from "./service/serviceProtocol.ts";
 
 const HANDOFF_DELAY_MS = 2_000;
 /**

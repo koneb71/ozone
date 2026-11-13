@@ -57,7 +57,6 @@ import {
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeftIcon,
-  BugIcon,
   ChartNoAxesColumnIcon,
   CheckIcon,
   ChevronRightIcon,
@@ -75,10 +74,8 @@ import {
   MonitorIcon,
   PinIcon,
   PinOffIcon,
-  PlugIcon,
   SquarePenIcon,
   TextSearchIcon,
-  UserPlusIcon,
 } from "lucide-react";
 import { openThreadFind } from "./chat/threadFindStore";
 import { dispatchPreviewAction } from "./preview/previewActionBus";
@@ -113,7 +110,7 @@ import {
 import { useClientSettings } from "../hooks/useSettings";
 import { useStableCallback } from "../hooks/useStableCallback";
 import { readLocalApi } from "../localApi";
-import { configuredHostedAppUrl } from "../hostedPairing";
+import { appLinkOrigin } from "../appLinks";
 import { desktopLocalBackendId } from "../connection/desktopLocal";
 import { filesystemEnvironment, useFilesystemReadAccess } from "../state/filesystem";
 import { projectEnvironment } from "../state/projects";
@@ -126,8 +123,6 @@ import { useAtomCommand } from "../state/use-atom-command";
 import { useOrchestrationCommand } from "../state/use-orchestration-command";
 import { useAtomQueryRunner } from "../state/use-atom-query-runner";
 import { useScratchProject } from "../hooks/useScratchProject";
-import { useStartTriage } from "../hooks/useStartTriage";
-import { pickTriageEnvironment } from "../lib/triageTarget";
 import { useNewProject } from "../hooks/useNewProject";
 import { useOrderWhileOpen } from "../hooks/useOrderWhileOpen";
 import { reportProjectFailure, useProjectPin } from "../hooks/useProjectGroupUpdate";
@@ -255,9 +250,6 @@ import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
 import { Checkbox } from "./ui/checkbox";
 import { ProjectFilePicker } from "./files/ProjectFilePicker";
 import { openLinkPullRequestDialog } from "./pullRequest/LinkPullRequestDialog";
-import { canShareWithGuestAtom } from "./chat/guestShareAvailability";
-import { openGuestShareDialog } from "./chat/guestShareDialogState";
-import { openUseInAnotherApp } from "./mcp/UseInAnotherAppDialog";
 import { ProjectContentSearchDialog } from "./search/ProjectContentSearchDialog";
 import { settingsForThisPlatform, SETTINGS_SECTION_LABELS } from "./settings/settingsSearch";
 import { primaryServerKeybindingsAtom } from "../state/server";
@@ -265,7 +257,6 @@ import { resolveShortcutCommand, threadJumpIndexFromCommand } from "../keybindin
 import { CommandDialog, CommandDialogPopup, CommandFooterAction } from "./ui/command";
 import { Button } from "./ui/button";
 import { stackedThreadToast, toastManager } from "./ui/toast";
-import { suggestAppAccessForRemote } from "./sourceControlAppAccessToast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { ComposerHandleContext, useComposerHandleContext } from "../composerHandleContext";
 import type { ChatComposerHandle } from "./chat/ChatComposer";
@@ -456,7 +447,6 @@ function OpenCommandPaletteDialog(props: {
     label: "project unarchive",
   });
   const { scratchEnvironmentId, scratchWorkspaceRootFor, startScratchThread } = useScratchProject();
-  const startTriage = useStartTriage();
   const lookupRepository = useAtomQueryRunner(sourceControlEnvironment.repository, {
     reportFailure: false,
   });
@@ -493,9 +483,6 @@ function OpenCommandPaletteDialog(props: {
   const activeThreadServerConfig = useServerConfigs().get(
     activeThread?.environmentId ?? ("" as EnvironmentId),
   );
-  const canShareActiveThreadWithGuest = useAtomValue(
-    canShareWithGuestAtom(activeThread?.environmentId ?? ("" as EnvironmentId)),
-  );
   const activeThreadReferenceCopyTarget =
     referenceThreadRef === null || (pathname === "/pull-requests" && !openPanelPullRequestUrl)
       ? null
@@ -506,7 +493,7 @@ function OpenCommandPaletteDialog(props: {
           pullRequests: activeThread?.pullRequests,
           linkedPullRequestUrl:
             activeThread?.linkedPullRequest?.url ?? activeThread?.branchPullRequest?.url ?? null,
-          hostedAppUrl: configuredHostedAppUrl(),
+          appOrigin: appLinkOrigin(),
         });
   const copyActiveThreadReference = async () => {
     if (activeThreadReferenceCopyTarget === null) return;
@@ -698,20 +685,6 @@ function OpenCommandPaletteDialog(props: {
     activeThread?.environmentId ?? activeDraftThread?.environmentId ?? null;
   const currentProjectId = activeThread?.projectId ?? activeDraftThread?.projectId ?? null;
   const scratchTargetEnvironmentId = scratchEnvironmentId(currentProjectEnvironmentId);
-  const supportsTriage = (environmentId: EnvironmentId | null) =>
-    environments.find((environment) => environment.environmentId === environmentId)?.serverConfig
-      ?.environment.capabilities.triage === true;
-  const triageEnvironmentId = pickTriageEnvironment({
-    onScreen: currentProjectEnvironmentId,
-    primary: primaryEnvironmentId,
-    connected: environments
-      .filter((environment) => environment.connection.phase === "connected")
-      .map((environment) => environment.environmentId),
-    supportsTriage,
-  });
-  const canTriage =
-    useAtomValue(serverEnvironment.prepareTriage.permissionAtom(triageEnvironmentId)) &&
-    supportsTriage(triageEnvironmentId);
   const currentProject = resolveCommandPaletteProject(
     projectByKey,
     currentProjectEnvironmentId,
@@ -1333,18 +1306,6 @@ function OpenCommandPaletteDialog(props: {
     });
   }
 
-  if (triageEnvironmentId !== null && canTriage) {
-    actionItems.push({
-      kind: "action",
-      value: "action:triage",
-      searchTerms: ["triage", "bug", "issue", "report", "broken", "debug", "help", "support"],
-      title: "Triage an issue",
-      description: "An agent investigates a T3 Code problem and helps file an issue",
-      icon: <BugIcon className={ITEM_ICON_CLASS} />,
-      run: () => startTriage(triageEnvironmentId),
-    });
-  }
-
   if (activeThreadKey !== null && supportsThreadFind) {
     actionItems.push({
       kind: "action",
@@ -1463,20 +1424,6 @@ function OpenCommandPaletteDialog(props: {
       icon: <PullRequestGlyph.link className={ITEM_ICON_CLASS} />,
       run: async () => {
         useRightPanelStore.getState().open(threadRef, "pull-requests");
-      },
-    });
-  }
-
-  if (activeThread !== null && canShareActiveThreadWithGuest) {
-    const threadRef = scopeThreadRef(activeThread.environmentId, activeThread.id);
-    actionItems.push({
-      kind: "action",
-      value: "action:share-thread-with-guest",
-      searchTerms: ["share", "guest", "invite", "link", "teammate"],
-      title: "Share with guest",
-      icon: <UserPlusIcon className={ITEM_ICON_CLASS} />,
-      run: async () => {
-        openGuestShareDialog(threadRef);
       },
     });
   }
@@ -1636,34 +1583,6 @@ function OpenCommandPaletteDialog(props: {
       },
     });
   }
-
-  actionItems.push({
-    kind: "action",
-    value: "action:use-in-another-app",
-    searchTerms: [
-      "mcp",
-      "connector",
-      "another app",
-      "poke",
-      "claude",
-      "chatgpt",
-      "grok",
-      "muse",
-      "instinct",
-      "openclaw",
-      "hermes",
-    ],
-    title: "Use T3 Code in another app (MCP)",
-    icon: <PlugIcon className={ITEM_ICON_CLASS} />,
-    run: async () => {
-      openUseInAnotherApp(
-        currentProjectEnvironmentId ??
-          (paletteRouteTarget?.kind === "server"
-            ? paletteRouteTarget.threadRef.environmentId
-            : null),
-      );
-    },
-  });
 
   actionItems.push({
     kind: "action",
@@ -2222,10 +2141,6 @@ function OpenCommandPaletteDialog(props: {
       return;
     }
     setOpen(false);
-    void suggestAppAccessForRemote(
-      addProjectCloneFlow.environmentId,
-      addProjectCloneFlow.remoteUrl,
-    );
     const projectRef = scopeProjectRef(
       addProjectCloneFlow.environmentId,
       startResult.value.projectId,

@@ -1273,11 +1273,6 @@ export function createServerEnvironmentAtoms<R, E>(
       tag: WS_METHODS.serverRunStorageCleanup,
       concurrency: { mode: "singleFlight", key: ({ environmentId }) => environmentId },
     }),
-    prepareTriage: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:server:prepare-triage",
-      tag: WS_METHODS.serverPrepareTriage,
-      concurrency: { mode: "singleFlight", key: ({ environmentId }) => environmentId },
-    }),
     databaseStorage,
     databaseCompactionRecommendations,
     reclaimDatabaseSpace: createEnvironmentRpcCommand(runtime, {
@@ -1368,12 +1363,6 @@ export function createServerEnvironmentAtoms<R, E>(
     traceDiagnostics: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:server:trace-diagnostics",
       tag: WS_METHODS.serverGetTraceDiagnostics,
-    }),
-    npmRelease: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:server:npm-release",
-      tag: WS_METHODS.serverGetNpmRelease,
-      staleTimeMs: 60_000,
-      refreshIntervalMs: 5 * 60_000,
     }),
     processDiagnostics: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:server:process-diagnostics",
@@ -1648,10 +1637,6 @@ export function createServerEnvironmentAtoms<R, E>(
       tag: WS_METHODS.scheduledTasksRotateWebhookToken,
       scheduler: configScheduler,
       concurrency: configConcurrency,
-    }),
-    createGuestShare: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:server:guest-share:create",
-      tag: WS_METHODS.guestShareCreate,
     }),
     // Off the config lane: answering a card must not queue behind settings
     // edits. One answer per card at a time.

@@ -166,7 +166,7 @@ export async function downloadLocalUpdate(
   }
 }
 
-export async function installLocalUpdate(
+async function installLocalUpdate(
   bridge: DesktopBridge,
   reportError: ReportLocalUpdateError = toastUpdateError,
   expectedVersion?: string,

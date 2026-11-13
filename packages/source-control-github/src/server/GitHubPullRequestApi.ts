@@ -45,9 +45,7 @@ import {
   type PullRequestPreview,
 } from "@t3tools/contracts";
 
-import * as GitHubAppAccess from "./GitHubAppAccess.ts";
 import * as GitHubRest from "./GitHubRest.ts";
-import * as GitHubPullRequestEvents from "./gitHubPullRequestEvents.ts";
 import * as GitHubRequestPolicy from "./GitHubRequestPolicy.ts";
 import * as GitHubGraphQlClient from "./gitHubGraphQlClient.ts";
 import { PullRequestBatchesGraphQLGroup } from "./pullRequestBatches.graphql.ts";
@@ -518,8 +516,6 @@ export class GitHubPullRequestApi extends Context.Service<
       readonly host: string;
       readonly number: number;
     }) => Effect.Effect<GitHubPullRequestWatchFingerprint | null, GitHubPullRequestApiError>;
-    readonly pullRequestEvents: Effect.Success<typeof GitHubPullRequestEvents.make>;
-
     readonly revalidateChecks: Effect.Success<typeof makeChecksRevalidator>;
 
     readonly getPullRequestDetail: (input: {
@@ -958,7 +954,6 @@ interface RestReadInput<A> {
 /** @public */
 export const make = Effect.gen(function* () {
   const api = yield* GitHubRest.GitHubRest;
-  const appAccess = yield* GitHubAppAccess.GitHubAppAccess;
   const policy = yield* GitHubRequestPolicy.GitHubRequestPolicy;
   const httpClient = yield* HttpClient.HttpClient;
   const sourceControlHost = yield* SourceControlHost.SourceControlHost;
@@ -989,11 +984,7 @@ export const make = Effect.gen(function* () {
     }) {
       const unavailable = () => new GitHubViewerLoginUnavailableError({ cwd: input.cwd });
       const host = input.host.toLowerCase();
-      // A pinned credential is never handed on to another, so pick one that reaches the repository.
-      const { token, fingerprint: key } =
-        input.repository === undefined
-          ? yield* api.credential(host)
-          : yield* appAccess.credentialFor(host, input.repository);
+      const { token, fingerprint: key } = yield* api.credential(host);
       const credential = { host, token, credentialFingerprint: key };
       return yield* Effect.acquireUseRelease(
         Effect.sync(() => {
@@ -1982,12 +1973,12 @@ export const make = Effect.gen(function* () {
         ),
       );
       // GitHub answers a private repository the token cannot see as missing, and its error names
-      // the credential that request carried. A personal credential is pinned for the whole
-      // read, so a token changed mid-read does not split it; the app keeps the policy's fallback.
+      // the credential that request carried. The credential is pinned for the whole read, so a
+      // token changed mid-read does not split it.
       const host = normalizeHost(input.host);
       return api.credential(host).pipe(
         Effect.flatMap(({ token, fingerprint, source }) =>
-          source === undefined || source === "app"
+          source === undefined
             ? listed
             : listed.pipe(
                 Effect.provideService(GitHubRequestPolicy.PinnedGitHubCredential, {
@@ -2068,8 +2059,6 @@ export const make = Effect.gen(function* () {
 
     getPullRequestSummary,
     getPullRequestWatchFingerprint,
-    pullRequestEvents: yield* GitHubPullRequestEvents.make,
-
     getPullRequestDetail,
     getPullRequestPreview: Effect.fn("GitHubPullRequestApi.getPullRequestPreview")(
       function (input) {
@@ -2579,7 +2568,6 @@ export const make = Effect.gen(function* () {
       if (input.stackNumber !== undefined)
         return runGitHubStackAction({ ...input, stackNumber: input.stackNumber }).pipe(
           Effect.provideService(GitHubRest.GitHubRest, api),
-          Effect.provideService(GitHubAppAccess.GitHubAppAccess, appAccess),
           Effect.provideService(GitHubRequestPolicy.GitHubRequestPolicy, policy),
           Effect.provideService(HttpClient.HttpClient, httpClient),
           Effect.provideService(SourceControlHost.SourceControlHost, sourceControlHost),

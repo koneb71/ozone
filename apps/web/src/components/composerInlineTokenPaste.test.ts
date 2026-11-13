@@ -27,15 +27,18 @@ const importAll =
     return new Map(fragment.records.map((record) => [record.contextId, record.contextId]));
   };
 
+const APP = "http://localhost:3773";
+
 describe("importPastedComposerText", () => {
   it("pastes a copied thread link back as the chip it was copied from", () => {
-    const target = threadChipCopyTarget(thread, "Fix the login flow");
+    const target = threadChipCopyTarget(thread, "Fix the login flow", APP);
     const imported: Array<ComposerContextClipboardFragment> = [];
     const text = importPastedComposerText(
       clipboard({
         "text/plain": `See ${target.value}`,
         [COMPOSER_CONTEXT_CLIPBOARD_MIME]: encodeComposerContextFragment(target.fragment!)!,
       }),
+      APP,
       importAll(imported),
     );
     expect(text).toBe(`See ${chip("Fix the login flow")}`);
@@ -45,21 +48,22 @@ describe("importPastedComposerText", () => {
   it("makes a chip of a v2 link pasted without T3's clipboard format", () => {
     const text = importPastedComposerText(
       clipboard({ "text/plain": "[Login](t3-thread://v2/env-1/thread-1)" }),
+      APP,
       importAll([]),
     );
     expect(text).toBe(chip("Login"));
   });
 
   it("keeps the link when the composer cannot take the thread", () => {
-    const pasted = "https://app.t3.codes/threads/env-1/thread-1";
-    expect(importPastedComposerText(clipboard({ "text/plain": pasted }), () => new Map())).toBe(
-      pasted,
-    );
+    const pasted = `${APP}/threads/env-1/thread-1`;
+    expect(
+      importPastedComposerText(clipboard({ "text/plain": pasted }), APP, () => new Map()),
+    ).toBe(pasted);
   });
 
   it("imports CRLF and CR clipboard text with LF line breaks", () => {
     expect(
-      importPastedComposerText(clipboard({ "text/plain": "x\r\n\r\ny\rz" }), () => new Map()),
+      importPastedComposerText(clipboard({ "text/plain": "x\r\n\r\ny\rz" }), APP, () => new Map()),
     ).toBe("x\n\ny\nz");
   });
 });

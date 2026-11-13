@@ -167,11 +167,6 @@ import {
   ProviderUploadFeedbackResult,
 } from "./provider.ts";
 import { ProviderInstanceId, ProviderInstanceMutation } from "./providerInstance.ts";
-import {
-  GuestShareCreateError,
-  GuestShareCreateInput,
-  GuestShareCreateResult,
-} from "./guestShare.ts";
 import { PullRequestReviewGuideResult } from "./pullRequestReviewGuide.ts";
 import {
   PullRequestActionInput,
@@ -216,11 +211,6 @@ import {
   PullRequestUnavailableError,
   PullRequestUpdateInput,
 } from "./pullRequest.ts";
-import {
-  RelayClientInstallFailedError,
-  RelayClientInstallProgressEventSchema,
-  RelayClientStatusSchema,
-} from "./relayClient.ts";
 import {
   ORCHESTRATION_V2_WS_METHODS,
   OrchestrationGetWorkflowScriptError,
@@ -315,9 +305,6 @@ import {
   ServerConfigStreamEvent,
   DesktopUpdateCommitInput,
   OtlpEndpointCheckInput,
-  ServerPrepareTriageError,
-  ServerPrepareTriageInput,
-  ServerPrepareTriageResult,
   OtlpEndpointCheckResult,
   ServerConfig,
   ServerProviderUpdateError,
@@ -327,9 +314,6 @@ import {
   ServerRemoveKeybindingResult,
   ServerProviderUpdatedPayload,
   ServerSelfUpdateError,
-  ServerNpmRelease,
-  ServerNpmReleaseError,
-  ServerNpmReleaseInput,
   ServerSelfUpdateInput,
   ServerSelfUpdateProgressEvent,
   ServerSelfUpdateResult,
@@ -401,13 +385,6 @@ import {
   SourceControlRepositoryError,
   SourceControlRepositoryInfo,
   SourceControlRepositoryLookupInput,
-  SourceControlAppAccess,
-  SourceControlAppAccessInput,
-  SourceControlStarredInput,
-  SourceControlSignInError,
-  SourceControlSignInInput,
-  SourceControlSignInPrompt,
-  SourceControlSignInResult,
 } from "./sourceControl.ts";
 import { VcsError } from "./vcs.ts";
 import { Project, ProjectMutation, ProjectMutationError } from "./project.ts";
@@ -506,7 +483,6 @@ export const WS_METHODS = {
 
   serverProbe: "server.probe",
   serverGetConfig: "server.getConfig",
-  serverGetNpmRelease: "server.getNpmRelease",
   serverRefreshProviders: "server.refreshProviders",
   serverUpdateProvider: "server.updateProvider",
   serverUpdateServer: "server.updateServer",
@@ -543,7 +519,6 @@ export const WS_METHODS = {
   serverRetryResourceTelemetry: "server.retryResourceTelemetry",
   serverCheckOtlpEndpoint: "server.checkOtlpEndpoint",
   serverListTextGeneratorModels: "server.listTextGeneratorModels",
-  serverPrepareTriage: "server.prepareTriage",
   serverSignalProcess: "server.signalProcess",
   serverReportClientActivity: "server.reportClientActivity",
   serverGetUsageSummary: "server.getUsageSummary",
@@ -556,12 +531,8 @@ export const WS_METHODS = {
   scheduledTasksRunNow: "scheduledTasks.runNow",
   scheduledTasksRotateWebhookToken: "scheduledTasks.rotateWebhookToken",
   secretsAnswerRequest: "secrets.answerRequest",
-  guestShareCreate: "guestShare.create",
   scheduledTasksListWebhookDeliveries: "scheduledTasks.listWebhookDeliveries",
   scheduledTasksGetWebhookDelivery: "scheduledTasks.getWebhookDelivery",
-
-  cloudGetRelayClientStatus: "cloud.getRelayClientStatus",
-  cloudInstallRelayClient: "cloud.installRelayClient",
 
   pullRequestsList: "pullRequests.list",
   pullRequestsListStats: "pullRequests.listStats",
@@ -601,12 +572,6 @@ export const WS_METHODS = {
   sourceControlLookupRepository: "sourceControl.lookupRepository",
   sourceControlCloneRepository: "sourceControl.cloneRepository",
   sourceControlPublishRepository: "sourceControl.publishRepository",
-  sourceControlSignInStart: "sourceControl.signInStart",
-  sourceControlSignInWait: "sourceControl.signInWait",
-  sourceControlSignInCancel: "sourceControl.signInCancel",
-  sourceControlAppAccess: "sourceControl.appAccess",
-  sourceControlStarred: "sourceControl.starred",
-  sourceControlStar: "sourceControl.star",
   projectCloneStart: "projectClone.start",
   projectCloneCancel: "projectClone.cancel",
   projectCloneRetry: "projectClone.retry",
@@ -777,12 +742,6 @@ const WsProviderInstallRemoveRpc = Rpc.make(WS_METHODS.providerInstallRemove, {
   payload: ProviderSetupInput,
   success: ProviderInstallState,
   error: ProviderSetupRpcError,
-});
-
-const WsServerGetNpmReleaseRpc = Rpc.make(WS_METHODS.serverGetNpmRelease, {
-  payload: ServerNpmReleaseInput,
-  success: Schema.NullOr(ServerNpmRelease),
-  error: Schema.Union([ServerNpmReleaseError, EnvironmentAuthorizationError]),
 });
 
 const WsServerUpdateServerRpc = Rpc.make(WS_METHODS.serverUpdateServer, {
@@ -989,12 +948,6 @@ const WsServerListTextGeneratorModelsRpc = Rpc.make(WS_METHODS.serverListTextGen
   error: Schema.Union([TextGeneratorError, EnvironmentAuthorizationError]),
 });
 
-const WsServerPrepareTriageRpc = Rpc.make(WS_METHODS.serverPrepareTriage, {
-  payload: ServerPrepareTriageInput,
-  success: ServerPrepareTriageResult,
-  error: Schema.Union([ServerPrepareTriageError, EnvironmentAuthorizationError]),
-});
-
 const WsServerGetUsageSummaryRpc = Rpc.make(WS_METHODS.serverGetUsageSummary, {
   payload: UsageSummaryInput,
   success: UsageSummary,
@@ -1011,19 +964,6 @@ const WsServerSignalProcessRpc = Rpc.make(WS_METHODS.serverSignalProcess, {
   payload: ServerSignalProcessInput,
   success: ServerSignalProcessResult,
   error: EnvironmentAuthorizationError,
-});
-
-const WsCloudGetRelayClientStatusRpc = Rpc.make(WS_METHODS.cloudGetRelayClientStatus, {
-  payload: Schema.Struct({}),
-  success: RelayClientStatusSchema,
-  error: EnvironmentAuthorizationError,
-});
-
-const WsCloudInstallRelayClientRpc = Rpc.make(WS_METHODS.cloudInstallRelayClient, {
-  payload: Schema.Struct({}),
-  success: RelayClientInstallProgressEventSchema,
-  error: Schema.Union([RelayClientInstallFailedError, EnvironmentAuthorizationError]),
-  stream: true,
 });
 
 const WsServerReportClientActivityRpc = Rpc.make(WS_METHODS.serverReportClientActivity, {
@@ -1255,47 +1195,6 @@ const WsSourceControlCloneRepositoryRpc = Rpc.make(WS_METHODS.sourceControlClone
   payload: SourceControlCloneRepositoryInput,
   success: SourceControlCloneRepositoryResult,
   error: Schema.Union([SourceControlRepositoryError, EnvironmentAuthorizationError]),
-});
-
-// Starts a device-flow sign-in the server finishes on its own, so a client can leave meanwhile.
-const WsSourceControlSignInStartRpc = Rpc.make(WS_METHODS.sourceControlSignInStart, {
-  payload: SourceControlSignInInput,
-  success: SourceControlSignInPrompt,
-  error: Schema.Union([SourceControlSignInError, EnvironmentAuthorizationError]),
-});
-
-// Resolves when the sign-in `signInStart` began ends, however long the user takes.
-const WsSourceControlSignInWaitRpc = Rpc.make(WS_METHODS.sourceControlSignInWait, {
-  payload: SourceControlSignInInput,
-  success: SourceControlSignInResult,
-  error: Schema.Union([SourceControlSignInError, EnvironmentAuthorizationError]),
-});
-
-// Ends the sign-in `signInStart` began, so approving the code afterwards signs nothing in.
-const WsSourceControlSignInCancelRpc = Rpc.make(WS_METHODS.sourceControlSignInCancel, {
-  payload: SourceControlSignInInput,
-  success: Schema.Void,
-  error: Schema.Union([SourceControlSignInError, EnvironmentAuthorizationError]),
-});
-
-const WsSourceControlAppAccessRpc = Rpc.make(WS_METHODS.sourceControlAppAccess, {
-  payload: SourceControlAppAccessInput,
-  success: SourceControlAppAccess,
-  error: EnvironmentAuthorizationError,
-});
-
-// False when the server's forge account has not starred the repository or the forge cannot say.
-const WsSourceControlStarredRpc = Rpc.make(WS_METHODS.sourceControlStarred, {
-  payload: SourceControlStarredInput,
-  success: Schema.Boolean,
-  error: EnvironmentAuthorizationError,
-});
-
-// Stars the repository as the server's forge account. False when the forge refused or cannot star.
-const WsSourceControlStarRpc = Rpc.make(WS_METHODS.sourceControlStar, {
-  payload: SourceControlStarredInput,
-  success: Schema.Boolean,
-  error: EnvironmentAuthorizationError,
 });
 
 // Returns when the project exists and cloning starts; progress uses the subscription.
@@ -2017,12 +1916,6 @@ const WsScheduledTasksRotateWebhookTokenRpc = Rpc.make(
   },
 );
 
-const WsGuestShareCreateRpc = Rpc.make(WS_METHODS.guestShareCreate, {
-  payload: GuestShareCreateInput,
-  success: GuestShareCreateResult,
-  error: Schema.Union([GuestShareCreateError, EnvironmentAuthorizationError]),
-});
-
 const WsSecretsAnswerRequestRpc = Rpc.make(WS_METHODS.secretsAnswerRequest, {
   payload: SecretRequestAnswerInput,
   error: Schema.Union([SecretRequestError, EnvironmentAuthorizationError]),
@@ -2066,7 +1959,6 @@ export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthori
 ) {}
 
 export const WsRpcGroup = RpcGroup.make(
-  WsGuestShareCreateRpc,
   WsServerProbeRpc,
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
@@ -2087,7 +1979,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsProviderInstallSubscribeRpc,
   WsProviderInstallRemoveRpc,
   WsServerUpdateServerRpc,
-  WsServerGetNpmReleaseRpc,
   WsServerUpdateServerWithProgressRpc,
   WsServerCommitDesktopUpdateRpc,
   WsServerUpsertKeybindingRpc,
@@ -2121,7 +2012,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerRetryResourceTelemetryRpc,
   WsServerCheckOtlpEndpointRpc,
   WsServerListTextGeneratorModelsRpc,
-  WsServerPrepareTriageRpc,
   WsServerGetUsageSummaryRpc,
   WsServerRefreshUsageRatesRpc,
   WsServerSignalProcessRpc,
@@ -2135,8 +2025,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsScheduledTasksListWebhookDeliveriesRpc,
   WsScheduledTasksGetWebhookDeliveryRpc,
   WsServerReportClientActivityRpc,
-  WsCloudGetRelayClientStatusRpc,
-  WsCloudInstallRelayClientRpc,
   WsPullRequestsListRpc,
   WsPullRequestsListStatsRpc,
   WsPullRequestsFilterOptionsRpc,
@@ -2174,12 +2062,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsSourceControlLookupRepositoryRpc,
   WsSourceControlCloneRepositoryRpc,
   WsSourceControlPublishRepositoryRpc,
-  WsSourceControlSignInStartRpc,
-  WsSourceControlSignInWaitRpc,
-  WsSourceControlSignInCancelRpc,
-  WsSourceControlAppAccessRpc,
-  WsSourceControlStarredRpc,
-  WsSourceControlStarRpc,
   WsProjectCloneStartRpc,
   WsProjectCloneCancelRpc,
   WsProjectCloneRetryRpc,

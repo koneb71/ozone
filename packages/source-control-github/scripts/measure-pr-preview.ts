@@ -14,7 +14,6 @@ import * as Stream from "effect/Stream";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
-import * as GitHubAppAccess from "../src/server/GitHubAppAccess.ts";
 import * as GitHubPullRequestApi from "../src/server/GitHubPullRequestApi.ts";
 import * as GitHubPullRequestProvider from "../src/server/GitHubPullRequestProvider.ts";
 import * as GitHubRest from "../src/server/GitHubRest.ts";
@@ -101,7 +100,6 @@ const sourceControlHost = Layer.unwrap(
 ).pipe(Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)));
 
 const services = GitHubPullRequestApi.layer.pipe(
-  Layer.provideMerge(GitHubAppAccess.layer),
   Layer.provideMerge(GitHubRest.layerWithDependencies),
   Layer.provideMerge(SourceControlRateLimit.layer),
   Layer.provideMerge(measuredHttp),

@@ -65,7 +65,7 @@ type Loaded =
 const UNREACHABLE = "Could not reach this environment. Try again.";
 const isApprovalError = Schema.is(AuthMcpApprovalError);
 
-export type McpApprovalAnswer<A> =
+type McpApprovalAnswer<A> =
   | { readonly kind: "ok"; readonly value: A }
   | { readonly kind: "redirect"; readonly url: string }
   | { readonly kind: "error"; readonly message: string };
@@ -117,53 +117,29 @@ const primaryTransport: McpApprovalTransport = {
 const decodeAuthorizationRequest = Schema.decodeSync(AuthMcpAuthorizationRequest);
 
 /** The agent's OAuth request from this page's query; other parameters are ignored. */
-export function readAuthorizationRequest(): AuthMcpAuthorizationRequest {
+function readAuthorizationRequest(): AuthMcpAuthorizationRequest {
   return decodeAuthorizationRequest(Object.fromEntries(new URL(window.location.href).searchParams));
 }
 
+/** The consent screen for one agent sign-in. */
 export function ConnectAgentSurface() {
   const [authorization] = useState(readAuthorizationRequest);
-  return <McpConsent authorization={authorization} transport={primaryTransport} acceptsCode />;
-}
-
-/**
- * The consent screen for one agent sign-in. `acceptsCode` shows the sign-in code field;
- * `requireLevelChoice` starts with no level picked; `footer` sits under the actions.
- */
-export function McpConsent({
-  authorization,
-  transport,
-  acceptsCode = false,
-  requireLevelChoice = false,
-  environmentLabel,
-  footer,
-}: {
-  readonly authorization: AuthMcpAuthorizationRequest;
-  readonly transport: McpApprovalTransport;
-  readonly acceptsCode?: boolean;
-  readonly requireLevelChoice?: boolean;
-  readonly environmentLabel?: string | undefined;
-  readonly footer?: ReactNode;
-}) {
   const [loaded, setLoaded] = useState<Loaded>({ status: "loading" });
   const [requestedAccess, setAccess] = useState<AuthMcpClientAccess | null>(null);
   const [pairingCode, setPairingCode] = useState("");
   const [armed, setArmed] = useState(false);
-  const access =
-    requireLevelChoice && requestedAccess === null
-      ? null
-      : resolveMcpAccess(
-          requestedAccess,
-          loaded.status === "ready" ? loaded.details.runtimeModeCeiling : undefined,
-          pairingCode.trim().length > 0,
-        );
+  const access = resolveMcpAccess(
+    requestedAccess,
+    loaded.status === "ready" ? loaded.details.runtimeModeCeiling : undefined,
+    pairingCode.trim().length > 0,
+  );
   const [errorMessage, setErrorMessage] = useState("");
   const [pending, setPending] = useState<"approve" | "deny" | null>(null);
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- fetches the MCP OAuth approval and redirects the window or stores details, ignoring stale answers
   useEffect(() => {
     let cancelled = false;
-    void transport.load(authorization).then((answer) => {
+    void primaryTransport.load(authorization).then((answer) => {
       if (cancelled) return;
       if (answer.kind === "redirect") {
         if (!followRedirect(answer.url)) setLoaded({ status: "invalid", message: UNSAFE_REDIRECT });
@@ -178,7 +154,7 @@ export function McpConsent({
     return () => {
       cancelled = true;
     };
-  }, [authorization, transport]);
+  }, [authorization]);
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- keeps Approve off briefly after the page shows or regains focus, so a click aimed at another window cannot land on it
   useEffect(() => {
@@ -208,7 +184,7 @@ export function McpConsent({
     if (decision === null) return;
     setPending(choice);
     setErrorMessage("");
-    const answer = await transport.decide(authorization, decision);
+    const answer = await primaryTransport.decide(authorization, decision);
     if (answer.kind === "redirect" && followRedirect(answer.url)) return;
     setPending(null);
     setErrorMessage(
@@ -239,7 +215,6 @@ export function McpConsent({
         <p className="mt-4 text-sm text-muted-foreground">
           Close this page and start the sign-in again from your agent.
         </p>
-        {footer}
       </StandalonePage>
     );
   }
@@ -250,7 +225,7 @@ export function McpConsent({
     pending === null &&
     access !== null &&
     resolveApprovalDecision({ code: pairingCode, access, details }) !== null;
-  // A code from "Use T3 Code in another app" names its level, so the page does not ask again.
+  // An approval code names its level, so the page does not ask again.
   const codeAccess = parseMcpApprovalCode(pairingCode)?.access;
   const approveLevel = codeAccess ?? access;
 
@@ -261,10 +236,7 @@ export function McpConsent({
         description={
           <>
             This agent wants to use the threads in every project on{" "}
-            <span className="font-medium text-foreground">
-              {environmentLabel ?? details.environmentHost}
-            </span>
-            {environmentLabel ? ` (${details.environmentHost})` : null}.
+            <span className="font-medium text-foreground">{details.environmentHost}</span>.
           </>
         }
       />
@@ -298,29 +270,27 @@ export function McpConsent({
           if (canApprove) void decide("approve", details);
         }}
       >
-        {acceptsCode ? (
-          <div className="space-y-2">
-            <label className="text-sm font-medium" htmlFor="connect-agent-pairing-code">
-              Sign-in code
-            </label>
-            <Input
-              id="connect-agent-pairing-code"
-              autoCapitalize="none"
-              autoComplete="one-time-code"
-              autoCorrect="off"
-              disabled={pending !== null}
-              nativeInput
-              onChange={(event) => setPairingCode(event.currentTarget.value)}
-              placeholder="Paste a code"
-              spellCheck={false}
-              value={pairingCode}
-            />
-            <p className="text-xs text-muted-foreground">
-              Get one from Use T3 Code in another app (MCP), Settings → Sharing & access, or{" "}
-              <code>t3 auth pairing create</code> on this machine.
-            </p>
-          </div>
-        ) : null}
+        <div className="space-y-2">
+          <label className="text-sm font-medium" htmlFor="connect-agent-pairing-code">
+            Sign-in code
+          </label>
+          <Input
+            id="connect-agent-pairing-code"
+            autoCapitalize="none"
+            autoComplete="one-time-code"
+            autoCorrect="off"
+            disabled={pending !== null}
+            nativeInput
+            onChange={(event) => setPairingCode(event.currentTarget.value)}
+            placeholder="Paste a code"
+            spellCheck={false}
+            value={pairingCode}
+          />
+          <p className="text-xs text-muted-foreground">
+            Get one from Settings → Sharing & access, or <code>t3 auth pairing create</code> on this
+            machine.
+          </p>
+        </div>
 
         {codeAccess ? (
           <p className="text-sm">
@@ -377,7 +347,6 @@ export function McpConsent({
           </Button>
         </div>
       </form>
-      {footer}
     </StandalonePage>
   );
 }
@@ -403,7 +372,7 @@ function ceilingReason(details: AuthMcpApprovalDetails, access: AuthMcpClientAcc
 }
 
 /** One access level in a radio group; `description` replaces the level's own, null hides it. */
-export function AccessOption({
+function AccessOption({
   access,
   selected,
   disabledReason,

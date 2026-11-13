@@ -26,17 +26,10 @@ import * as GitHubQuota from "./GitHubQuota.ts";
 import * as SourceControlRateLimit from "@t3tools/source-control-core/server/SourceControlRateLimit";
 import type * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
 import * as TestSourceControlHost from "@t3tools/source-control-testing/TestSourceControlHost";
-import * as GitHubAppSignIn from "./GitHubAppSignIn.ts";
 import * as GitHubHttpClient from "./GitHubHttpClient.ts";
 import * as GitHubGraphQlClient from "./gitHubGraphQlClient.ts";
 import { PullRequestBatchesGraphQLGroup } from "./pullRequestBatches.graphql.ts";
 import { driver } from "./driver.ts";
-
-const appSignedOut = Layer.mock(GitHubAppSignIn.GitHubAppSignIn)({
-  enabled: false,
-  token: () => Effect.succeedNone,
-  invalidate: () => Effect.void,
-});
 
 const NOW = Date.parse("2026-10-05T12:00:00.000Z");
 
@@ -75,7 +68,7 @@ function harness(respond: (request: HttpClientRequest.HttpClientRequest) => Resp
     }),
   );
   const layer = GitHubRest.layer.pipe(
-    Layer.provide(Layer.mergeAll(credentials, http, appSignedOut)),
+    Layer.provide(Layer.mergeAll(credentials, http)),
     Layer.provideMerge(GitHubQuota.layer),
     Layer.provideMerge(SourceControlRateLimit.layer),
   );
@@ -347,8 +340,6 @@ describe("GitHubRest", () => {
         });
         expect(reference.number).toBe(7);
         expect(requests.at(-1)?.body).toContain("query PullRequestByNumber");
-        expect(yield* instance.isRepositoryStarred!("github.com", "acme/web")).toBe(true);
-        expect(requests.at(-1)?.path).toBe("/user/starred/acme/web");
         yield* Effect.promise(() => NodeFSP.unlink(socketPath));
         const error = yield* Effect.flip(
           rest.rest({ host: "github.com", operation: "user", path: "user" }),

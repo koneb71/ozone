@@ -5,7 +5,6 @@ import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
@@ -22,17 +21,6 @@ import * as TestSourceControlHost from "@t3tools/source-control-testing/TestSour
 import * as GitHubPullRequestApi from "./GitHubPullRequestApi.ts";
 import * as GitHubPullRequestProvider from "./GitHubPullRequestProvider.ts";
 import { KnownWorkflowRuns } from "./gitHubConditionalChecks.ts";
-import * as GitHubAppAccess from "./GitHubAppAccess.ts";
-import * as GitHubAppSignIn from "./GitHubAppSignIn.ts";
-
-const appSignedOut = Layer.mock(GitHubAppSignIn.GitHubAppSignIn)({
-  enabled: false,
-  token: () => Effect.succeedNone,
-  invalidate: () => Effect.void,
-});
-const mockedAppToken = vi.fn<(host: string) => Effect.Effect<Option.Option<string>>>(
-  () => Effect.succeedNone,
-);
 
 const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 
@@ -136,7 +124,6 @@ const mockApi = Layer.succeed(
   GitHubRest.GitHubRest.of({
     rest: (input) => mockedExecute({ kind: "rest", ...input }),
     credential: (host) => mockedCredential(host),
-    appCredential: () => Effect.succeedNone,
   }),
 );
 
@@ -192,16 +179,8 @@ const mockHttp = Layer.succeed(
 
 const layer = it.layer(
   GitHubPullRequestApi.layer.pipe(
-    Layer.provideMerge(GitHubAppAccess.layer),
     Layer.provideMerge(mockApi),
     Layer.provideMerge(GitHubRequestPolicy.layer),
-    Layer.provideMerge(
-      Layer.mock(GitHubAppSignIn.GitHubAppSignIn)({
-        enabled: false,
-        token: (host) => mockedAppToken(host),
-        invalidate: () => Effect.void,
-      }),
-    ),
     Layer.provideMerge(GitHubQuota.layer),
     Layer.provideMerge(SourceControlRateLimit.layer),
     Layer.provideMerge(mockHttp),
@@ -645,7 +624,6 @@ afterEach(() => {
   mockedExecute.mockReset();
   mockedStackMemberships.mockReset();
   mockedCredential.mockReset();
-  mockedAppToken.mockReset();
   mockedCredential.mockImplementation(defaultCredential);
 });
 
@@ -693,9 +671,8 @@ it.effect(
       );
       const cli = yield* GitHubPullRequestApi.make.pipe(
         Effect.provide(
-          GitHubAppAccess.layer.pipe(
-            Layer.provideMerge(GitHubRest.layer),
-            Layer.provideMerge(Layer.mergeAll(credentials, http, appSignedOut)),
+          GitHubRest.layer.pipe(
+            Layer.provideMerge(Layer.mergeAll(credentials, http)),
             Layer.provideMerge(GitHubQuota.layer),
             Layer.provideMerge(SourceControlRateLimit.layer),
             Layer.merge(TestSourceControlHost.layer()),
@@ -1495,19 +1472,9 @@ layer("GitHubPullRequestApi.layer", (it) => {
       assert.isAbove(saved.sentWith.length, 1);
       for (const authorization of saved.sentWith) expect(authorization).toContain("first");
 
-      // The policy hands what the app cannot see to the gh login, which GitHub refuses too.
-      mockedAppToken.mockReturnValue(Effect.succeedSome("app"));
-      const app = { token: "app", source: "app" } as const;
-      const gh = { token: "personal", source: "gh" } as const;
-      const retried = yield* listUnreadableRepository(app, gh);
-      expect(retried.error.accessHint).toContain("gh login");
-      expect(retried.sentWith).toEqual(["Bearer app", "Bearer app", "Bearer personal"]);
-
-      // With no gh login when the app is refused, the app made the last request; a login that
-      // turns up afterwards is not named.
-      const appOnly = yield* listUnreadableRepository(app, undefined, gh);
-      assert.isUndefined(appOnly.error.accessHint);
-      expect(appOnly.sentWith).toEqual(["Bearer app", "Bearer app"]);
+      const gh = yield* listUnreadableRepository({ token: "personal", source: "gh" });
+      expect(gh.error.accessHint).toContain("gh login");
+      for (const authorization of gh.sentWith) expect(authorization).toContain("personal");
     }),
   );
 

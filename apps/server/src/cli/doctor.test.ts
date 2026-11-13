@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as TestClock from "effect/testing/TestClock";
 
-import * as BootService from "../cloud/bootService.ts";
+import * as BootService from "../service/bootService.ts";
 import { runDoctor } from "./doctor.ts";
 import { DatabaseMaintenance } from "../persistence/DatabaseMaintenance.ts";
 

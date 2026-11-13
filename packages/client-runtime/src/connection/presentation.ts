@@ -94,18 +94,11 @@ export function connectionStatusTitle(connection: EnvironmentConnectionPresentat
   return connectionStatusText({ ...connection, error: null });
 }
 
-/**
- * The T3 Connect address wins whenever it is known: it works for agents anywhere, while the
- * connected route is often a LAN or loopback address. SSH routes ride a local forward that
- * disappears with the client, so they have no stable address.
- */
+/** SSH routes ride a local forward that disappears with the client, so they have no stable address. */
 export function environmentMcpUrl(input: {
   readonly entry: ConnectionCatalogEntry;
-  readonly relayHttpBaseUrl?: string | undefined;
   readonly connectedTarget?: ConnectionTarget | null | undefined;
 }): string | null {
-  const relayMcpUrl = input.relayHttpBaseUrl ? mcpUrlFromBase(input.relayHttpBaseUrl) : null;
-  if (relayMcpUrl !== null) return relayMcpUrl;
   const connectedRouteId = input.connectedTarget ? connectionRouteId(input.connectedTarget) : null;
   const routes = connectionRoutes(input.entry);
   const connectedRoute = routes.find(
@@ -136,8 +129,6 @@ export function connectionCatalogDisplayUrl(entry: ConnectionCatalogEntry): stri
   switch (entry.target._tag) {
     case "PrimaryConnectionTarget":
       return entry.target.httpBaseUrl;
-    case "RelayConnectionTarget":
-      return null;
     case "BearerConnectionTarget":
       return Option.isSome(entry.profile) && entry.profile.value._tag === "BearerConnectionProfile"
         ? entry.profile.value.httpBaseUrl

@@ -272,9 +272,9 @@ function scheduledTaskSummary(task: ScheduledTask, mayRun: boolean): Orchestrato
     schedule: task.schedule,
     nextRunAt: task.nextRunAt,
     lastRunStatus: task.lastRunStatus,
-    ...(task.webhook?.url == null || !mayRun || task.blockedByPolicy !== undefined
+    ...(task.webhook === undefined || !mayRun || task.blockedByPolicy !== undefined
       ? {}
-      : { webhookUrl: task.webhook.url }),
+      : { webhookPath: task.webhook.path }),
     ...(task.webhook === undefined
       ? {}
       : { webhookSignature: task.webhook.hasSecret ? "set" : "none" }),

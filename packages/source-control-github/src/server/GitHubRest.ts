@@ -8,7 +8,6 @@ import * as Schema from "effect/Schema";
 import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/http";
 
 import { collectUint8StreamText } from "@t3tools/provider-core/server/collectStreamText";
-import * as GitHubAppSignIn from "./GitHubAppSignIn.ts";
 import * as GitHubCredentials from "./GitHubCredentials.ts";
 import * as GitHubQuota from "./GitHubQuota.ts";
 import * as GitHubRequestPolicy from "./GitHubRequestPolicy.ts";
@@ -50,7 +49,6 @@ export class GitHubRest extends Context.Service<
   {
     readonly rest: (input: GitHubRestInput) => Effect.Effect<GitHubRestResponse, GitHubApiError>;
     readonly credential: GitHubRequestPolicy.GitHubRequestPolicy["Service"]["credential"];
-    readonly appCredential: GitHubRequestPolicy.GitHubRequestPolicy["Service"]["appCredential"];
   }
 >()("@t3tools/source-control-github/server/GitHubRest") {}
 
@@ -208,11 +206,7 @@ export const make = Effect.gen(function* () {
     );
   };
 
-  return GitHubRest.of({
-    rest,
-    credential: policy.credential,
-    appCredential: policy.appCredential,
-  });
+  return GitHubRest.of({ rest, credential: policy.credential });
 });
 
 export const layer = Layer.effect(GitHubRest, make).pipe(
@@ -226,6 +220,5 @@ export const layer = Layer.effect(GitHubRest, make).pipe(
  */
 export const layerWithDependencies = layer.pipe(
   Layer.provideMerge(GitHubCredentials.layer),
-  Layer.provideMerge(GitHubAppSignIn.layer),
   Layer.provideMerge(GitHubQuota.layer),
 );

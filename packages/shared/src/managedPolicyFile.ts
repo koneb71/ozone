@@ -104,13 +104,17 @@ const WINDOWS_POLICY_SUBKEY = "SOFTWARE\\Policies\\T3Tools\\T3Code";
  */
 export const WINDOWS_POLICY_KEY = `HKLM\\${WINDOWS_POLICY_SUBKEY}`;
 
+type WindowsPolicyValues = Record<
+  string,
+  { readonly type: "string" | "json" | "boolean"; readonly path: ReadonlyArray<string> }
+>;
+
 /** Each value a Group Policy control writes, and where it lands in the document. */
 export const WINDOWS_POLICY_VALUES = {
   Organization: { type: "string", path: ["organization"] },
   SupportUrl: { type: "string", path: ["supportUrl"] },
   Settings: { type: "json", path: ["settings"] },
   MaxRuntimeMode: { type: "string", path: ["limits", "maxRuntimeMode"] },
-  Connect: { type: "boolean", path: ["limits", "connect"] },
   WebhookTasks: { type: "boolean", path: ["limits", "webhookTasks"] },
   Telemetry: { type: "boolean", path: ["limits", "telemetry"] },
   BrowserCookieImport: { type: "boolean", path: ["limits", "browserCookieImport"] },
@@ -118,10 +122,13 @@ export const WINDOWS_POLICY_VALUES = {
   UpdatesMode: { type: "string", path: ["limits", "updates", "mode"] },
   UpdatesFeedUrl: { type: "string", path: ["limits", "updates", "feedUrl"] },
   AllowNightly: { type: "boolean", path: ["limits", "updates", "allowNightly"] },
-} as const satisfies Record<
-  string,
-  { readonly type: "string" | "json" | "boolean"; readonly path: ReadonlyArray<string> }
->;
+} as const satisfies WindowsPolicyValues;
+
+/** Values no template control writes any more. A machine that still has one set keeps its policy. */
+const WINDOWS_POLICY_RETIRED_VALUES = {
+  Connect: { type: "boolean", path: ["limits", "connect"] },
+} as const satisfies WindowsPolicyValues;
+const WINDOWS_POLICY_READ_VALUES = { ...WINDOWS_POLICY_VALUES, ...WINDOWS_POLICY_RETIRED_VALUES };
 
 /** Subkeys of checkboxes: every value set to 1 is one entry of the list at `path`. */
 export const WINDOWS_POLICY_LISTS = {
@@ -382,10 +389,9 @@ function windowsPolicyDocument(
 ): { readonly document: unknown } | { readonly error: string } {
   // Registry names ignore case; a hand-written `organization` is still Organization.
   const canonical = new Map(
-    [...Object.keys(WINDOWS_POLICY_VALUES), ...Object.keys(WINDOWS_POLICY_GROUPS)].map((name) => [
-      name.toLowerCase(),
-      name,
-    ]),
+    [...Object.keys(WINDOWS_POLICY_READ_VALUES), ...Object.keys(WINDOWS_POLICY_GROUPS)].map(
+      (name) => [name.toLowerCase(), name],
+    ),
   );
   values = values.map((value) =>
     value.key === ""
@@ -426,10 +432,10 @@ function windowsPolicyDocument(
       continue;
     }
     if (Object.hasOwn(WINDOWS_POLICY_GROUPS, value.name)) continue;
-    if (!Object.hasOwn(WINDOWS_POLICY_VALUES, value.name)) {
+    if (!Object.hasOwn(WINDOWS_POLICY_READ_VALUES, value.name)) {
       return { error: `${value.name} is not a T3 Code policy value` };
     }
-    const field = WINDOWS_POLICY_VALUES[value.name as keyof typeof WINDOWS_POLICY_VALUES];
+    const field = WINDOWS_POLICY_READ_VALUES[value.name as keyof typeof WINDOWS_POLICY_READ_VALUES];
     if (field.type === "boolean") {
       const flag = dwordBoolean(value);
       if (flag === undefined) return { error: `${where} must be a DWORD of 0 or 1` };

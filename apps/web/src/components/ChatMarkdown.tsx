@@ -96,6 +96,7 @@ import { defaultUrlTransform } from "react-markdown";
 import { parseAssistantCitationHref } from "@t3tools/shared/assistantCitations";
 import { parseComposerContextHref } from "@t3tools/shared/composerContextReferences";
 import { parseThreadLinkHref } from "@t3tools/shared/threadLinks";
+import { appLinkOrigin } from "../appLinks";
 import { AssistantCitationEmbed } from "./chat/AssistantCitationChip";
 import { MarkdownThreadLink } from "./chat/MarkdownThreadLink";
 import { mathKind } from "@t3tools/shared/markdownMath";
@@ -413,7 +414,7 @@ const CHAT_MARKDOWN_LITERAL_HTML_REHYPE_PLUGINS = [
 function markdownUrlTransform(href: string) {
   if (parseAssistantCitationHref(href)) return href;
   if (parseComposerContextHref(href)) return href;
-  if (parseThreadLinkHref(href)) return href;
+  if (parseThreadLinkHref(href, appLinkOrigin())) return href;
   if (isWindowsDrivePathHref(href)) return href;
   if (isLocalEditorFileHref(href)) return href;
   return rewriteMarkdownFileUriHref(href) ?? defaultUrlTransform(href);
@@ -1127,11 +1128,12 @@ const CHAT_MARKDOWN_COMPONENTS = {
     if (citation) {
       return <AssistantCitationEmbed citation={citation} leading={leading} trailing={trailing} />;
     }
-    const threadLink = href ? parseThreadLinkHref(href) : null;
+    const appOrigin = appLinkOrigin();
+    const threadLink = href ? parseThreadLinkHref(href, appOrigin) : null;
     if (threadLink) {
       const written = hastPlainTextDeep(node);
       // An autolink's text is its own URL, which is no label.
-      const label = written && parseThreadLinkHref(written) === null ? written : null;
+      const label = written && parseThreadLinkHref(written, appOrigin) === null ? written : null;
       return environmentId ? (
         <MarkdownThreadLink environmentId={environmentId} link={threadLink} label={label} />
       ) : (

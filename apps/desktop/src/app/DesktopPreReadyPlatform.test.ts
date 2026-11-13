@@ -210,54 +210,52 @@ describe("DesktopPreReadyPlatform", () => {
     ).pipe(Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())));
   });
 
-  it.effect(
-    "acquires a synchronous pre-ready layer before an asynchronous Clerk-shaped layer",
-    () =>
-      Effect.gen(function* () {
-        class ClerkShaped extends Context.Service<ClerkShaped, { readonly ready: true }>()(
-          "@t3tools/desktop/app/DesktopPreReadyPlatform.test/ClerkShaped",
-        ) {}
+  it.effect("acquires a synchronous pre-ready layer before an asynchronous layer", () =>
+    Effect.gen(function* () {
+      class AsyncService extends Context.Service<AsyncService, { readonly ready: true }>()(
+        "@t3tools/desktop/app/DesktopPreReadyPlatform.test/AsyncService",
+      ) {}
 
-        const events: Array<string> = [];
-        registerSchemesMock.mockImplementation(() => {
-          events.push("pre-ready");
-        });
+      const events: Array<string> = [];
+      registerSchemesMock.mockImplementation(() => {
+        events.push("pre-ready");
+      });
 
-        const layerPreReady = DesktopPreReadyPlatform.layer.pipe(
-          Layer.provide(Layer.succeed(HostProcess.Platform, "darwin")),
-        );
+      const layerPreReady = DesktopPreReadyPlatform.layer.pipe(
+        Layer.provide(Layer.succeed(HostProcess.Platform, "darwin")),
+      );
 
-        const layerClerkShaped = Layer.effect(
-          ClerkShaped,
-          Effect.promise(() => Promise.resolve()).pipe(
-            Effect.map(() => {
-              events.push("clerk");
-              return { ready: true as const };
-            }),
-          ),
-        );
+      const layerAsync = Layer.effect(
+        AsyncService,
+        Effect.promise(() => Promise.resolve()).pipe(
+          Effect.map(() => {
+            events.push("async");
+            return { ready: true as const };
+          }),
+        ),
+      );
 
-        const layerRuntime = layerClerkShaped.pipe(
-          Layer.flatMap((clerkContext) => Layer.succeedContext(clerkContext)),
-          Layer.provideMerge(layerPreReady),
-        );
+      const layerRuntime = layerAsync.pipe(
+        Layer.flatMap((asyncContext) => Layer.succeedContext(asyncContext)),
+        Layer.provideMerge(layerPreReady),
+      );
 
-        const result = yield* Effect.all({
-          clerk: ClerkShaped,
-          preReady: DesktopPreReadyPlatform.DesktopPreReadyElectronOptions,
-        }).pipe(Effect.provide(layerRuntime));
+      const result = yield* Effect.all({
+        async: AsyncService,
+        preReady: DesktopPreReadyPlatform.DesktopPreReadyElectronOptions,
+      }).pipe(Effect.provide(layerRuntime));
 
-        assert.deepEqual(result, {
-          clerk: { ready: true },
-          preReady: {
-            linux: null,
-            linuxPasswordStoreCommandLine: null,
-          },
-        });
-        assert.deepEqual(events, ["pre-ready", "clerk"]);
-        assert.equal(registerSchemesMock.mock.calls.length, 1);
-        assert.equal(appendSwitchMock.mock.calls.length, 0);
-        assert.equal(setDesktopNameMock.mock.calls.length, 0);
-      }),
+      assert.deepEqual(result, {
+        async: { ready: true },
+        preReady: {
+          linux: null,
+          linuxPasswordStoreCommandLine: null,
+        },
+      });
+      assert.deepEqual(events, ["pre-ready", "async"]);
+      assert.equal(registerSchemesMock.mock.calls.length, 1);
+      assert.equal(appendSwitchMock.mock.calls.length, 0);
+      assert.equal(setDesktopNameMock.mock.calls.length, 0);
+    }),
   );
 });

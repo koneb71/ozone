@@ -1,4 +1,5 @@
 import { pasteTextToFocusComposer, shouldRedirectInputToComposer } from "./composerFocusRedirect";
+import { appLinkOrigin } from "../../appLinks";
 import { readPastedComposerContext } from "../composerInlineTokenPaste";
 import { isPasteAsTextShortcut } from "@t3tools/client-runtime/text-paste";
 import { useEffect, useRef } from "react";
@@ -38,7 +39,7 @@ export function usePasteToFocusComposer(
       const bypassAutoAttachment = Date.now() <= pasteAsTextShortcutUntilRef.current;
       pasteAsTextShortcutUntilRef.current = 0;
       if (
-        ((readPastedComposerContext(clipboardData)?.records.length ?? 0) === 0 &&
+        ((readPastedComposerContext(clipboardData, appLinkOrigin())?.records.length ?? 0) === 0 &&
           composerRef.current?.pasteTextAtEnd(text, { bypassAutoAttachment })) ||
         composerRef.current?.insertTextAtEnd(text, { clipboardData })
       ) {

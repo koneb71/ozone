@@ -11,7 +11,6 @@ import * as TestSourceControlHost from "@t3tools/source-control-testing/TestSour
 import * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
 
 import * as GitHubCredentials from "./GitHubCredentials.ts";
-import * as GitHubAppSignIn from "./GitHubAppSignIn.ts";
 import * as GitHubRest from "./GitHubRest.ts";
 import * as GitHubSourceControlProvider from "./GitHubSourceControlProvider.ts";
 
@@ -27,7 +26,6 @@ const makeDiscovery = (credential: GitHubRest.GitHubRest["Service"]["credential"
     Effect.provide(
       Layer.mergeAll(
         Layer.mock(GitHubRest.GitHubRest)({ credential }),
-        Layer.mock(GitHubAppSignIn.GitHubAppSignIn)({ enabled: false }),
         TestSourceControlHost.layer(),
       ),
     ),
@@ -154,7 +152,6 @@ it.effect.each([
               });
             },
           }),
-          Layer.mock(GitHubAppSignIn.GitHubAppSignIn)({ enabled: false }),
           Layer.effect(
             SourceControlHost.SourceControlHost,
             Effect.gen(function* () {

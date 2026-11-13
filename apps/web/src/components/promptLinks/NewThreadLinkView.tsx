@@ -46,7 +46,6 @@ import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../ui/empty";
 import { SidebarInset } from "../ui/sidebar";
 import { stackedThreadToast, toastManager } from "../ui/toast";
-import { suggestAppAccessForRemote } from "../sourceControlAppAccessToast";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { placeLinkedPrompt, warnAboutHiddenCharacters } from "./linkedPrompt";
 
@@ -244,10 +243,6 @@ export function NewThreadLinkView({ link }: { readonly link: NewThreadLink }) {
       setState({ status: "missing-repository", repository });
       return;
     }
-    void suggestAppAccessForRemote(
-      environmentId,
-      `https://github.com/${repository.owner}/${repository.name}.git`,
-    );
     const project = await waitForProject(
       scopeProjectRef(environmentId, result.value.projectId),
       5_000,

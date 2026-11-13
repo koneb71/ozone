@@ -30,7 +30,6 @@ import { readEnvironmentScope, useEnvironmentScope } from "./session";
 import { sourceControlEnvironment } from "./sourceControl";
 import { useAtomCommand } from "./use-atom-command";
 import { vcsActionManager, vcsEnvironment } from "./vcs";
-import { suggestAppAccessForRemote } from "../components/sourceControlAppAccessToast";
 
 export type SourceControlActionKind =
   | "init"
@@ -293,9 +292,6 @@ export function useSourceControlPublishRepositoryAction(scope: SourceControlActi
         ...input,
       },
     });
-    if (result._tag === "Success") {
-      void suggestAppAccessForRemote(target.environmentId, result.value.remoteUrl);
-    }
     return result;
   };
   return useAction({

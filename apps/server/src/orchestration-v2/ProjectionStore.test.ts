@@ -1,3 +1,4 @@
+import { projectThreadAwarenessV2 } from "@t3tools/shared/agentAwareness";
 import * as NodeSqlite from "node:sqlite";
 
 import { assert, it, vi } from "@effect/vitest";
@@ -30,7 +31,6 @@ import {
   TurnItemId,
   type ThreadPullRequestLink,
   isLiveSubagentShell,
-  isListedThreadLineage,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -42,7 +42,6 @@ import * as Schema from "effect/Schema";
 import * as Tracer from "effect/Tracer";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Statement from "effect/sql/Statement";
-import { projectThreadAwarenessV2 } from "@t3tools/shared/agentAwareness";
 
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
@@ -109,37 +108,6 @@ const assertShellIndexCoversShells = Effect.fnUntraced(function* () {
   const snapshot = yield* store.getShellSnapshot();
   const shells = snapshot.threads;
   const index = yield* store.listActiveShellIndex();
-  const { tracer, statements, queryTransactions } = traceSqlStatements();
-  const activity = yield* store.getAgentAwarenessSnapshot().pipe(Effect.withTracer(tracer));
-  assert.equal(activity.snapshotSequence, snapshot.snapshotSequence);
-  const awareness = (thread: Parameters<typeof projectThreadAwarenessV2>[0]["thread"]) =>
-    projectThreadAwarenessV2({
-      environmentId: EnvironmentId.make("test"),
-      project: { title: "Test" },
-      thread,
-    });
-  assert.deepEqual(
-    activity.threads.map(awareness),
-    shells.filter((thread) => isListedThreadLineage(thread.lineage)).map(awareness),
-  );
-  assert.deepEqual(
-    activity.threads.map((thread) => [thread.id, thread.projectId, thread.latestRunCompletedAt]),
-    shells
-      .filter((thread) => isListedThreadLineage(thread.lineage))
-      .map((thread) => [thread.id, thread.projectId, thread.latestRunCompletedAt]),
-  );
-  assert.isFalse(statements.some((statement) => /COUNT\(\*\)|GROUP BY/i.test(statement)));
-  assert.isTrue(queryTransactions.every((transaction) => transaction !== null));
-  assert.equal(new Set(queryTransactions).size, 1);
-  for (const shell of [...shells, ...snapshot.archivedThreads]) {
-    const targeted = yield* store
-      .getAgentAwarenessSnapshot(shell.id)
-      .pipe(Effect.withTracer(tracer));
-    assert.deepEqual(targeted.threads.map(awareness), [awareness(shell)]);
-    assert.deepEqual(targeted.threads[0]?.archivedAt, shell.archivedAt);
-  }
-  assert.isFalse(statements.some((statement) => /COUNT\(\*\)|GROUP BY/i.test(statement)));
-
   const iso = (value: DateTime.Utc | null | undefined) =>
     value == null ? null : DateTime.formatIso(value);
   const trimmed = (
@@ -313,7 +281,6 @@ it.effect("routes full projection reads to readers and retains uncommitted write
       },
     });
     const { queries, trace } = traceSqlRouting();
-    yield* store.getAgentAwarenessSnapshot().pipe(trace);
     const projection = yield* store.getThreadProjection(threadId).pipe(trace);
     assert.equal(projection.thread.id, threadId);
     assert.deepEqual(
@@ -385,12 +352,6 @@ it.effect("routes full projection reads to readers and retains uncommitted write
         assert.equal(
           (yield* store.getMessagesById(threadId, [messageId])).get(messageId)?.text,
           "Uncommitted message",
-        );
-        assert.equal(
-          (yield* store.getAgentAwarenessSnapshot()).threads.find(
-            (thread) => thread.id === threadId,
-          )?.title,
-          "Uncommitted title",
         );
         assert.equal(
           (yield* store.getThreadProjection(threadId)).thread.title,

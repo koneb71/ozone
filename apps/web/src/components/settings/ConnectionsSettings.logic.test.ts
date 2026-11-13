@@ -3,10 +3,24 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import {
   applyWslEnableSelection,
   resolveAccessEnvironmentId,
+  resolvePairingUrl,
   resolveTailscaleServeBaseUrl,
   selectQrEndpointOption,
   togglePairingScopeSelection,
 } from "./ConnectionsSettings.logic";
+
+describe("resolvePairingUrl", () => {
+  it.each([
+    ["http://192.168.1.44:3773", "http://192.168.1.44:3773/pair#token=PAIRCODE"],
+    [
+      "https://host.tailnet.example.ts.net:3773",
+      "https://host.tailnet.example.ts.net:3773/pair#token=PAIRCODE",
+    ],
+    ["http://127.0.0.1:3773/", "http://127.0.0.1:3773/pair#token=PAIRCODE"],
+  ])("points %s at that server's own pair page", (endpointUrl, expected) => {
+    expect(resolvePairingUrl(endpointUrl, "PAIRCODE")).toBe(expected);
+  });
+});
 
 describe("togglePairingScopeSelection", () => {
   it.each([

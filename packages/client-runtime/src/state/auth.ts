@@ -93,7 +93,6 @@ export function createAuthEnvironmentAtoms<R, E>(
       execute: (input: AuthCreatePairingCredentialInput) =>
         executeConnectedEnvironmentHttpRequest({
           group: "auth",
-          method: "POST",
           url: (urls) => urls.pairingCredential(),
           timeoutMs: ACCESS_REQUEST_TIMEOUT_MS,
           request: ({ client, headers }) => client.pairingCredential({ headers, payload: input }),
@@ -104,7 +103,6 @@ export function createAuthEnvironmentAtoms<R, E>(
       execute: (input: AuthRevokePairingLinkInput) =>
         executeConnectedEnvironmentHttpRequest({
           group: "auth",
-          method: "POST",
           url: (urls) => urls.revokePairingLink(),
           timeoutMs: ACCESS_REQUEST_TIMEOUT_MS,
           request: ({ client, headers }) => client.revokePairingLink({ headers, payload: input }),
@@ -115,7 +113,6 @@ export function createAuthEnvironmentAtoms<R, E>(
       execute: (input: AuthRevokeClientSessionInput) =>
         executeConnectedEnvironmentHttpRequest({
           group: "auth",
-          method: "POST",
           url: (urls) => urls.revokeClient(),
           timeoutMs: ACCESS_REQUEST_TIMEOUT_MS,
           request: ({ client, headers }) => client.revokeClient({ headers, payload: input }),
@@ -126,7 +123,6 @@ export function createAuthEnvironmentAtoms<R, E>(
       execute: (_input: null) =>
         executeConnectedEnvironmentHttpRequest({
           group: "auth",
-          method: "POST",
           url: (urls) => urls.revokeOtherClients(),
           timeoutMs: ACCESS_REQUEST_TIMEOUT_MS,
           request: ({ client, headers }) => client.revokeOtherClients({ headers }),

@@ -133,7 +133,7 @@ function gitHubProviderFailure(
             : "failed",
       };
     case "GitHubApiNotFoundError":
-      return error.credential === undefined || error.credential === "app"
+      return error.credential === undefined
         ? { reason: "not-found" }
         : { reason: "not-found", accessHint: REPOSITORY_ACCESS_HINTS[error.credential] };
     default:
@@ -141,7 +141,7 @@ function gitHubProviderFailure(
   }
 }
 
-const REPOSITORY_ACCESS_HINTS: Record<Exclude<GitHubCredentialSource, "app">, string> = {
+const REPOSITORY_ACCESS_HINTS: Record<GitHubCredentialSource, string> = {
   settings:
     "Your saved GitHub token can't see it. Give it access, or change it in Settings → Source Control.",
   env: "The server's environment token can't see it. Give it access, or unset it.",
@@ -492,8 +492,6 @@ export const make = Effect.gen(function* () {
       cli
         .getPullRequestWatchFingerprint(input)
         .pipe(Effect.mapError(fail("getChangeRequestWatchFingerprint"))),
-
-    changeRequestEvents: (input) => cli.pullRequestEvents(input),
 
     getChangeRequestPreview: (input) =>
       cli.getPullRequestPreview(input).pipe(Effect.mapError(fail("getChangeRequestPreview"))),

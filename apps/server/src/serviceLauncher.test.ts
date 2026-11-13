@@ -19,7 +19,7 @@ import {
   renderBootServicePlist,
   renderBootServiceTask,
   renderBootServiceUnit,
-} from "./cloud/bootService.ts";
+} from "./service/bootService.ts";
 import {
   databaseBackupBlocker,
   Launcher,
@@ -41,7 +41,7 @@ import {
   SERVICE_LAUNCHER_PROTOCOL,
   SERVICE_RESTART_PENDING_FILE,
   SERVICE_STOP_MARKER_FILE,
-} from "./cloud/serviceProtocol.ts";
+} from "./service/serviceProtocol.ts";
 
 const spawnedChildren = vi.hoisted((): Array<NodeChildProcess.ChildProcess> => []);
 

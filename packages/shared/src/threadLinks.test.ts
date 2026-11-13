@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { EnvironmentId, ThreadId, type ScopedThreadRef } from "@t3tools/contracts";
 
 import {
-  formatHostedThreadLink,
+  appThreadLink,
+  formatAppThreadLink,
   formatThreadLink,
   guessThreadLinkRef,
-  hostedThreadLink,
   parseThreadLinkHref,
   relabelThreadLinks,
   threadLinkCandidates,
@@ -202,63 +202,77 @@ describe("thread links", () => {
   });
 });
 
-describe("hosted thread links", () => {
+describe("app thread links", () => {
+  const APP = "http://localhost:3773";
+
   it("escapes every id character a sentence or path could claim, and reads it back", () => {
     const thread = ref("env.1", "thread:delegated/mcp%3A1.");
-    const link = hostedThreadLink(thread);
-    expect(link).toBe("https://app.t3.codes/threads/env%2E1/thread%3Adelegated%2Fmcp%253A1%2E");
-    expect(parseThreadLinkHref(link)).toEqual(thread);
-    expect(hostedThreadLink(thread, "https://preview.t3.codes/")).toMatch(
-      /^https:\/\/preview\.t3\.codes\/threads\//,
+    const link = appThreadLink(thread, APP);
+    expect(link).toBe(`${APP}/threads/env%2E1/thread%3Adelegated%2Fmcp%253A1%2E`);
+    expect(parseThreadLinkHref(link, APP)).toEqual(thread);
+    expect(appThreadLink(thread, "https://desk.tail1234.ts.net/")).toMatch(
+      /^https:\/\/desk\.tail1234\.ts\.net\/threads\//,
     );
   });
 
-  it("reads only a bare thread path on the hosted app", () => {
-    expect(parseThreadLinkHref("https://app.t3.codes/threads/env-1/thread-1")).toEqual(
-      ref("env-1", "thread-1"),
-    );
-    expect(parseThreadLinkHref("https://app.t3.codes/threads/env-1/thread-1?prompt=go")).toBeNull();
-    expect(parseThreadLinkHref("https://app.t3.codes/threads/env-1/thread-1/extra")).toBeNull();
-    expect(parseThreadLinkHref("https://app.t3.codes/threads/env-1")).toBeNull();
-    expect(parseThreadLinkHref("https://app.t3.codes/env-1/thread-1")).toBeNull();
-    expect(parseThreadLinkHref("https://evil.test/threads/env-1/thread-1")).toBeNull();
+  it.each([
+    { href: `${APP}/threads/env-1/thread-1`, origin: APP, link: ref("env-1", "thread-1") },
+    // The origin is what the app reports, whatever path or slash it carries.
+    { href: `${APP}/threads/env-1/thread-1`, origin: `${APP}/`, link: ref("env-1", "thread-1") },
+    {
+      href: "https://desk.tail1234.ts.net/threads/env-1/thread-1",
+      origin: "https://desk.tail1234.ts.net/env-1/thread-1",
+      link: ref("env-1", "thread-1"),
+    },
+    { href: `${APP}/threads/env-1/thread-1?prompt=go`, origin: APP, link: null },
+    { href: `${APP}/threads/env-1/thread-1/extra`, origin: APP, link: null },
+    { href: `${APP}/threads/env-1`, origin: APP, link: null },
+    { href: `${APP}/env-1/thread-1`, origin: APP, link: null },
+    { href: "https://evil.test/threads/env-1/thread-1", origin: APP, link: null },
+    { href: "http://localhost:3774/threads/env-1/thread-1", origin: APP, link: null },
+    { href: "https://app.t3.codes/threads/env-1/thread-1", origin: APP, link: null },
+    { href: `${APP}/threads/env-1/thread-1`, origin: undefined, link: null },
+    { href: `${APP}/threads/env-1/thread-1`, origin: "not a url", link: null },
+    { href: "t3-thread://v2/env-1/thread-1", origin: undefined, link: ref("env-1", "thread-1") },
+    { href: "t3-thread://v2/env-1/thread-1", origin: APP, link: ref("env-1", "thread-1") },
+  ])("reads $href on $origin", ({ href, origin, link }) => {
+    expect(parseThreadLinkHref(href, origin)).toEqual(link);
   });
 
   it("writes a copied link a reader can follow, labeled when it has a title", () => {
-    expect(formatHostedThreadLink(ref("e", "t1"), "Fix [ci]")).toBe(
-      "[Fix ci](https://app.t3.codes/threads/e/t1)",
+    expect(formatAppThreadLink(ref("e", "t1"), "Fix [ci]", APP)).toBe(
+      `[Fix ci](${APP}/threads/e/t1)`,
     );
-    expect(formatHostedThreadLink(ref("e", "t1"), " ")).toBe("https://app.t3.codes/threads/e/t1");
+    expect(formatAppThreadLink(ref("e", "t1"), " ", APP)).toBe(`${APP}/threads/e/t1`);
   });
 
-  it("titles hosted links in every Markdown form and writes them as v2 links", () => {
+  it("titles app links in every Markdown form and writes them as v2 links", () => {
     const title = titlesIn({ there: { t1: "There" } });
-    expect(
-      relabelThreadLinks(
-        [
-          "See https://app.t3.codes/threads/there/t1.",
-          "[old](https://app.t3.codes/threads/there/t1)",
-          "<https://app.t3.codes/threads/there/t1>",
-          "`https://app.t3.codes/threads/there/t1`",
-          "https://app.t3.codes/threads/there/t1?prompt=go",
-        ].join("\n"),
-        local,
-        title,
-      ),
-    ).toBe(
+    const markdown = [
+      `See ${APP}/threads/there/t1.`,
+      `[old](${APP}/threads/there/t1)`,
+      `<${APP}/threads/there/t1>`,
+      `\`${APP}/threads/there/t1\``,
+      `${APP}/threads/there/t1?prompt=go`,
+    ].join("\n");
+    expect(relabelThreadLinks(markdown, local, title, APP)).toBe(
       [
         "See [There](t3-thread://v2/there/t1).",
         "[There](t3-thread://v2/there/t1)",
         "[There](t3-thread://v2/there/t1)",
-        "`https://app.t3.codes/threads/there/t1`",
-        "https://app.t3.codes/threads/there/t1?prompt=go",
+        `\`${APP}/threads/there/t1\``,
+        `${APP}/threads/there/t1?prompt=go`,
       ].join("\n"),
     );
-    expect(
-      relabelThreadLinks("https://app.t3.codes/threads/there/t1", local, () => undefined),
-    ).toBe("Thread on another machine");
-    expect(threadLinkRefs("Open https://app.t3.codes/threads/there/t%3A1", local)).toEqual([
+    // Links to another origin, or with no origin to match, stay as written.
+    expect(relabelThreadLinks(markdown, local, title)).toBe(markdown);
+    expect(relabelThreadLinks(markdown, local, title, "https://other.example")).toBe(markdown);
+    expect(relabelThreadLinks(`${APP}/threads/there/t1`, local, () => undefined, APP)).toBe(
+      "Thread on another machine",
+    );
+    expect(threadLinkRefs(`Open ${APP}/threads/there/t%3A1`, local, APP)).toEqual([
       ref("there", "t:1"),
     ]);
+    expect(threadLinkRefs(`Open ${APP}/threads/there/t%3A1`, local)).toEqual([]);
   });
 });

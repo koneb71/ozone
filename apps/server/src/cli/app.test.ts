@@ -21,7 +21,7 @@ import * as TestConsole from "effect/testing/TestConsole";
 import { Command } from "effect/cli";
 import { describe, expect } from "vite-plus/test";
 
-import { makeCli } from "../binCli.ts";
+import { cli } from "../binCli.ts";
 import { PersistedServerRuntimeState } from "../serverRuntimeState.ts";
 
 // ozone-seam: the default data directory name.
@@ -56,7 +56,7 @@ const setProcessEnv = (name: string, value: string) => {
 };
 
 const runCli = (args: ReadonlyArray<string>, env: Record<string, string> = {}) =>
-  Command.runWith(makeCli(), { version: "0.0.0" })(args).pipe(
+  Command.runWith(cli, { version: "0.0.0" })(args).pipe(
     Effect.provide(
       Layer.mergeAll(
         NodeServices.layer,

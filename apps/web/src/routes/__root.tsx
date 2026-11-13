@@ -17,14 +17,10 @@ import { APP_DISPLAY_NAME, APP_VERSION } from "../branding";
 import { AppSidebarLayout } from "../components/AppSidebarLayout";
 import { CommandPalette } from "../components/CommandPalette";
 import { CustomSnoozeDialogHost } from "../components/CustomSnoozeDialog";
-import { GuestShareDialogHost } from "../components/chat/GuestShareControls";
-import { UseInAnotherAppDialogHost } from "../components/mcp/UseInAnotherAppDialog";
 import { AddProjectToMachineDialogHost } from "../components/AddProjectToMachineDialog";
 import { ConfirmDialogHost } from "../components/ConfirmDialogHost";
 import { DevReplayHost } from "../components/DevReplayHost";
 import { FirstRunGate } from "../components/onboarding/FirstRunGate";
-import { ConnectOnboardingDialog } from "../components/cloud/ConnectOnboardingDialog";
-import { RelayClientInstallDialog } from "../components/cloud/RelayClientInstallDialog";
 import { SshPasswordPromptDialog } from "../components/desktop/SshPasswordPromptDialog";
 import { SnapShotCoordinator } from "../components/desktop/SnapShotCoordinator";
 import { DesktopAppActivationCoordinator } from "../components/desktop/DesktopAppActivationCoordinator";
@@ -48,9 +44,6 @@ import {
 import { useUiStateStore } from "../uiStateStore";
 import { configureClientTracing } from "../observability/clientTracing";
 import { resolveInitialServerAuthGateState } from "../environments/primary";
-import { GUEST_PAGE_PATH } from "../guestPage";
-import { hasHostedPairingRequest, isHostedStaticApp } from "../hostedPairing";
-import { useHostedPromptLinkLanding } from "../components/promptLinks/HostedPromptLinkLanding";
 import { isLocalEnvironmentDisabled } from "../localEnvironment";
 import { useAtomValue } from "@effect/atom-react";
 import { primaryServerConfigAtom, primaryServerWelcomeAtom } from "../state/server";
@@ -61,28 +54,10 @@ import { shouldResumeSnapShotSetupOnStartup } from "../lib/snapShotSetupResume";
 
 export const Route = createRootRoute({
   beforeLoad: async ({ location }) => {
-    // Guest links open on the owner's tunnel host in a browser with no T3 session, and must
-    // not trigger pairing or an environment connection.
-    if (location.pathname === GUEST_PAGE_PATH) {
+    if (isLocalEnvironmentDisabled()) {
       return {
         authGateState: {
-          status: "guest",
-        } as const,
-      };
-    }
-
-    if (location.pathname === "/pair" && hasHostedPairingRequest(new URL(window.location.href))) {
-      return {
-        authGateState: {
-          status: "hosted-pairing",
-        } as const,
-      };
-    }
-
-    if (isLocalEnvironmentDisabled() || isHostedStaticApp(new URL(window.location.href))) {
-      return {
-        authGateState: {
-          status: "hosted-static",
+          status: "local-environment-off",
         } as const,
       };
     }
@@ -148,28 +123,16 @@ function RootRouteBranch() {
   // Once true, stays true: a visit to /welcome means the bootstrap already chose a route.
   const [returningFromWelcome, setReturningFromWelcome] = useState(pathname === "/welcome");
   if (pathname === "/welcome" && !returningFromWelcome) setReturningFromWelcome(true);
-  const hostedPromptLinkLanding = useHostedPromptLinkLanding(
-    authGateState.status === "hosted-static",
-  );
 
-  if (pathname === GUEST_PAGE_PATH) return <Outlet />;
-
-  if (
-    pathname === "/pair" ||
-    pathname === "/connect" ||
-    pathname === "/connect-agent" ||
-    pathname === "/approve-agent"
-  ) {
+  if (pathname === "/pair" || pathname === "/connect-agent") {
     return <Outlet />;
   }
 
-  // Handle links before onboarding redirects lose them.
-  if (hostedPromptLinkLanding !== null) {
-    return hostedPromptLinkLanding;
-  }
-
   const isWelcome = pathname === "/welcome";
-  if (authGateState.status !== "authenticated" && authGateState.status !== "hosted-static") {
+  if (
+    authGateState.status !== "authenticated" &&
+    authGateState.status !== "local-environment-off"
+  ) {
     return <Outlet />;
   }
 
@@ -182,17 +145,13 @@ function RootRouteBranch() {
         <DesktopWebLinkCoordinator />
       ) : null}
       {isElectron ? <RunningThreadKeepAlive /> : null}
-      <RelayClientInstallDialog />
-      <ConnectOnboardingDialog />
       <SshPasswordPromptDialog />
       <SnapShotCoordinator />
       <ReopenClosedViewShortcut />
       <ConfirmDialogHost />
       <CustomSnoozeDialogHost />
-      <GuestShareDialogHost />
       <ProjectCloneToastCoordinator />
       <AddProjectToMachineDialogHost />
-      <UseInAnotherAppDialogHost />
       {import.meta.env.DEV && primaryEnvironmentAuthenticated ? <DevReplayHost /> : null}
     </>
   );
@@ -216,7 +175,7 @@ function RootRouteBranch() {
       ) : (
         <FirstRunGate
           enabled={primaryEnvironmentAuthenticated}
-          hostedStatic={authGateState.status === "hosted-static"}
+          localEnvironmentOff={authGateState.status === "local-environment-off"}
         >
           {appHosts}
           {primaryEnvironmentAuthenticated ? (

@@ -13,6 +13,12 @@ describe("provider auth return destinations", () => {
       ).toBe(`${scheme}://app/settings/providers?instanceId=work`);
     },
   );
+  it("returns to a browser on this machine and to no other web origin", () => {
+    expect(providerAuthReturnUrl("http://127.0.0.1:3773/welcome?code=secret")).toBe(
+      "http://127.0.0.1:3773/welcome",
+    );
+    expect(providerAuthReturnUrl("https://app.t3.codes/welcome")).toBeUndefined();
+  });
   it.each([
     "t3code://attacker/welcome",
     "t3code://app/welcome/../evil",

@@ -6,21 +6,32 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 
-import { DpopPublicJwk as DpopPublicJwkSchema, normalizeDpopHtu } from "./dpopCommon.ts";
-import type { DpopPublicJwk as DpopPublicJwkType } from "./dpopCommon.ts";
-import { stableStringify } from "./relaySigning.ts";
-
 const DPOP_TYP = "dpop+jwt";
 const DPOP_ALG = "ES256";
 /**
  * How far a proof's `iat` may sit from the verifier's clock, in either direction.
  * Proofs carry the client's clock, so this also bounds tolerated clock skew.
  */
-export const DPOP_MAX_CLOCK_SKEW_SECONDS = 300;
+const DPOP_MAX_CLOCK_SKEW_SECONDS = 300;
 
-export const DpopPublicJwk = DpopPublicJwkSchema;
-export type DpopPublicJwk = DpopPublicJwkType;
-export { normalizeDpopHtu };
+export const DpopPublicJwk = Schema.Struct({
+  kty: Schema.Literal("EC"),
+  crv: Schema.Literal("P-256"),
+  x: Schema.String.check(Schema.isNonEmpty()),
+  y: Schema.String.check(Schema.isNonEmpty()),
+});
+export type DpopPublicJwk = typeof DpopPublicJwk.Type;
+
+export function normalizeDpopHtu(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    parsed.hash = "";
+    parsed.search = "";
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
 
 export const DpopVerificationFailureCode = Schema.Literals([
   "missing_proof",
@@ -36,7 +47,7 @@ export const DpopVerificationFailureCode = Schema.Literals([
 export type DpopVerificationFailureCode = typeof DpopVerificationFailureCode.Type;
 
 const DpopJwtHeaderPublicJwk = Schema.Struct({
-  ...DpopPublicJwkSchema.fields,
+  ...DpopPublicJwk.fields,
   d: Schema.optionalKey(Schema.Never),
 });
 
@@ -85,16 +96,12 @@ function decodeBase64UrlDpopJwtPayload(value: string) {
   return decodeDpopJwtPayloadJson(Result.getOrThrow(Base64Url.decodeString(value)));
 }
 
-function dpopThumbprintInput(jwk: DpopPublicJwkType): string {
-  return stableStringify({
-    crv: jwk.crv,
-    kty: jwk.kty,
-    x: jwk.x,
-    y: jwk.y,
-  });
+// RFC 7638 hashes the required members in this order, without whitespace.
+function dpopThumbprintInput(jwk: DpopPublicJwk): string {
+  return JSON.stringify({ crv: jwk.crv, kty: jwk.kty, x: jwk.x, y: jwk.y });
 }
 
-export function computeDpopJwkThumbprint(jwk: DpopPublicJwkType): string {
+export function computeDpopJwkThumbprint(jwk: DpopPublicJwk): string {
   return pipe(
     dpopThumbprintInput(jwk),
     (input) => new TextEncoder().encode(input),
@@ -107,7 +114,7 @@ export function computeDpopAccessTokenHash(accessToken: string): string {
   return Base64Url.encode(sha256(new TextEncoder().encode(accessToken)));
 }
 
-function publicKeyBytesFromJwk(jwk: DpopPublicJwkType): Uint8Array {
+function publicKeyBytesFromJwk(jwk: DpopPublicJwk): Uint8Array {
   const x = base64UrlToBytes(jwk.x);
   const y = base64UrlToBytes(jwk.y);
   if (x.length !== 32 || y.length !== 32) {

@@ -6,7 +6,7 @@ import {
   ExecutionEnvironmentDescriptor,
   ServerSelfUpdateMethod,
 } from "./environment.ts";
-import { AuthClientPresentationMetadata, ServerAuthDescriptor } from "./auth.ts";
+import { ServerAuthDescriptor } from "./auth.ts";
 import {
   ForwardCompatibleArray,
   IsoDateTime,
@@ -324,33 +324,6 @@ export const OtlpEndpointCheckResult = Schema.Union([
   Schema.TaggedStruct("Unreachable", { timedOut: Schema.Boolean }),
 ]);
 export type OtlpEndpointCheckResult = typeof OtlpEndpointCheckResult.Type;
-
-/** The client tells the server what it is, so the triage context can name it. */
-export const ServerPrepareTriageInput = Schema.Struct({
-  client: AuthClientPresentationMetadata,
-});
-export type ServerPrepareTriageInput = typeof ServerPrepareTriageInput.Type;
-
-export const ServerPrepareTriageResult = Schema.Struct({
-  /** Composer text that links the session's prompt file. */
-  prompt: Schema.String,
-});
-export type ServerPrepareTriageResult = typeof ServerPrepareTriageResult.Type;
-
-/**
- * The prompt file links as a chip in the user's message; clients spot a triage
- * draft by it.
- */
-export const TRIAGE_PROMPT_FILE_NAME = "triage-playbook.md";
-
-export class ServerPrepareTriageError extends Schema.TaggedError<ServerPrepareTriageError>()(
-  "ServerPrepareTriageError",
-  { cause: Schema.optional(Schema.Defect()) },
-) {
-  override get message(): string {
-    return "Could not write the triage session files.";
-  }
-}
 
 export const ServerTraceDiagnosticsErrorKind = Schema.Literals([
   "trace-file-not-found",
@@ -894,29 +867,6 @@ export class ServerProviderUpdateError extends Schema.TaggedError<ServerProvider
 ) {
   override get message(): string {
     return `Provider update failed for ${this.provider}: ${this.reason}`;
-  }
-}
-
-export const ServerNpmReleaseInput = Schema.Struct({
-  spec: Schema.String.check(
-    Schema.isMaxLength(64),
-    Schema.isPattern(/^(?:latest|nightly|\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/),
-  ),
-});
-export type ServerNpmReleaseInput = typeof ServerNpmReleaseInput.Type;
-
-export const ServerNpmRelease = Schema.Struct({
-  version: Schema.String,
-  databaseMigration: Schema.optionalKey(Schema.Int),
-});
-export type ServerNpmRelease = typeof ServerNpmRelease.Type;
-
-export class ServerNpmReleaseError extends Schema.TaggedError<ServerNpmReleaseError>()(
-  "ServerNpmReleaseError",
-  { reason: Schema.String },
-) {
-  override get message(): string {
-    return `Could not check the configured npm registry: ${this.reason}`;
   }
 }
 

@@ -10,7 +10,7 @@ import {
   sanitizeLinkedPrompt,
   withoutPromptLinkParams,
 } from "./promptLinks.ts";
-import { hostedThreadLink } from "./threadLinks.ts";
+import { appThreadLink } from "./threadLinks.ts";
 
 describe("sanitizeLinkedPrompt", () => {
   it("removes characters a reader cannot see and counts them", () => {
@@ -93,14 +93,17 @@ describe("thread links", () => {
 });
 
 describe("link round trips", () => {
+  const APP = "http://localhost:3773";
+
   it("builds a link that parses back to the same prompt", () => {
     const link = buildNewThreadLink({
       prompt: "Swear count & rating?",
       repository: { owner: "pingdotgg", name: "t3code" },
       provider: "claudeAgent",
       model: "opus",
+      origin: APP,
     });
-    const path = promptLinkAppPath(link);
+    const path = promptLinkAppPath(link, APP);
     expect(path).toBe(new URL(link).pathname + new URL(link).search);
     const parsed = parseNewThreadLink(new URL(link).search);
     expect(parsed.ok && parsed.value.kind === "new" && parsed.value.prompt.text).toBe(
@@ -109,34 +112,34 @@ describe("link round trips", () => {
   });
 
   it("opens a copied thread link in the app at that thread", () => {
-    const link = hostedThreadLink({
-      environmentId: EnvironmentId.make("env-1"),
-      threadId: ThreadId.make("mcp:1"),
-    });
-    const path = promptLinkAppPath(link);
+    const link = appThreadLink(
+      { environmentId: EnvironmentId.make("env-1"), threadId: ThreadId.make("mcp:1") },
+      APP,
+    );
+    const path = promptLinkAppPath(link, APP);
     expect(path).toBe("/env-1/mcp%3A1");
     const deepLink = promptLinkDeepLink(path!);
     expect(deepLink).toBe("t3code://threads/env-1/mcp%3A1");
     expect(promptLinkAppPath(deepLink)).toBe(path);
   });
 
-  it("maps app scheme and hosted links to in-app paths, and nothing else", () => {
+  it("maps app scheme and own-origin links to in-app paths, and nothing else", () => {
     expect(promptLinkAppPath("t3code://new?prompt=hi")).toBe("/new?prompt=hi");
     expect(promptLinkAppPath("t3code-dev://threads/env-1/thread-1")).toBe("/env-1/thread-1");
-    expect(promptLinkAppPath("https://app.t3.codes/env-1/thread-1?prompt=go")).toBe(
+    expect(promptLinkAppPath(`${APP}/env-1/thread-1?prompt=go`, APP)).toBe(
       "/env-1/thread-1?prompt=go",
     );
-    expect(promptLinkAppPath("https://app.t3.codes/threads/env-1/thread-1")).toBe(
-      "/env-1/thread-1",
-    );
-    expect(promptLinkAppPath("https://app.t3.codes/threads/env-1/thread-1?prompt=go")).toBe(
+    expect(promptLinkAppPath(`${APP}/threads/env-1/thread-1`, APP)).toBe("/env-1/thread-1");
+    expect(promptLinkAppPath(`${APP}/threads/env-1/thread-1?prompt=go`, APP)).toBe(
       "/env-1/thread-1?prompt=go",
     );
     // The web app's own thread route, reloaded, is no link.
-    expect(promptLinkAppPath("https://app.t3.codes/env-1/thread-1")).toBeNull();
-    expect(promptLinkAppPath("https://app.t3.codes/threads/env-1")).toBeNull();
-    expect(promptLinkAppPath("https://app.t3.codes/settings/general")).toBeNull();
-    expect(promptLinkAppPath("https://evil.test/new?prompt=hi")).toBeNull();
+    expect(promptLinkAppPath(`${APP}/env-1/thread-1`, APP)).toBeNull();
+    expect(promptLinkAppPath(`${APP}/threads/env-1`, APP)).toBeNull();
+    expect(promptLinkAppPath(`${APP}/settings/general`, APP)).toBeNull();
+    expect(promptLinkAppPath("https://evil.test/new?prompt=hi", APP)).toBeNull();
+    // Without the app's origin no web link is its own.
+    expect(promptLinkAppPath(`${APP}/new?prompt=hi`)).toBeNull();
     expect(promptLinkAppPath("t3code://app/index.html")).toBeNull();
   });
 });

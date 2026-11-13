@@ -255,7 +255,7 @@ describe("findAccessibleWindow", () => {
   };
 
   const chromeCapture = {
-    title: "Issues · pingdotgg/t3code",
+    title: "Issues · koneb71/ozone",
     bounds: captured.bounds,
     platform: "darwin" as const,
     bundleId: "com.google.Chrome",

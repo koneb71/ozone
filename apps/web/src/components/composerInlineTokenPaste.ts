@@ -25,9 +25,13 @@ export function readPastedPlainText(clipboardData: Pick<DataTransfer, "getData">
   return clipboardData.getData("text/plain").replace(/\r\n?/g, "\n");
 }
 
-/** Pasted thread links count as context too, so they become chips like a copied chip does. */
+/**
+ * Pasted thread links count as context too, so they become chips like a copied chip does.
+ * `appOrigin` is this app's own origin, whose thread links count with `t3-thread:` ones.
+ */
 export function readPastedComposerContext(
   clipboardData: Pick<DataTransfer, "getData">,
+  appOrigin: string,
 ): ComposerContextClipboardFragment | null {
   const pastedText = clipboardData.getData("text/plain");
   const decodedFragment =
@@ -37,6 +41,7 @@ export function readPastedComposerContext(
     pastedText,
     decodedFragment?.records ?? [],
     threadTitle,
+    appOrigin,
   );
   const source =
     decodedFragment?.source ??
@@ -66,12 +71,15 @@ export function readPastedComposerContext(
 
 export function importPastedComposerText(
   clipboardData: Pick<DataTransfer, "getData">,
+  appOrigin: string,
   importContextFragment?: (
     fragment: ComposerContextClipboardFragment,
   ) => ReadonlyMap<string, string>,
 ): string {
   const pastedText = readPastedPlainText(clipboardData);
-  const fragment = importContextFragment ? readPastedComposerContext(clipboardData) : null;
+  const fragment = importContextFragment
+    ? readPastedComposerContext(clipboardData, appOrigin)
+    : null;
   const rewrittenIds =
     fragment && fragment.records.length > 0 ? importContextFragment!(fragment) : null;
   if (!rewrittenIds || rewrittenIds.size === 0) return pastedText;
@@ -90,7 +98,11 @@ export function importPastedComposerText(
       : occurrence.source;
   });
   // A thread the import refused, on a machine this agent cannot read, stays the link it was.
-  return threadLinkContextReferences(text, fragment?.records ?? [], threadTitle, (record) =>
-    nextId(record.contextId),
+  return threadLinkContextReferences(
+    text,
+    fragment?.records ?? [],
+    threadTitle,
+    appOrigin,
+    (record) => nextId(record.contextId),
   ).text;
 }

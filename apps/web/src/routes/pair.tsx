@@ -1,24 +1,13 @@
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 
-import {
-  HostedPairingRouteSurface,
-  PairingPendingSurface,
-  PairingRouteSurface,
-} from "../components/auth/PairingRouteSurface";
+import { PairingPendingSurface, PairingRouteSurface } from "../components/auth/PairingRouteSurface";
 
 export const Route = createFileRoute("/pair")({
   beforeLoad: async ({ context }) => {
     const { authGateState } = context;
-    if (authGateState.status === "hosted-pairing") {
-      return {
-        authGateState,
-      };
-    }
-
     if (
       authGateState.status === "authenticated" ||
-      authGateState.status === "hosted-static" ||
-      authGateState.status === "guest"
+      authGateState.status === "local-environment-off"
     ) {
       throw redirect({ to: "/", replace: true });
     }
@@ -36,10 +25,6 @@ function PairRouteView() {
 
   if (!authGateState) {
     return null;
-  }
-
-  if (authGateState.status === "hosted-pairing") {
-    return <HostedPairingRouteSurface />;
   }
 
   return (

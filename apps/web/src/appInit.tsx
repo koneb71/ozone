@@ -135,12 +135,8 @@ function readOpenThreadRef(router: AppRouter): ScopedThreadRef | null {
 
 /** Names the open thread and its project in the window title, or the app when none is open. */
 function startDocumentTitle(router: AppRouter): void {
-  const readOnGuestPage = () => router.state.matches.some((match) => match.routeId === "/guest");
   let openThreadRef = readOpenThreadRef(router);
-  let onGuestPage = readOnGuestPage();
   const write = () => {
-    // GuestPage titles the tab after the shared thread.
-    if (onGuestPage) return;
     const thread =
       openThreadRef === null
         ? null
@@ -183,15 +179,10 @@ function startDocumentTitle(router: AppRouter): void {
   // The draft store changes on every keystroke; only a new open thread matters here.
   const updateOpenThread = () => {
     const next = readOpenThreadRef(router);
-    const nextOnGuestPage = readOnGuestPage();
-    if (
-      nextOnGuestPage === onGuestPage &&
-      (next && scopedThreadKey(next)) === (openThreadRef && scopedThreadKey(openThreadRef))
-    ) {
+    if ((next && scopedThreadKey(next)) === (openThreadRef && scopedThreadKey(openThreadRef))) {
       return;
     }
     openThreadRef = next;
-    onGuestPage = nextOnGuestPage;
     watchOpenThread();
     write();
   };

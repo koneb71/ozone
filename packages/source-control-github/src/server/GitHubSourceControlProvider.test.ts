@@ -22,13 +22,6 @@ import * as GitHubCredentials from "./GitHubCredentials.ts";
 import * as GitHubQuota from "./GitHubQuota.ts";
 import { parseGitHubAuthStatus } from "./gitHubAuthStatus.ts";
 import * as GitHubSourceControlProvider from "./GitHubSourceControlProvider.ts";
-import * as GitHubAppSignIn from "./GitHubAppSignIn.ts";
-
-const appSignedOut = Layer.mock(GitHubAppSignIn.GitHubAppSignIn)({
-  enabled: false,
-  token: () => Effect.succeedNone,
-  invalidate: () => Effect.void,
-});
 
 const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 
@@ -233,13 +226,11 @@ function harness(input: {
         }),
         GitHubQuota.layer,
         SourceControlRateLimit.layer,
-        appSignedOut,
       ),
     ),
   );
   const layer = Layer.mergeAll(
     host,
-    appSignedOut,
     Layer.mock(GitHubRest.GitHubRest)(input.api ?? {}),
     policy,
     Layer.succeed(HttpClient.HttpClient, graphQlHttp(graphql, graphqlCalls)),

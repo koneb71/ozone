@@ -11,6 +11,7 @@ import {
 import { isLocalEnvironmentDisabled } from "../../localEnvironment";
 import { usePrimaryEnvironmentId } from "../../state/environments";
 import { useRightPanelStore } from "~/rightPanelStore";
+import { appLinkOrigin } from "../../appLinks";
 import { importPastedComposerText, readPastedComposerContext } from "../composerInlineTokenPaste";
 import {
   questionAttachmentDraftId,
@@ -2544,7 +2545,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       return false;
     }
     if (options?.clipboardData) {
-      text = importPastedComposerText(options.clipboardData, importContextFragment);
+      text = importPastedComposerText(
+        options.clipboardData,
+        appLinkOrigin(),
+        importContextFragment,
+      );
     }
     const prompt = promptRef.current;
     const cursor = position === "cursor" ? readComposerSnapshot().expandedCursor : prompt.length;
@@ -2701,7 +2706,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       return;
     }
 
-    if ((readPastedComposerContext(event.clipboardData)?.records.length ?? 0) > 0) return;
+    if ((readPastedComposerContext(event.clipboardData, appLinkOrigin())?.records.length ?? 0) > 0)
+      return;
     if (!foldPastedText(plainText, bypassAutoAttachment)) {
       return;
     }

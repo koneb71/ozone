@@ -6,7 +6,7 @@ import * as Schema from "effect/Schema";
 import { Command, GlobalFlag } from "effect/cli";
 import * as CliError from "effect/cli/CliError";
 
-import { awaitServiceLauncherStop } from "../cloud/serviceLauncherClient.ts";
+import { awaitServiceLauncherStop } from "../service/serviceLauncherClient.ts";
 import * as ServerConfig from "../config.ts";
 import { awaitLauncherLoss } from "../launcherWatch.ts";
 import * as DatabaseMaintenance from "../persistence/DatabaseMaintenance.ts";

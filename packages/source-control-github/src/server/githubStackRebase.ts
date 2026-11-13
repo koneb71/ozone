@@ -4,7 +4,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Base64 from "effect/encoding/Base64";
 
-import * as GitHubAppAccess from "./GitHubAppAccess.ts";
+import * as GitHubRest from "./GitHubRest.ts";
 import * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
 
 export interface CascadeLayer {
@@ -44,11 +44,10 @@ export const cascadeRebaseStack = Effect.fn("cascadeRebaseStack")(function* (inp
   readonly mergedHeadSha?: string;
   readonly remote?: string;
 }) {
-  const appAccess = yield* GitHubAppAccess.GitHubAppAccess;
+  const api = yield* GitHubRest.GitHubRest;
   const { process } = yield* SourceControlHost.SourceControlHost;
   const fileSystem = yield* FileSystem.FileSystem;
-  // A push takes one credential up front, so it must be one that reaches the repository.
-  const { token } = yield* appAccess.credentialFor(input.host, input.repository);
+  const { token } = yield* api.credential(input.host);
   const first = input.layers[0];
   if (first === undefined) return 0;
   const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-stack-rebase-" }).pipe(
@@ -71,9 +70,9 @@ export const cascadeRebaseStack = Effect.fn("cascadeRebaseStack")(function* (inp
     GIT_CONFIG_KEY_0: `http.${remote}.extraheader`,
     GIT_CONFIG_VALUE_0: authorization,
     GIT_CONFIG_KEY_1: "user.name",
-    GIT_CONFIG_VALUE_1: "T3 Code",
+    GIT_CONFIG_VALUE_1: "Ozone",
     GIT_CONFIG_KEY_2: "user.email",
-    GIT_CONFIG_VALUE_2: "noreply@t3.codes",
+    GIT_CONFIG_VALUE_2: "noreply@users.noreply.github.com",
   };
   const git = (args: ReadonlyArray<string>, allowNonZeroExit = false) =>
     process.run({

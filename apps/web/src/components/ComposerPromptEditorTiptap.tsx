@@ -133,6 +133,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { ComposerCodeBlockNodeView } from "./chat/ComposerCodeBlockNodeView";
 import { resolveAssistantCitationCommentDismissal } from "./chat/assistantCitationCommentDismissal";
 import { composerCodeBlockHighlight } from "./composerCodeBlockHighlight";
+import { appLinkOrigin } from "../appLinks";
 import { importPastedComposerText, readPastedPlainText } from "./composerInlineTokenPaste";
 import { didComposerSelectionChangeVisibly } from "./composerSelection";
 import type { ComposerDraftContextRecords } from "./composerContextPresentation";
@@ -1415,7 +1416,7 @@ function ComposerPromptEditorTiptapInner(
           const importFragment = readCallbacks().importContextFragment;
           let text =
             !literalText && importFragment
-              ? importPastedComposerText(clipboardData, importFragment)
+              ? importPastedComposerText(clipboardData, appLinkOrigin(), importFragment)
               : pastedText;
           const tokens = literalText ? [] : collectComposerPromptInlineTokens(`${text}\n`);
           const isChip = (token: (typeof tokens)[number] | undefined) =>

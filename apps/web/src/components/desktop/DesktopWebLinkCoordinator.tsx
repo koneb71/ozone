@@ -16,6 +16,7 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { openFileInPreview, openUrlInPreview } from "../../browser/openFileInPreview";
 import { isPreviewAvailableFor } from "../../browser/previewRuntime";
 import { requestConfirmDialog } from "../../confirmDialog";
+import { appLinkOrigin } from "../../appLinks";
 import { connectPairing } from "../../connection/onboarding";
 import { isLocalEnvironmentDisabled } from "../../localEnvironment";
 import { useComposerDraftStore } from "../../composerDraftStore";
@@ -206,7 +207,7 @@ export function DesktopWebLinkCoordinator() {
       await pairFromLink(pairingUrl);
       return;
     }
-    const appPath = promptLinkAppPath(url);
+    const appPath = promptLinkAppPath(url, appLinkOrigin());
     if (appPath !== null) {
       await router.navigate({ href: appPath });
       return;

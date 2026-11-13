@@ -33,7 +33,6 @@ import { TYPOGRAPHY_ADVANCED_STORAGE_KEY } from "../../appearanceFonts";
 import { isElectron } from "../../env";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { usePersistEnvironmentProviderInstanceMutation } from "../../hooks/useSettings";
-import { PRIVACY_POLICY_URL } from "../../legalLinks";
 import { workspaceAreaProps } from "../../lib/workspaceFocus";
 import { completeOnboarding } from "../../onboarding/firstRun";
 import {
@@ -117,7 +116,7 @@ export function WelcomePage({
     environments.find((environment) => environment.environmentId === environmentId)?.label ??
     "this computer";
   const agentReady = useWelcomeAgents(environmentId).readyCount > 0;
-  // The phone and `t3` on PATH belong to the primary computer, so only it offers them.
+  // `t3` on PATH belongs to the primary computer, so only it offers it.
   const isPrimary = usePrimaryEnvironmentId() === environmentId;
   const scans = useProjectScans([environmentId]);
   const [storedSelection, storeSelection] = useLocalStorage(
@@ -298,20 +297,9 @@ export function WelcomePage({
 }
 
 function TelemetryNotice({ environmentId }: { readonly environmentId: EnvironmentId }) {
-  const telemetryOff = managedTelemetryOffMessage(useManagedPolicy(environmentId));
   return (
     <p className="mt-auto pt-12 text-2xs leading-relaxed text-muted-foreground/70">
-      {telemetryOff ?? "T3 Code collects anonymous usage data to improve the app."}{" "}
-      {telemetryOff === undefined ? "To opt out, see the" : "See the"}{" "}
-      <a
-        className="underline decoration-current/40 underline-offset-2 hover:text-muted-foreground"
-        href={PRIVACY_POLICY_URL}
-        target="_blank"
-        rel="noreferrer noopener"
-      >
-        privacy policy
-      </a>
-      .
+      {managedTelemetryOffMessage(useManagedPolicy(environmentId))}
     </p>
   );
 }

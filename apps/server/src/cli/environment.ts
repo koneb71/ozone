@@ -42,7 +42,7 @@ const runWithPeerLinks = Effect.fn("environment.runWithPeerLinks")(function* <A,
             FetchHttpClient.layer,
           ),
         ),
-        Layer.provide(ServerEnvironment.layer.pipe(Layer.provide(ServerSecretStore.layer))),
+        Layer.provide(ServerEnvironment.layer),
         Layer.provide(
           ServerSettings.layer.pipe(
             Layer.provide(
@@ -86,7 +86,7 @@ const environmentLinkCommand = Command.make("link", {
   ...authLocationFlags,
   url: Argument.String("url").pipe(
     Argument.withDescription(
-      "Where the other environment answers: its T3 Connect, Tailscale, LAN or loopback address.",
+      "Where the other environment answers: its Tailscale, LAN or loopback address.",
     ),
   ),
   alternateUrl: Flag.String("url").pipe(
