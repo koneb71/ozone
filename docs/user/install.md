@@ -18,8 +18,8 @@ Download a build from [GitHub Releases](https://github.com/koneb71/ozone/release
 | Windows x64          | the `.exe` installer |
 | Linux x64            | the `.AppImage`      |
 
-The builds are not signed, so your operating system may warn you before the
-first launch.
+The Mac app is signed and notarized by Apple. The Windows and Linux builds are
+not signed, so Windows may warn you before the first launch.
 
 ### Linux
 

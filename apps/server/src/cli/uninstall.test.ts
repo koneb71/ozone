@@ -75,7 +75,7 @@ it.layer(NodeServices.layer)("ozone uninstall launcher", (it) => {
       const cmd = path.join(root, "bin/ozone.cmd");
       const edited = path.join(root, "bin/edited.cmd");
       yield* fs.writeFileString(cmd, `@echo off\r\n"${exe}" %*`);
-      yield* fs.writeFileString(edited, `@echo off\r\nset "T3CODE_HOME=D:\\other"\r\n"${exe}" %*`);
+      yield* fs.writeFileString(edited, `@echo off\r\nset "OZONE_HOME=D:\\other"\r\n"${exe}" %*`);
       yield* fs.writeFileString(path.join(root, "runtime/launchers"), `${cmd}\r\n${edited}\r\n`);
       assert.deepStrictEqual(
         yield* findRecordedLaunchers(versionsDir).pipe(

@@ -41,7 +41,7 @@ depend on each project's working directory and cannot be reliably discovered by 
 sharing a history directory count once.
 
 The server saves its first hostname in `~/.ozone/usage-host-id`, so a recreated container keeps
-its usage identity when that folder is persisted. Set `T3CODE_HOST_ID` to choose the identity
+its usage identity when that folder is persisted. Set `OZONE_HOST_ID` to choose the identity
 explicitly.
 
 When your app and server support different providers, usage totals may cover only the providers

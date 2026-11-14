@@ -30,21 +30,21 @@ Running `vp run dev` through an agent's own shell tool does not attach it to thi
 
 ### State and ports
 
-Linked worktrees default to their own `.t3/userdata`, even when `T3CODE_HOME` is set.
+Linked worktrees default to their own `.t3/userdata`, even when `OZONE_HOME` is set.
 The main checkout keeps dev state in `~/.ozone/dev`, beside an installed Ozone's
 `~/.ozone/userdata` and separate from it. An explicit `--home-dir` wins in both cases. In the main
-checkout, `T3CODE_HOME` counts as explicit too: state then goes to `<T3CODE_HOME>/userdata`, so do
+checkout, `OZONE_HOME` counts as explicit too: state then goes to `<OZONE_HOME>/userdata`, so do
 not point it at `~/.ozone`.
 The first start in a worktree seeds its empty database from a read-only copy of
 `~/.ozone/userdata/statev2.sqlite` if that file exists and is at most 500 MiB. Larger sources warn
-and dev starts with an empty database. `--no-seed` or `T3CODE_DEV_SEED=0` skips seeding.
+and dev starts with an empty database. `--no-seed` or `OZONE_DEV_SEED=0` skips seeding.
 To copy a larger source, run `vp run migrate-dev-db` with dev stopped. It may use
 substantial disk space before pruning.
 Never run a development server against the live `~/.ozone/userdata`.
 See [test data](../../AGENTS.md#test-data) for copying a consistent database snapshot.
 
 Read ports from the `[dev-runner]` output. Worktrees derive stable preferences from their paths,
-but occupied ports can shift them. `T3CODE_PORT_OFFSET` or `T3CODE_DEV_INSTANCE` can select a
+but occupied ports can shift them. `OZONE_PORT_OFFSET` or `OZONE_DEV_INSTANCE` can select a
 different preference when needed.
 
 ### Replay provider
@@ -65,7 +65,7 @@ and vendor frames, so Grok and fx recordings lose their vendor-only behavior.
 Run `vp run profile:startup` to capture the first 20 seconds of inherited Node processes under
 `.t3/startup-profiles/<timestamp>`. Workers that execute the preload get separate profiles.
 It starts the normal dev runner and accepts its flags.
-Stop it with Ctrl+C after the capture. Set `T3CODE_STARTUP_PROFILE_DIR` to choose another output
+Stop it with Ctrl+C after the capture. Set `OZONE_STARTUP_PROFILE_DIR` to choose another output
 directory. Profiling adds overhead, so compare readiness with an ordinary `vp run dev` run.
 
 Open a `.cpuprofile` in Chrome DevTools' Performance panel for sampled function stacks and source
@@ -98,7 +98,7 @@ Leave `VITE_HTTP_URL` and `VITE_WS_URL` unset. Vite proxies the backend through 
 origin so the same build works over localhost and remote connections.
 
 Shared runs enable bundled dev to avoid a network round trip for each import level.
-`T3CODE_BUNDLED_DEV=0` opts out when debugging bundler differences. Two reload traps matter
+`OZONE_BUNDLED_DEV=0` opts out when debugging bundler differences. Two reload traps matter
 when changing this setup:
 
 - The web entry must dynamically import the app so React refresh initializes before application
@@ -138,7 +138,7 @@ openssl rand -hex 32
 Put that value in the main checkout's gitignored `.env`:
 
 ```dotenv
-T3CODE_DEV_AUTH_TOKEN=<the value generated above>
+OZONE_DEV_AUTH_TOKEN=<the value generated above>
 ```
 
 The `t3.json` Setup Worktree action links that file to each worktree's `.env`. The dev runner reads repository env files at startup. `.env.local` and inherited process
@@ -147,7 +147,7 @@ environment values override `.env`, so no per-worktree export is needed after se
 For a manual worktree or launcher without that link, export the same fixed value instead:
 
 ```sh
-export T3CODE_DEV_AUTH_TOKEN="<the value generated above>"
+export OZONE_DEV_AUTH_TOKEN="<the value generated above>"
 ```
 
 Do not generate a new value at startup. Start or restart `vp run dev --share` after configuration,

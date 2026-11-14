@@ -67,7 +67,7 @@ export const installCli = Effect.fn("cli.install.install")(function* () {
   }
   // Absolute, so the PATH hint never adds a folder that changes with the working directory.
   const binDir = path.resolve(
-    environment.T3CODE_INSTALL_BIN_DIR?.trim() || path.join(home, ".local", "bin"),
+    environment.OZONE_INSTALL_BIN_DIR?.trim() || path.join(home, ".local", "bin"),
   );
   const name = windows ? "ozone.cmd" : "ozone";
   const link = path.join(binDir, name);

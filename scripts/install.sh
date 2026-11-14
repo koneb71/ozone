@@ -5,21 +5,21 @@
 #   curl -fsSL https://raw.githubusercontent.com/koneb71/ozone/main/scripts/install.sh | sh
 #
 # Environment:
-#   T3CODE_CHANNEL           release train to follow: stable, nightly, or preview
+#   OZONE_CHANNEL           release train to follow: stable, nightly, or preview
 #                            (default: stable; preview is a maintainers' test train)
-#   T3CODE_VERSION           exact version to install (overrides T3CODE_CHANNEL)
-#   T3CODE_HOME              Ozone home directory (default: ~/.ozone)
-#   T3CODE_INSTALL_BIN_DIR   where the `ozone` symlink goes (default: ~/.local/bin)
-#   T3CODE_RELEASE_BASE_URL  mirror for releases/download (default: GitHub)
+#   OZONE_VERSION           exact version to install (overrides OZONE_CHANNEL)
+#   OZONE_HOME              Ozone home directory (default: ~/.ozone)
+#   OZONE_INSTALL_BIN_DIR   where the `ozone` symlink goes (default: ~/.local/bin)
+#   OZONE_RELEASE_BASE_URL  mirror for releases/download (default: GitHub)
 #
-# The archive is unpacked into $T3CODE_HOME/runtime/versions/<version>, the
+# The archive is unpacked into $OZONE_HOME/runtime/versions/<version>, the
 # same layout `ozone service install` uses, so the service reuses this download
 # instead of fetching the release again.
 set -eu
 
 repo="koneb71/ozone"
-base_url="${T3CODE_RELEASE_BASE_URL:-https://github.com/${repo}/releases/download}"
-ozone_home="${T3CODE_HOME:-$HOME/.ozone}"
+base_url="${OZONE_RELEASE_BASE_URL:-https://github.com/${repo}/releases/download}"
+ozone_home="${OZONE_HOME:-$HOME/.ozone}"
 case "$ozone_home" in
   /*) ;;
   *)
@@ -28,7 +28,7 @@ case "$ozone_home" in
     ozone_home="${ozone_cwd%??}/$ozone_home"
     ;;
 esac
-bin_dir="${T3CODE_INSTALL_BIN_DIR:-$HOME/.local/bin}"
+bin_dir="${OZONE_INSTALL_BIN_DIR:-$HOME/.local/bin}"
 # Trailing slashes would put `//` in the paths the ozone command guard compares.
 while [ "${ozone_home%/}" != "$ozone_home" ] && [ "$ozone_home" != / ]; do ozone_home="${ozone_home%/}"; done
 while [ "${bin_dir%/}" != "$bin_dir" ] && [ "$bin_dir" != / ]; do bin_dir="${bin_dir%/}"; done
@@ -176,13 +176,13 @@ else
   fail "sha256sum or shasum is required"
 fi
 
-channel="${T3CODE_CHANNEL:-stable}"
-version="${T3CODE_VERSION:-}"
+channel="${OZONE_CHANNEL:-stable}"
+version="${OZONE_VERSION:-}"
 if [ -z "$version" ]; then
   case "$channel" in
     stable) tag_pattern='v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)' ;;
     nightly | preview) tag_pattern="v\([0-9][^\"]*-${channel}\.[0-9]*\.[0-9]*\)" ;;
-    *) fail "T3CODE_CHANNEL must be stable, nightly, or preview" ;;
+    *) fail "OZONE_CHANNEL must be stable, nightly, or preview" ;;
   esac
   tmp_index="$(mktemp)"
   if [ "$channel" = stable ]; then
@@ -200,7 +200,7 @@ if [ -z "$version" ]; then
     done
   fi
   rm -f "$tmp_index"
-  [ -n "$version" ] || fail "could not find a ${channel} release; set T3CODE_VERSION"
+  [ -n "$version" ] || fail "could not find a ${channel} release; set OZONE_VERSION"
 fi
 case "$version" in
   *-preview.*)
@@ -208,8 +208,8 @@ case "$version" in
       "ozone ${version} is a preview build." \
       "  Preview builds are cut by maintainers from unreleased branches to exercise the release" \
       "  pipeline. They can be broken, receive no fixes, and are never offered as updates." \
-      "  Set T3CODE_CHANNEL=stable (the default) for a supported build." >&2
-    if [ "$channel" != "preview" ] && [ -z "${T3CODE_VERSION:-}" ]; then
+      "  Set OZONE_CHANNEL=stable (the default) for a supported build." >&2
+    if [ "$channel" != "preview" ] && [ -z "${OZONE_VERSION:-}" ]; then
       fail "refusing a preview build that was not explicitly requested"
     fi
     ;;

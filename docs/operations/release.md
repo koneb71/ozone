@@ -49,9 +49,28 @@ invisible to both, so attach every file before publishing.
   inside the mounted `.dmg`, the app after a silent run of the Windows installer, and the extracted
   AppImage under `xvfb`. On a failure, what the check saw is uploaded as `launch-check-<platform>`.
 
+## Signing the Mac app
+
+The macOS job signs with a Developer ID certificate and notarizes when the repository has the
+`CSC_LINK` secret. Without it the app is built unsigned. With it, every secret below must be set:
+
+| Secret                             | Value                                                                                        |
+| ---------------------------------- | -------------------------------------------------------------------------------------------- |
+| `CSC_LINK`                         | The Developer ID Application certificate exported as `.p12`, base64 encoded                  |
+| `CSC_KEY_PASSWORD`                 | The password of that `.p12`                                                                  |
+| `APPLE_API_KEY`                    | The text of the App Store Connect API key (`.p8`)                                            |
+| `APPLE_API_KEY_ID`                 | That key's ID                                                                                |
+| `APPLE_API_ISSUER`                 | The issuer ID shown above the keys in App Store Connect                                      |
+| `OZONE_APPLE_TEAM_ID`              | The Apple Developer Team ID                                                                  |
+| `OZONE_MACOS_PROVISIONING_PROFILE` | A Developer ID provisioning profile for the app ID `io.github.koneb71.ozone`, base64 encoded |
+
+After the build, the job asks `codesign`, `spctl` and `stapler` whether another Mac would accept
+the app.
+
 ## Limits
 
-- Nothing is signed or notarized. macOS and Windows warn before they open the app.
+- Only the Mac app is signed and notarized. Windows warns before it runs the installer, and the
+  command-line archive for macOS is signed ad hoc.
 - The Windows app does not carry the Linux archive that running the server inside WSL needs,
   because the workflow passes no `--wsl-runtime` to `scripts/build-desktop-artifact.ts`.
 

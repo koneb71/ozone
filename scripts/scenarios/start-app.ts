@@ -129,7 +129,7 @@ const startApp = Effect.fn("startApp")(function* (input: {
   const env = {
     ...hostEnvironment,
     PATH: `${path.join(input.home, "bin")}:${hostEnvironment.PATH ?? ""}`,
-    T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "0",
+    OZONE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "0",
   };
   const devRunner = (mode: string, args: ReadonlyArray<string>) => [
     "scripts/dev-runner.ts",
@@ -147,16 +147,16 @@ const startApp = Effect.fn("startApp")(function* (input: {
   const serverPort = String(yield* net.reserveLoopbackPort());
   const token = yield* (yield* SecureRandom.SecureRandom).uuidV4();
   const ports = ["--port", serverPort, "--dev-url", origin];
-  const webEnv = { ...env, T3CODE_PORT_OFFSET: String(Number(webPort) - BASE_WEB_PORT) };
+  const webEnv = { ...env, OZONE_PORT_OFFSET: String(Number(webPort) - BASE_WEB_PORT) };
   const server = yield* start({
     cwd: checkout,
     command: node,
     args: devRunner("dev:server", ports),
     env: {
       ...webEnv,
-      T3CODE_DEV_ALLOWED_ORIGINS: origin,
+      OZONE_DEV_ALLOWED_ORIGINS: origin,
       // Makes the startup pairing link reusable, so every test can sign in with it.
-      T3CODE_DEV_AUTH_TOKEN: `${token}${token}`.replaceAll("-", ""),
+      OZONE_DEV_AUTH_TOKEN: `${token}${token}`.replaceAll("-", ""),
     },
     onLine: (line) => {
       const url = /pairingUrl:\s*(\S+)/.exec(line)?.[1];

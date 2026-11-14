@@ -881,7 +881,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
                 ConfigProvider.fromEnv({
                   env: {
                     npm_config_python: pythonPath,
-                    T3CODE_DESKTOP_REUSE_RESOURCE_MONITOR: "true",
+                    OZONE_DESKTOP_REUSE_RESOURCE_MONITOR: "true",
                   },
                 }),
               ),
@@ -927,7 +927,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
               spawner,
               ConfigProvider.layer(
                 ConfigProvider.fromEnv({
-                  env: { T3CODE_DESKTOP_REUSE_RESOURCE_MONITOR: "true" },
+                  env: { OZONE_DESKTOP_REUSE_RESOURCE_MONITOR: "true" },
                 }),
               ),
             ),
@@ -1493,8 +1493,8 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
 
   it("reads the macOS signing team and profile, and renders the entitlements they allow", () => {
     const configuration = resolveMacPasskeySigningConfiguration({
-      T3CODE_APPLE_TEAM_ID: "abc1234567",
-      T3CODE_MACOS_PROVISIONING_PROFILE: "/tmp/ozone.provisionprofile",
+      OZONE_APPLE_TEAM_ID: "abc1234567",
+      OZONE_MACOS_PROVISIONING_PROFILE: "/tmp/ozone.provisionprofile",
     });
     assert.deepStrictEqual(configuration, {
       appId: "io.github.koneb71.ozone",
@@ -1592,14 +1592,14 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       return assert.fail("Expected passkey signing configuration to fail.");
     };
 
-    const missingProfileError = captureError({ T3CODE_APPLE_TEAM_ID: "ABC1234567" });
+    const missingProfileError = captureError({ OZONE_APPLE_TEAM_ID: "ABC1234567" });
     assert.instanceOf(missingProfileError, MissingMacPasskeyProvisioningProfileError);
     assert.equal(
       missingProfileError.message,
-      "T3CODE_MACOS_PROVISIONING_PROFILE must point to the app's provisioning profile.",
+      "OZONE_MACOS_PROVISIONING_PROFILE must point to the app's provisioning profile.",
     );
     assert.instanceOf(
-      captureError({ T3CODE_MACOS_PROVISIONING_PROFILE: "/tmp/ozone.provisionprofile" }),
+      captureError({ OZONE_MACOS_PROVISIONING_PROFILE: "/tmp/ozone.provisionprofile" }),
       InvalidAppleTeamIdError,
     );
   });
@@ -1731,11 +1731,11 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
           ConfigProvider.layer(
             ConfigProvider.fromEnv({
               env: {
-                T3CODE_DESKTOP_SKIP_BUILD: "true",
-                T3CODE_DESKTOP_KEEP_STAGE: "true",
-                T3CODE_DESKTOP_SIGNED: "true",
-                T3CODE_DESKTOP_VERBOSE: "true",
-                T3CODE_DESKTOP_MOCK_UPDATES: "true",
+                OZONE_DESKTOP_SKIP_BUILD: "true",
+                OZONE_DESKTOP_KEEP_STAGE: "true",
+                OZONE_DESKTOP_SIGNED: "true",
+                OZONE_DESKTOP_VERBOSE: "true",
+                OZONE_DESKTOP_MOCK_UPDATES: "true",
               },
             }),
           ),

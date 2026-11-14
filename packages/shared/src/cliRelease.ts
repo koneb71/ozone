@@ -1,6 +1,6 @@
 const CLI_RELEASE_REPOSITORY = "koneb71/ozone";
 export const CLI_RELEASE_CHECKSUMS_FILE = "SHA256SUMS";
-export const CLI_RELEASE_BASE_URL_ENV = "T3CODE_RELEASE_BASE_URL";
+export const CLI_RELEASE_BASE_URL_ENV = "OZONE_RELEASE_BASE_URL";
 
 // Keep archive keys aligned with the Linux matrix, Windows ARM64 build, and build matrix in ozone-release.yml,
 // and with the SSH runner's host check in packages/ssh/src/tunnel.ts.

@@ -4,22 +4,22 @@
 #   irm https://raw.githubusercontent.com/koneb71/ozone/main/scripts/install.ps1 | iex
 #
 # Environment:
-#   T3CODE_CHANNEL           release train to follow: stable, nightly, or preview
+#   OZONE_CHANNEL           release train to follow: stable, nightly, or preview
 #                            (default: stable; preview is a maintainers' test train)
-#   T3CODE_VERSION           exact version to install (overrides T3CODE_CHANNEL)
-#   T3CODE_HOME              Ozone home directory (default: ~\.ozone)
-#   T3CODE_INSTALL_BIN_DIR   where ozone.exe is linked (default: ~\.local\bin)
-#   T3CODE_RELEASE_BASE_URL  mirror for releases/download (default: GitHub)
+#   OZONE_VERSION           exact version to install (overrides OZONE_CHANNEL)
+#   OZONE_HOME              Ozone home directory (default: ~\.ozone)
+#   OZONE_INSTALL_BIN_DIR   where ozone.exe is linked (default: ~\.local\bin)
+#   OZONE_RELEASE_BASE_URL  mirror for releases/download (default: GitHub)
 #
-# The archive is unpacked into $T3CODE_HOME\runtime\versions\<version>, the
+# The archive is unpacked into $OZONE_HOME\runtime\versions\<version>, the
 # same layout `ozone service install` uses, so the service reuses this download.
 $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $repo = "koneb71/ozone"
-$baseUrl = if ($env:T3CODE_RELEASE_BASE_URL) { $env:T3CODE_RELEASE_BASE_URL.TrimEnd("/") } else { "https://github.com/$repo/releases/download" }
-$ozoneHome = if ($env:T3CODE_HOME) { $env:T3CODE_HOME } else { Join-Path $HOME ".ozone" }
-$binDir = if ($env:T3CODE_INSTALL_BIN_DIR) { $env:T3CODE_INSTALL_BIN_DIR } else { Join-Path $HOME ".local\bin" }
+$baseUrl = if ($env:OZONE_RELEASE_BASE_URL) { $env:OZONE_RELEASE_BASE_URL.TrimEnd("/") } else { "https://github.com/$repo/releases/download" }
+$ozoneHome = if ($env:OZONE_HOME) { $env:OZONE_HOME } else { Join-Path $HOME ".ozone" }
+$binDir = if ($env:OZONE_INSTALL_BIN_DIR) { $env:OZONE_INSTALL_BIN_DIR } else { Join-Path $HOME ".local\bin" }
 # Absolute, so PATH never gets a folder that changes with the working directory.
 $binDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($binDir)
 
@@ -130,14 +130,14 @@ $arch = switch ($rawArch) {
   default { Fail "unsupported architecture $rawArch" }
 }
 
-$channel = if ($env:T3CODE_CHANNEL) { $env:T3CODE_CHANNEL } else { "stable" }
-$version = $env:T3CODE_VERSION
+$channel = if ($env:OZONE_CHANNEL) { $env:OZONE_CHANNEL } else { "stable" }
+$version = $env:OZONE_VERSION
 if (-not $version) {
   $tagPattern = switch ($channel) {
     "stable" { '^v\d+\.\d+\.\d+$' }
     "nightly" { '^v\d+\.\d+\.\d+-nightly\.\d+\.\d+$' }
     "preview" { '^v\d+\.\d+\.\d+-preview\.\d+\.\d+$' }
-    default { Fail "T3CODE_CHANNEL must be stable, nightly, or preview" }
+    default { Fail "OZONE_CHANNEL must be stable, nightly, or preview" }
   }
   if ($channel -eq "stable") {
     # GitHub marks only a published, plain stable release latest. This is a github.com
@@ -152,12 +152,12 @@ if (-not $version) {
       if (-not $releases) { break }
     }
   }
-  if (-not $tag) { Fail "could not find a $channel release; set T3CODE_VERSION" }
+  if (-not $tag) { Fail "could not find a $channel release; set OZONE_VERSION" }
   $version = $tag.Substring(1)
 }
 if ($version -match '-preview\.') {
-  Write-Warning "ozone $version is a preview build. Preview builds are cut by maintainers from unreleased branches to exercise the release pipeline. They can be broken, receive no fixes, and are never offered as updates. Set T3CODE_CHANNEL=stable (the default) for a supported build."
-  if ($channel -ne "preview" -and -not $env:T3CODE_VERSION) {
+  Write-Warning "ozone $version is a preview build. Preview builds are cut by maintainers from unreleased branches to exercise the release pipeline. They can be broken, receive no fixes, and are never offered as updates. Set OZONE_CHANNEL=stable (the default) for a supported build."
+  if ($channel -ne "preview" -and -not $env:OZONE_VERSION) {
     Fail "refusing a preview build that was not explicitly requested"
   }
 }

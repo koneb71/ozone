@@ -211,7 +211,7 @@ listed port opens as `http://localhost:<port>` and might not be a web page. For
 an HTTPS server or a specific path, set the **Preview URL** on the project
 script that starts it; Ozone checks that address and opens it as written.
 
-To stop listing ports, set `T3CODE_PORT_DISCOVERY=0` in the environment that
+To stop listing ports, set `OZONE_PORT_DISCOVERY=0` in the environment that
 starts the Ozone server, such as
 [`service.env`](./background-service.md#configure-the-service-environment) for
 the background service, and restart it. Script preview URLs still appear.
@@ -240,14 +240,14 @@ as root. If your Ozone server runs as root, run it as a nonroot user to keep
 sandboxing enabled. `ozone browser setup` does not fix this root restriction.
 
 If you need to run as root, or cannot enable the sandbox on your host, set
-`T3CODE_SERVER_BROWSER_SANDBOX=0` in the **Ozone server's environment** and restart
+`OZONE_SERVER_BROWSER_SANDBOX=0` in the **Ozone server's environment** and restart
 the server. This disables Chrome's sandbox. For a manual launch:
 
 ```sh
-T3CODE_SERVER_BROWSER_SANDBOX=0 ozone serve
+OZONE_SERVER_BROWSER_SANDBOX=0 ozone serve
 ```
 
-For a systemd service, add `Environment=T3CODE_SERVER_BROWSER_SANDBOX=0` under
+For a systemd service, add `Environment=OZONE_SERVER_BROWSER_SANDBOX=0` under
 `[Service]` in its configuration, run `sudo systemctl daemon-reload`, then restart
 the Ozone service. Setting the variable in an agent's terminal does not change the
 environment of an already running Ozone server.

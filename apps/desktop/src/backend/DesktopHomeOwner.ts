@@ -74,7 +74,7 @@ export const readLiveHomeOwner = Effect.fn("DesktopHomeOwner.readLiveHomeOwner")
 export const homeOwnedMessage = (owner: Option.Option<HomeOwner>): string =>
   Option.match(owner, {
     onNone: () =>
-      "Another Ozone server, such as the background service, is using this data directory, or an older background service is set up for it. Stop that server or try `ozone update`. If the older launcher cannot update, run `ozone service uninstall` and optionally reinstall with `ozone service install` from a current CLI. Run the Ozone install script again if `ozone` is missing or outdated, and pass `--base-dir` with the service's Ozone home to each command. Then reopen Ozone. You can also set a separate T3CODE_HOME and pair with the running server.",
+      "Another Ozone server, such as the background service, is using this data directory, or an older background service is set up for it. Stop that server or try `ozone update`. If the older launcher cannot update, run `ozone service uninstall` and optionally reinstall with `ozone service install` from a current CLI. Run the Ozone install script again if `ozone` is missing or outdated, and pass `--base-dir` with the service's Ozone home to each command. Then reopen Ozone. You can also set a separate OZONE_HOME and pair with the running server.",
     onSome: (owner) => {
       const kind = owner.serviceManaged
         ? "The Ozone background service"
@@ -83,6 +83,6 @@ export const homeOwnedMessage = (owner: Option.Option<HomeOwner>): string =>
       const stop = owner.serviceManaged
         ? "Stop it with `ozone service uninstall`, passing `--base-dir` with this Ozone home"
         : "If an Ozone app on another machine started it over SSH, that app restarts it: remove or disconnect that SSH environment there, or quit that app. Then stop the server";
-      return `${kind} is using this Ozone home (PID ${owner.pid}, port ${owner.port}${version}). ${stop}, and reopen Ozone. You can also set a separate T3CODE_HOME and pair with the running server.`;
+      return `${kind} is using this Ozone home (PID ${owner.pid}, port ${owner.port}${version}). ${stop}, and reopen Ozone. You can also set a separate OZONE_HOME and pair with the running server.`;
     },
   });

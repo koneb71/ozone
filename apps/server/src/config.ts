@@ -21,9 +21,9 @@ import { type ReleaseChannel, releaseResourceAttributes } from "@t3tools/shared/
 import packageJson from "../package.json" with { type: "json" };
 
 // Official release workflows set this telemetry channel; other builds report dev.
-declare const __T3CODE_TELEMETRY_CHANNEL__: ReleaseChannel | undefined;
+declare const __OZONE_TELEMETRY_CHANNEL__: ReleaseChannel | undefined;
 export const telemetryChannel: ReleaseChannel =
-  typeof __T3CODE_TELEMETRY_CHANNEL__ === "undefined" ? "dev" : __T3CODE_TELEMETRY_CHANNEL__;
+  typeof __OZONE_TELEMETRY_CHANNEL__ === "undefined" ? "dev" : __OZONE_TELEMETRY_CHANNEL__;
 
 // Ozone listens on its own port so it can run beside a T3 Code install.
 export const DEFAULT_PORT = 3737;

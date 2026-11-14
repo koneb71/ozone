@@ -86,9 +86,8 @@ Download the latest build from [Releases](https://github.com/koneb71/ozone/relea
 | Linux, 64-bit Intel or AMD   | `Ozone-…-x86_64.AppImage` |
 | Windows, 64-bit Intel or AMD | `Ozone-…-x64.exe`         |
 
-The builds are not signed. On a Mac, the first time, open **System Settings**, choose **Privacy &
-Security** and press **Open Anyway** after macOS refuses to open Ozone. On Windows, SmartScreen
-warns before the installer runs; choose **More info**, then **Run anyway**.
+The Mac app is signed and notarized by Apple, so it opens like any other download. The Windows
+installer is not signed: SmartScreen warns before it runs; choose **More info**, then **Run anyway**.
 
 Ozone keeps its data in `~/.ozone`. See [Install Ozone](docs/user/install.md) for the `ozone`
 command and for running it on a server.

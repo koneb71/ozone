@@ -37,10 +37,10 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("installer home
           env: {
             ...process.env,
             HOME: root,
-            T3CODE_HOME: homeName,
-            T3CODE_VERSION: version,
-            T3CODE_INSTALL_BIN_DIR: NodePath.dirname(launcher),
-            T3CODE_RELEASE_BASE_URL: "http://127.0.0.1:1",
+            OZONE_HOME: homeName,
+            OZONE_VERSION: version,
+            OZONE_INSTALL_BIN_DIR: NodePath.dirname(launcher),
+            OZONE_RELEASE_BASE_URL: "http://127.0.0.1:1",
           },
           encoding: "utf8",
         },
@@ -104,12 +104,12 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("installer chan
           const child = NodeChildProcess.spawn("sh", [installer], {
             env: {
               ...process.env,
-              T3CODE_VERSION: "",
-              T3CODE_CHANNEL: channel,
-              T3CODE_HOME: NodePath.join(root, "home"),
-              T3CODE_INSTALL_BIN_DIR: NodePath.join(root, "bin"),
+              OZONE_VERSION: "",
+              OZONE_CHANNEL: channel,
+              OZONE_HOME: NodePath.join(root, "home"),
+              OZONE_INSTALL_BIN_DIR: NodePath.join(root, "bin"),
               // A wrong version must fail here instead of downloading a real release.
-              T3CODE_RELEASE_BASE_URL: origin,
+              OZONE_RELEASE_BASE_URL: origin,
             },
             stdio: ["ignore", "pipe", "pipe"],
           });
@@ -151,11 +151,11 @@ async function installOver(input: {
     ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
     env: {
       ...process.env,
-      T3CODE_CHANNEL: "",
-      T3CODE_VERSION: "1.2.3",
-      T3CODE_HOME: input.home,
-      T3CODE_INSTALL_BIN_DIR: input.binDir,
-      T3CODE_RELEASE_BASE_URL: "http://127.0.0.1:9",
+      OZONE_CHANNEL: "",
+      OZONE_VERSION: "1.2.3",
+      OZONE_HOME: input.home,
+      OZONE_INSTALL_BIN_DIR: input.binDir,
+      OZONE_RELEASE_BASE_URL: "http://127.0.0.1:9",
       ...input.env,
     },
   });
@@ -290,7 +290,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "win32")(
         expect(await NodeFSP.readFile(shim, "utf8")).toBe(desktopShim);
 
         // A hand-edited wrapper may set its own environment; replacing it would drop that.
-        const edited = `@echo off\r\nset "T3CODE_HOME=D:\\other"\r\n"${NodePath.join(home, "runtime", "versions", "1.0.0", "ozone.exe")}" %*`;
+        const edited = `@echo off\r\nset "OZONE_HOME=D:\\other"\r\n"${NodePath.join(home, "runtime", "versions", "1.0.0", "ozone.exe")}" %*`;
         await NodeFSP.writeFile(shim, edited, "utf8");
         const wrapper = await installOver({ script: "install.ps1", home, binDir });
         expect(wrapper.code).not.toBe(0);
@@ -430,10 +430,10 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("installer chec
                   env: {
                     ...process.env,
                     PATH: tools,
-                    T3CODE_VERSION: version,
-                    T3CODE_HOME: home,
-                    T3CODE_INSTALL_BIN_DIR: NodePath.join(root, "bin"),
-                    T3CODE_RELEASE_BASE_URL: `http://127.0.0.1:${address.port}`,
+                    OZONE_VERSION: version,
+                    OZONE_HOME: home,
+                    OZONE_INSTALL_BIN_DIR: NodePath.join(root, "bin"),
+                    OZONE_RELEASE_BASE_URL: `http://127.0.0.1:${address.port}`,
                   },
                   stdio: ["ignore", "pipe", "pipe"],
                 },

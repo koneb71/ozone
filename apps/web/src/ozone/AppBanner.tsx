@@ -22,6 +22,7 @@ import { previewEnvironment } from "~/state/preview";
 import { useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
 
+import { AppDeployButton } from "./app-page/DeployButton";
 import { useOpenAppPage } from "./app-page/navigation";
 import { AppMenu } from "./AppMenu";
 import { buildBannerItem } from "./BuildCard";
@@ -257,6 +258,7 @@ export function useAppBanners(
               {phase === "failed" ? "Try again" : "Start"}
             </Button>
           ) : null}
+          <AppDeployButton app={app} environmentId={threadRef.environmentId} />
           <AppMenu
             app={app}
             environmentId={threadRef.environmentId}

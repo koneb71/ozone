@@ -14,6 +14,7 @@ import { useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
 
+import { AppDeployButton } from "./app-page/DeployButton";
 import { useOpenAppPage } from "./app-page/navigation";
 import { APP_MENU_PAGES } from "./app-page/menuPages";
 import { metaLine, phaseTone } from "./appPage.logic";
@@ -84,6 +85,7 @@ function AppRow(props: {
           <Button size="xs" variant="outline" onClick={props.onOpen}>
             Open
           </Button>
+          <AppDeployButton app={app} environmentId={environmentId} />
           <Menu>
             <MenuTrigger
               aria-label={`More for ${app.name}`}

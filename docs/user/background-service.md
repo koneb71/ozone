@@ -43,12 +43,12 @@ threads, and settings under `~/.ozone/userdata` are kept, along with
 
 A new service answers only on this machine. Other devices reach it once you
 choose the local network in `ozone up` (or run `ozone up --lan`, which sets
-`T3CODE_LAN=true` in `service.env`). It then listens on your local network and
+`OZONE_LAN=true` in `service.env`). It then listens on your local network and
 Tailscale addresses, so browsers and desktop apps on the same network connect
 directly. It still does not answer on public addresses. Anyone on the same
 network can reach the port, so a pairing code is all that keeps them out.
 
-`ozone up --no-lan` turns it off. Any `T3CODE_HOST` value replaces this setting.
+`ozone up --no-lan` turns it off. Any `OZONE_HOST` value replaces this setting.
 
 ## Configure the service environment
 
@@ -57,13 +57,13 @@ normally `~/.ozone/service.env`. This file survives service installation
 and updates. For example:
 
 ```dotenv
-T3CODE_PORT=3737
-T3CODE_HOST=127.0.0.1
+OZONE_PORT=3737
+OZONE_HOST=127.0.0.1
 ```
 
 Use `KEY=VALUE` entries, quoting values that contain spaces or `#`. Values are
 literal: shell commands and variable expansion are not evaluated. Entries
-override the inherited service environment, except for `PATH`, `T3CODE_HOME`,
+override the inherited service environment, except for `PATH`, `OZONE_HOME`,
 `T3_BOOT_SERVICE_UNIT`, and `T3_SERVICE_LAUNCHER_CONTEXT` (including case variants).
 
 Run `ozone service restart` after changing the file. Changes apply when the service

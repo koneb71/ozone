@@ -95,12 +95,11 @@ starts its lead thread.
 - **Ozone keeps its state out of the orchestration core.** `Orchestrator.ts`, `ProjectionStore.ts`
   and the V2 command and event unions carry nothing about apps or builds. Ozone composes the
   core's public services and keeps its own tables.
-- **Internal names stay as they are.** The `@t3tools/*` packages, `T3CODE_*` variables, storage
-  keys, the `t3code://` scheme, `t3.json`, the `t3_*` MCP tool names, the `t3-code` MCP server key
+- **Internal names stay as they are.** The `@t3tools/*` packages, storage keys, the `t3code://` scheme, `t3.json`, the `t3_*` MCP tool names, the `t3-code` MCP server key
   and the `t3code/` lint rules keep their names, because existing installs have saved them.
-  Everything a person reads says Ozone.
-- **Releases are built on each platform's own runner, unsigned.** Windows builds on Windows, so
-  nothing is cross-compiled. Each desktop build is opened before it is kept. See
+  Everything a person reads says Ozone. Environment variables are the exception: they are `OZONE_*`.
+- **Releases are built on each platform's own runner.** Windows builds on Windows, so
+  nothing is cross-compiled. Only the Mac app is signed. Each desktop build is opened before it is kept. See
   [Release](../operations/release.md).
 
 ## Defaults

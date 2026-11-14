@@ -19,21 +19,21 @@ describe("loadRepoEnv", () => {
     const repoRoot = makeTemporaryDirectory();
     NodeFS.writeFileSync(
       NodePath.join(repoRoot, ".env"),
-      "T3CODE_APPLE_TEAM_ID=ROOT123456\nT3CODE_FEATURE_SECRETS=root\nONLY_ROOT=root\n",
+      "OZONE_APPLE_TEAM_ID=ROOT123456\nOZONE_FEATURE_SECRETS=root\nONLY_ROOT=root\n",
     );
     NodeFS.writeFileSync(
       NodePath.join(repoRoot, ".env.local"),
-      "T3CODE_APPLE_TEAM_ID=LOCAL12345\nT3CODE_FEATURE_SECRETS=local\n",
+      "OZONE_APPLE_TEAM_ID=LOCAL12345\nOZONE_FEATURE_SECRETS=local\n",
     );
 
     expect(loadRepoEnv({ baseEnv: {}, repoRoot })).toEqual({
-      T3CODE_APPLE_TEAM_ID: "LOCAL12345",
-      T3CODE_FEATURE_SECRETS: "local",
+      OZONE_APPLE_TEAM_ID: "LOCAL12345",
+      OZONE_FEATURE_SECRETS: "local",
       ONLY_ROOT: "root",
     });
-    expect(loadRepoEnv({ baseEnv: { T3CODE_APPLE_TEAM_ID: "CI12345678" }, repoRoot })).toEqual({
-      T3CODE_APPLE_TEAM_ID: "CI12345678",
-      T3CODE_FEATURE_SECRETS: "local",
+    expect(loadRepoEnv({ baseEnv: { OZONE_APPLE_TEAM_ID: "CI12345678" }, repoRoot })).toEqual({
+      OZONE_APPLE_TEAM_ID: "CI12345678",
+      OZONE_FEATURE_SECRETS: "local",
       ONLY_ROOT: "root",
     });
   });

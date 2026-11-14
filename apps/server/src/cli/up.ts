@@ -23,7 +23,7 @@ import * as CliService from "./service.ts";
 interface Setup {
   readonly service: BootService.BootServiceStatus;
   readonly lan: boolean;
-  /** An installed service with no T3CODE_LAN keeps the old default: on. */
+  /** An installed service with no OZONE_LAN keeps the old default: on. */
   readonly lanFromOldDefault: boolean;
   readonly host: string | undefined;
 }
@@ -33,7 +33,7 @@ const readSetup = Effect.fn("cli.up.read_setup")(function* () {
   const service = yield* (yield* BootService.BootService).status;
   const { entries } = yield* CliService.readServiceEnv(baseDir);
   // Parsed as the server parses it.
-  const lan = yield* Config.Boolean("T3CODE_LAN")
+  const lan = yield* Config.Boolean("OZONE_LAN")
     .pipe(Config.option)
     .parse(ConfigProvider.fromEnv({ env: entries }));
   // Another home's service doesn't read this home's service.env.
@@ -42,7 +42,7 @@ const readSetup = Effect.fn("cli.up.read_setup")(function* () {
     service,
     lan: Option.getOrElse(lan, () => servesThisHome),
     lanFromOldDefault: Option.isNone(lan) && servesThisHome,
-    host: entries.T3CODE_HOST,
+    host: entries.OZONE_HOST,
   } satisfies Setup;
 });
 
@@ -68,7 +68,7 @@ const formatSetup = (setup: Setup) => {
     [
       "Local network",
       setup.host !== undefined
-        ? `overridden · T3CODE_HOST=${setup.host}`
+        ? `overridden · OZONE_HOST=${setup.host}`
         : setup.lanFromOldDefault
           ? "on · kept from an older install"
           : setup.lan
@@ -148,7 +148,7 @@ const setUp = Effect.fn("cli.up")(function* (flags: {
   }
   // Nothing to run in the background, but access left on still gets turned off.
   if (!before.service.installed && !lan) {
-    if (before.lan) yield* CliService.writeServiceEnv(baseDir, { T3CODE_LAN: "false" });
+    if (before.lan) yield* CliService.writeServiceEnv(baseDir, { OZONE_LAN: "false" });
     return yield* Console.log(formatNextSteps(lan, false, pairCommand));
   }
   const { installedVersion } = before.service;
@@ -178,13 +178,13 @@ const setUp = Effect.fn("cli.up")(function* (flags: {
     if (!confirmed) return yield* Console.log("Nothing changed.");
   }
 
-  const previousLan = (yield* CliService.readServiceEnv(baseDir)).entries.T3CODE_LAN;
+  const previousLan = (yield* CliService.readServiceEnv(baseDir)).entries.OZONE_LAN;
   // Also with no service manager: the file records the choice that `ozone status` shows.
-  yield* CliService.writeServiceEnv(baseDir, { T3CODE_LAN: String(lan) });
+  yield* CliService.writeServiceEnv(baseDir, { OZONE_LAN: String(lan) });
   // When the service step fails, an installed service still runs with the old
   // value, so the file goes back to match it.
   const restoreServiceEnv = before.service.installed
-    ? CliService.writeServiceEnv(baseDir, { T3CODE_LAN: previousLan })
+    ? CliService.writeServiceEnv(baseDir, { OZONE_LAN: previousLan })
     : Effect.void;
   // A failed update or restart may still have started the service with the new
   // settings, so restart it once more on the old ones.
@@ -193,22 +193,22 @@ const setUp = Effect.fn("cli.up")(function* (flags: {
     : Effect.void;
   if (before.host !== undefined) {
     yield* Console.warn(
-      `T3CODE_HOST=${before.host} in service.env overrides the network choice. Remove it to apply it.`,
+      `OZONE_HOST=${before.host} in service.env overrides the network choice. Remove it to apply it.`,
     );
   }
 
   const printServeCommand = Effect.fn(function* (reason: string) {
     const { command } = yield* resolveHostCliCommand("serve", [
       ...baseDirArgs,
-      // Explicit either way, so a T3CODE_LAN in the shell cannot override the choice.
+      // Explicit either way, so a OZONE_LAN in the shell cannot override the choice.
       lan ? "--lan" : "--no-lan",
     ]);
     yield* Console.log(`${reason} Keep this command running:\n  ${command}`);
     // A host wins over --lan and --no-lan, as it does in service.env.
-    const shellHost = (yield* HostProcess.Environment).T3CODE_HOST;
+    const shellHost = (yield* HostProcess.Environment).OZONE_HOST;
     if (shellHost !== undefined) {
       yield* Console.warn(
-        `T3CODE_HOST=${shellHost} in this shell overrides that choice. Unset it before you run the command.`,
+        `OZONE_HOST=${shellHost} in this shell overrides that choice. Unset it before you run the command.`,
       );
     }
   });
