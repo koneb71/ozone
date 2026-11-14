@@ -1,6 +1,15 @@
 {
   "name": "@t3tools/monorepo",
   "private": true,
+  "description": "Describe an app and Ozone builds it, runs it and deploys it. A local-first app builder on a full client for coding agents.",
+  "homepage": "https://github.com/koneb71/ozone#readme",
+  "bugs": "https://github.com/koneb71/ozone/issues",
+  "license": "MIT",
+  "author": "Neiell Care L. Paradiang",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/koneb71/ozone"
+  },
   "type": "module",
   "scripts": {
     "prepare": "vp config --no-agent",

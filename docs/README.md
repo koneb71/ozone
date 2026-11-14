@@ -2,9 +2,9 @@
 
 ## Using Ozone
 
-The [root README](../README.md) introduces apps, builds and deploys. These guides cover the rest.
-
 - [Install Ozone](./user/install.md)
+- [Apps and builds](./user/apps.md)
+- [Deploying an app](./user/deploy.md)
 - [Welcome page](./user/welcome-page.md)
 - [Messages and context](./user/composer.md)
 - [Files in question answers](./user/question-attachments.md)

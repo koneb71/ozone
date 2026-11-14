@@ -8,6 +8,11 @@ Ozone is local first: it runs on your machine with your own provider accounts, a
 to a service you did not set up. Under the app builder is a full client for coding agents, with
 threads, providers, checkpoints, a preview browser and remote access over your own network.
 
+Ozone is built on [T3 Code](https://github.com/pingdotgg/t3code) by T3 Tools. See
+[Thanks](#thanks).
+
+![Home: describe an app, pick a template, and see the apps you have built](docs/ozone/assets/home.png)
+
 ![A build thread: the plan with its repair task, the running app and its preview](docs/ozone/assets/build.png)
 
 That thread started from one sentence: "A reading list. Add a book with its title and author, mark
@@ -32,8 +37,9 @@ it as read, and see how many are left to read." This is the app it built:
 - **Gives each app a page.** Open it from Home or from the app's thread: Overview, Data, History,
   Environment, Build and Logs while you build, then Deploy, Deployments and Monitoring for
   production. It is laid out like Settings.
-- **Lets you steer.** Turn on "Plan first" and the build starts only when you say so. Each app's
-  Build page chooses the model its workers use, so a large lead can direct cheaper workers.
+- **Lets you steer.** Turn on "Plan first", on Home or above the message box in an app's thread,
+  and the build starts only when you say so. Each app's Build page chooses the model its workers
+  use, so a large lead can direct cheaper workers.
 - **Keeps your data.** An app's database lives in a volume that only a confirmed **Delete app**
   removes, after a snapshot, and Home can bring a deleted app back with that data. Every finished
   task takes a snapshot, and **History** takes the code and the data back to any task, which you
@@ -49,7 +55,10 @@ it as read, and see how many are left to read." This is the app it built:
   - **Monitoring** shows each container's CPU, memory and network, and its logs. **Set up** checks
     a server, installs Docker there if it has none, and starts the proxy.
   - A **Dokploy** server, or a **Railway**, **Render**, **Koyeb** or **Vercel** account, can run the
-    app from its Git remote instead. The host then owns the containers and the data.
+    app instead. Add it once under **Servers** with an API key or token. The host then owns the
+    containers and the data. Vercel takes only apps without a database.
+  - Those hosts build from a Git repository. When the app has none, **Deploy** offers to create a
+    private or public GitHub repository for it in one click.
   - **Build** deploys by itself when a build completes if you ask, **Deploy** gives the app a URL
     to call from a script, and **Notifications** tells Slack, Discord, Telegram or any webhook how
     each deploy went.
@@ -58,6 +67,8 @@ it as read, and see how many are left to read." This is the app it built:
 - **Uses your subscription.** Sign in to Claude from Settings. No API key is involved, and an API
   key left in your shell is not used by accident. Codex, Cursor, OpenCode and the other
   [supported providers](docs/README.md) work too.
+
+![The Deploy page: pick a saved server, and create the app's GitHub repository in one click](docs/ozone/assets/deploy.png)
 
 ## Run it
 
@@ -105,13 +116,22 @@ Open the pairing URL the dev runner prints.
 
 ## How it works
 
-- [Using Ozone](docs/README.md): the user guides, from the composer to remote access.
+- [Apps and builds](docs/user/apps.md) and [Deploying an app](docs/user/deploy.md): the guides
+  for what Ozone adds.
+- [Using Ozone](docs/README.md): the rest of the user guides, from the composer to remote access.
 - [How Ozone is built](docs/ozone/README.md): how the parts fit and the decisions behind them.
 - [The Build Conductor](docs/ozone/orchestrator.md): the orchestrator and the decisions behind it.
 - [Data safety](docs/ozone/data-safety.md): the contract that keeps an app's data.
 - [AGENTS.md](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md): how to work on Ozone.
 
+## Thanks
+
+Ozone started as a fork of [T3 Code](https://github.com/pingdotgg/t3code), the open source client
+for coding agents by Theo and the team at T3 Tools. The threads, providers, checkpoints, preview
+browser, terminal and most of what makes Ozone fast and pleasant to use are their work. Ozone adds
+the app builder, the deploys and a local-first setup on top, and has since gone its own way. If
+you want a great client for coding agents without the app builder, use T3 Code.
+
 ## License
 
-MIT. See [LICENSE](LICENSE). Ozone started as a fork of
-[T3 Code](https://github.com/pingdotgg/t3code), which is MIT licensed too.
+MIT, as T3 Code is. See [LICENSE](LICENSE), which keeps T3 Tools' copyright notice beside Ozone's.
