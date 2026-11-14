@@ -913,6 +913,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
         serverConfig.settingsPath,
         JSON.stringify({
           addProjectBaseDirectory: "~/Development",
+          appsDirectory: "~/Apps",
           providers: {
             codex: { binaryPath: "/opt/guard/bin/codex" },
             claudeAgent: { enabled: false },
@@ -940,6 +941,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
       const persisted = JSON.parse(yield* fileSystem.readFileString(serverConfig.settingsPath));
       assert.isUndefined(persisted.providers);
       assert.equal(persisted.addProjectBaseDirectory, "~/Development");
+      assert.equal(persisted.appsDirectory, "~/Apps");
       assert.deepEqual(persisted.providerInstances.codex, {
         driver: "codex",
         config: { binaryPath: "/opt/guard/bin/codex" },

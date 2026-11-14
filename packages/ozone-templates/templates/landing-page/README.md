@@ -24,6 +24,8 @@ Node and the dependencies live in the container. Run project commands through `.
 ./dev npm install <package>
 ```
 
+On Windows the same commands work from PowerShell and `cmd`, through `dev.cmd`.
+
 ## Ship it
 
 Ozone's **Deploy** runs `compose.prod.yaml`. By hand, `docker build --target prod -t my-site .` builds the production image, which serves the site on port 3000.

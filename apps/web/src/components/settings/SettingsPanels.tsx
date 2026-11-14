@@ -403,6 +403,9 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.addProjectBaseDirectory !== DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory
       ? ["Add project base directory"]
       : []),
+    ...(settings.appsDirectory !== DEFAULT_UNIFIED_SETTINGS.appsDirectory
+      ? ["Folder for new apps"]
+      : []),
     ...(settings.ghqCloneLayout !== DEFAULT_UNIFIED_SETTINGS.ghqCloneLayout
       ? ["Clone into host folders"]
       : []),
@@ -521,6 +524,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       defaultThreadEnvMode: DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode,
       newWorktreesStartFromOrigin: DEFAULT_UNIFIED_SETTINGS.newWorktreesStartFromOrigin,
       addProjectBaseDirectory: DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory,
+      appsDirectory: DEFAULT_UNIFIED_SETTINGS.appsDirectory,
       ghqCloneLayout: DEFAULT_UNIFIED_SETTINGS.ghqCloneLayout,
       confirmThreadArchive: DEFAULT_UNIFIED_SETTINGS.confirmThreadArchive,
       confirmThreadDelete: DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete,
@@ -1561,6 +1565,7 @@ export function ThreadsSettingsPanel() {
     textGenerationModelInstanceEntries,
   );
   const mixedAddProjectBaseDirectory = useScopedSettingsMixed(["addProjectBaseDirectory"]);
+  const mixedAppsDirectory = useScopedSettingsMixed(["appsDirectory"]);
   const mixedTextGenerationModel = useScopedSettingsMixed(["textGenerationModelSelection"]);
 
   return (
@@ -1594,6 +1599,34 @@ export function ThreadsSettingsPanel() {
               placeholder={mixedAddProjectBaseDirectory ? "Mixed" : "~/"}
               spellCheck={false}
               aria-label="Add project base directory"
+            />
+          }
+        />
+        <SettingsRow
+          serverScoped
+          settingKeys={["appsDirectory"]}
+          {...searchableSetting("apps-saved-in")}
+          description="Each new app gets its own folder here. Apps you already have stay where they are."
+          resetAction={
+            settings.appsDirectory !== DEFAULT_UNIFIED_SETTINGS.appsDirectory ? (
+              <SettingResetButton
+                label="apps folder"
+                onClick={() =>
+                  updateSettings({ appsDirectory: DEFAULT_UNIFIED_SETTINGS.appsDirectory })
+                }
+              />
+            ) : null
+          }
+          control={
+            <DraftInput
+              size="sm"
+              className="w-full sm:w-72"
+              value={mixedAppsDirectory ? "" : settings.appsDirectory}
+              onCommit={(next) => updateSettings({ appsDirectory: next })}
+              normalizeDraft={resolvePastedPath}
+              placeholder={mixedAppsDirectory ? "Mixed" : "Ozone's own folder"}
+              spellCheck={false}
+              aria-label="Folder for new apps"
             />
           }
         />

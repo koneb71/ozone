@@ -3,7 +3,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
 import { OZONE_APP_INSTRUCTIONS } from "./appInstructions.ts";
-import type { TemplateFile } from "./templates.ts";
+import { templateFiles, type TemplateFile } from "./templates.ts";
 
 const APP_NAME_TOKEN = "__OZONE_APP_NAME__";
 const APP_SLUG_TOKEN = "__OZONE_APP_SLUG__";
@@ -90,4 +90,30 @@ export const scaffold = Effect.fn("AppScaffolder.scaffold")(function* (input: Sc
   }
   yield* fs.writeFileString(path.join(input.workspaceRoot, ".env"), environmentFile(input));
   return written;
+});
+
+const HELPER = "dev";
+const WINDOWS_HELPER = "dev.cmd";
+
+/**
+ * An app made before templates carried `dev.cmd` has only `dev`, which Windows cannot run: it asks
+ * which program should open it. Adds the twin on a Windows host, and never replaces one.
+ */
+export const addWindowsHelper = Effect.fn("AppScaffolder.addWindowsHelper")(function* (input: {
+  readonly platform: NodeJS.Platform;
+  readonly workspaceRoot: string;
+  readonly templateId: string;
+}) {
+  if (input.platform !== "win32") return false;
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const target = path.join(input.workspaceRoot, WINDOWS_HELPER);
+  if (!(yield* fs.exists(path.join(input.workspaceRoot, HELPER)))) return false;
+  if (yield* fs.exists(target)) return false;
+  const helper = (yield* templateFiles(input.templateId)).find(
+    (file) => file.path === WINDOWS_HELPER,
+  );
+  if (helper === undefined) return false;
+  yield* fs.writeFile(target, helper.bytes);
+  return true;
 });

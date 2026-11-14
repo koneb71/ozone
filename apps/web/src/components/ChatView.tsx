@@ -3737,7 +3737,10 @@ export default function ChatView(props: ChatViewProps) {
                                   (activeThreadShell ?? activeThread)?.pullRequests
                                 }
                                 onComposerOverlayHeightChange={publishComposerOverlayHeightStable}
-                                planModeAvailable={!isOzoneAppThread}
+                                planModeAvailable={
+                                  !isOzoneAppThread &&
+                                  activeProviderStatus?.showInteractionModeToggle !== false
+                                }
                                 permissionsShownInStrip={
                                   showComposerContextStrip && !isServerThread
                                 }

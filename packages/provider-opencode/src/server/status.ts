@@ -29,7 +29,7 @@ import * as OpenCodeServerOwner from "./OpenCodeServerOwner.ts";
 
 const OPENCODE_PRESENTATION = {
   displayName: "OpenCode",
-  showInteractionModeToggle: false,
+  showInteractionModeToggle: true,
 } as const;
 
 class OpenCodeProbeError extends Schema.TaggedError<OpenCodeProbeError>()("OpenCodeProbeError", {
@@ -621,7 +621,6 @@ export function openCode2CommandsToServerProviderSlashCommands(
 // OpenCode has no reviewer; Auto asks like Supervised.
 const OPENCODE_2_PRESENTATION = {
   ...OPENCODE_PRESENTATION,
-  showInteractionModeToggle: true,
   supportedRuntimeModes: ["approval-required", "auto-accept-edits", "auto", "full-access"],
 } as const;
 

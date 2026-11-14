@@ -795,6 +795,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["base directory folder browser path home"],
   },
   {
+    id: "apps-saved-in",
+    title: "Apps are saved in",
+    to: "/settings/threads",
+    scope: "environment-defaults",
+    searchTerms: ["app folder directory location path build where save"],
+  },
+  {
     id: "ghq-clone-layout",
     title: "Clone into host folders",
     to: "/settings/threads",

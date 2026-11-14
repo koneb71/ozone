@@ -25,6 +25,8 @@ Node and the dependencies live in the container. Run project commands through `.
 ./dev npm run db:generate   # after changing src/db/schema.ts
 ```
 
+On Windows the same commands work from PowerShell and `cmd`, through `dev.cmd`.
+
 ## Your data
 
 The database lives in the Docker volume `pgdata`. Stopping, restarting and rebuilding the app keep it. `docker compose down -v` and `docker volume rm` delete it: do not run them unless you mean to lose the data.

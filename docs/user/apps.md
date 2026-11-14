@@ -18,7 +18,12 @@ so when either is missing.
    - **Web app**: pages, sign-in and a Postgres database.
    - **Landing page**: pages only, no database.
    - **API**: an HTTP API with a Postgres database.
-3. Describe the app and press Enter. You can attach sketches or files.
+3. To use a model other than your default, pick it beside the template.
+4. Describe the app and press Enter. You can attach sketches or files.
+
+The first time, Ozone asks where to keep your apps. Each app gets its own folder inside the one
+you choose, on the machine Ozone's server runs on. To change it later, open **Settings →
+Threads** and set **Apps are saved in**. Apps you already have stay where they are.
 
 Ozone creates the project in a git repository of its own, starts its containers and opens a
 thread where the build runs. The preview opens beside the thread when the app is up.

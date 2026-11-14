@@ -7,6 +7,7 @@ import {
 import type { EnvironmentId, ModelSelection, ProjectId } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 
+import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
 import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
 import { useScratchProject } from "~/hooks/useScratchProject";
 import { newMessageId, newThreadId } from "~/lib/utils";
@@ -39,20 +40,32 @@ const failureMessage = (
   return error instanceof Error && error.message.trim().length > 0 ? error.message : fallback;
 };
 
-/** What a new thread in this project would use, read at call time. */
-function newThreadDefaults(environmentId: EnvironmentId, projectId: ProjectId) {
+/** What a new thread in this project would use, read at call time. A chosen model wins. */
+function newThreadDefaults(
+  environmentId: EnvironmentId,
+  projectId: ProjectId,
+  chosen: ModelSelection | null,
+) {
   const settings = appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.settings;
   if (settings === undefined) return null;
   const providers =
     appAtomRegistry.get(environmentPresentations.providersByEnvironmentAtom).get(environmentId) ??
     [];
   const modelSelection: ModelSelection | null =
-    settings.defaultModelSelection === null
-      ? resolveProjectDefaultProviderModelSelection(providers, settings, projectId)
-      : resolveDefaultProviderModelSelection(providers, settings.defaultModelSelection);
+    chosen !== null
+      ? chosen
+      : settings.defaultModelSelection === null
+        ? resolveProjectDefaultProviderModelSelection(providers, settings, projectId)
+        : resolveDefaultProviderModelSelection(providers, settings.defaultModelSelection);
   return modelSelection === null
     ? null
     : { modelSelection, runtimeMode: settings.defaultRuntimeMode };
+}
+
+/** A draft opens on the default model; the one picked on Home replaces it. */
+function chooseDraftModel(draftId: DraftId, model: ModelSelection | null) {
+  if (model === null) return;
+  useComposerDraftStore.getState().setModelSelection(draftId, model, { replaceOptions: true });
 }
 
 /** Starts what Home offers: a new app with its lead thread, a chat, or a chat about files. */
@@ -69,8 +82,9 @@ export function useOzoneLaunch() {
     environmentId: EnvironmentId,
     projectId: ProjectId,
     text: string,
+    model: ModelSelection | null,
   ): Promise<LaunchOutcome> => {
-    const defaults = newThreadDefaults(environmentId, projectId);
+    const defaults = newThreadDefaults(environmentId, projectId, model);
     if (defaults === null) {
       return "No model is ready yet. Open Settings, choose Providers and sign in to Claude, then try again. Claude Code must be installed on this machine first.";
     }
@@ -115,9 +129,10 @@ export function useOzoneLaunch() {
       readonly files: ReadonlyArray<File>;
       readonly reviewPlans: boolean;
       readonly templateId: string;
+      readonly model: ModelSelection | null;
     },
   ): Promise<LaunchOutcome> => {
-    const { files, reviewPlans, templateId } = options;
+    const { files, reviewPlans, templateId, model } = options;
     const created = await createApp({
       environmentId,
       input: { name: appNameFromPrompt(prompt), templateId, settings: { reviewPlans } },
@@ -132,18 +147,23 @@ export function useOzoneLaunch() {
     );
     if (!arrived)
       return "The app was created, but it has not reached this window. Reload to see it.";
-    if (files.length === 0) return startThread(environmentId, projectId, prompt);
+    if (files.length === 0) return startThread(environmentId, projectId, prompt, model);
     // The composer prepares attachments, so the request waits in it for the person to send.
     const draft = await handleNewThread(scopeProjectRef(environmentId, projectId), { prompt });
     if (draft === null) return "The app was created. Open it from the list to start its build.";
+    chooseDraftModel(draft.draftId, model);
     queueHomeFiles(scopeThreadRef(environmentId, draft.threadId), files, { startsBuild: true });
     return null;
   };
 
-  const chat = async (environmentId: EnvironmentId, prompt: string): Promise<LaunchOutcome> => {
+  const chat = async (
+    environmentId: EnvironmentId,
+    prompt: string,
+    model: ModelSelection | null,
+  ): Promise<LaunchOutcome> => {
     const project = await openScratchProject(environmentId, "Could not start a chat");
     // openScratchProject reports its own failure.
-    return project === null ? null : startThread(environmentId, project.id, prompt);
+    return project === null ? null : startThread(environmentId, project.id, prompt, model);
   };
 
   /** Opens a new chat with the files and the text typed so far in its composer, unsent. */
@@ -151,11 +171,13 @@ export function useOzoneLaunch() {
     environmentId: EnvironmentId,
     prompt: string,
     files: ReadonlyArray<File>,
+    model: ModelSelection | null,
   ): Promise<LaunchOutcome> => {
     const project = await openScratchProject(environmentId, "Could not start a chat");
     if (project === null) return null;
     const draft = await handleNewThread(scopeProjectRef(environmentId, project.id), { prompt });
     if (draft === null) return "The chat did not open. Try again.";
+    chooseDraftModel(draft.draftId, model);
     queueHomeFiles(scopeThreadRef(environmentId, draft.threadId), files);
     return null;
   };

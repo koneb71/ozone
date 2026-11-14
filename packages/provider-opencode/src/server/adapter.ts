@@ -2980,9 +2980,11 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
         // OpenCode runs each step with the agent and system prompt of the latest
         // user message, so every prompt in a turn, steers included, repeats them.
         const turnPromptOptions = (turn: ActiveOpenCodeTurn) => {
+          // Every selection carries the picker's agent, "build" by default, so plan mode decides first.
           const agent =
-            getModelSelectionStringOptionValue(turn.modelSelection, "agent") ??
-            (turn.runtimePolicy.interactionMode === "plan" ? "plan" : undefined);
+            turn.runtimePolicy.interactionMode === "plan"
+              ? "plan"
+              : getModelSelectionStringOptionValue(turn.modelSelection, "agent");
           const variant = getModelSelectionStringOptionValue(turn.modelSelection, "variant");
           return {
             ...(agent === undefined ? {} : { agent }),

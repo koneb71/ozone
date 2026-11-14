@@ -32,8 +32,10 @@ import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 
 import * as ServerConfig from "../../config.ts";
+import { expandHomePath } from "../../os-jank.ts";
 import * as ManagedProjectFolders from "../../project/ManagedProjectFolders.ts";
 import * as ProjectService from "../../project/ProjectService.ts";
+import * as ServerSettings from "../../serverSettings.ts";
 import * as GitVcsDriver from "../../vcs/GitVcsDriver.ts";
 import * as AppData from "../data/AppData.ts";
 import * as AppDeploy from "../deploy/AppDeploy.ts";
@@ -104,10 +106,21 @@ export const make = Effect.gen(function* () {
   const projects = yield* ProjectService.ProjectService;
   const deploys = yield* AppDeploy.AppDeploy;
   const config = yield* ServerConfig.ServerConfig;
+  const serverSettings = yield* ServerSettings.ServerSettingsService;
   const hostUserId = yield* HostProcess.UserId;
   const scope = yield* Scope.Scope;
   // One at a time, so two new apps can never be given the same port.
   const creating = yield* Semaphore.make(1);
+
+  /** The folder the user chose for their apps, or null for Ozone's own. */
+  const appsDirectory = serverSettings.getSettings.pipe(
+    Effect.mapError(() => failed("Ozone could not read its settings.")),
+    Effect.flatMap(({ appsDirectory: chosen }) =>
+      chosen === ""
+        ? Effect.succeed(null)
+        : expandHomePath(chosen).pipe(Effect.provideService(Path.Path, path)),
+    ),
+  );
 
   const freePort = Effect.fn("OzoneApps.freePort")(function* (taken: ReadonlySet<number>) {
     for (let port = APP_PORT_RANGE.first; port <= APP_PORT_RANGE.last; port++) {
@@ -175,8 +188,9 @@ export const make = Effect.gen(function* () {
     );
     const name = safeAppName(input.name);
     const port = yield* freePort(new Set((yield* registry.list).map((app) => app.port)));
+    const parent = yield* appsDirectory;
     const { projectId, workspaceRoot } = yield* folders
-      .createNamedProject({ name })
+      .createNamedProject({ name, ...(parent === null ? {} : { parent }) })
       .pipe(Effect.mapError((error) => failed(error.message)));
     // From here a failure takes back the project and the folder made for it.
     const undo = Effect.all(
@@ -427,6 +441,7 @@ export const make = Effect.gen(function* () {
         templates: TEMPLATES,
         docker: yield* runtime.docker,
         deleted: yield* deletedApps(apps),
+        defaultDirectory: folders.namedProjectsRoot,
       };
     }),
     restore: Effect.fn("OzoneApps.restore")((input) =>

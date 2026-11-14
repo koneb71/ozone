@@ -10,6 +10,7 @@ import {
   type OzoneRuntimeStatus,
   type ProjectId,
 } from "@t3tools/contracts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
@@ -25,6 +26,7 @@ import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 
 import * as AppRegistry from "../apps/AppRegistry.ts";
+import { addWindowsHelper } from "../apps/AppScaffolder.ts";
 import * as AppData from "../data/AppData.ts";
 import {
   ACCEPT_MIGRATIONS_ENV,
@@ -211,6 +213,7 @@ export const make = Effect.gen(function* () {
   const registry = yield* AppRegistry.AppRegistry;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const platform = yield* HostProcess.Platform;
 
   const operations = yield* Ref.make<ReadonlyMap<ProjectId, RuntimeOperation>>(new Map());
   const starts = yield* FiberMap.make<ProjectId>();
@@ -354,6 +357,15 @@ export const make = Effect.gen(function* () {
   ) {
     const projectId = resolved.app.projectId;
     yield* supersede(projectId);
+    yield* addWindowsHelper({
+      platform,
+      workspaceRoot: resolved.workspaceRoot,
+      templateId: resolved.app.templateId,
+    }).pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(Path.Path, path),
+      Effect.ignore,
+    );
     yield* setOperation(projectId, { state: "starting", message });
     yield* FiberMap.run(
       starts,

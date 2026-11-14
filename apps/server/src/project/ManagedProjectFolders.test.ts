@@ -397,6 +397,17 @@ it.effect("starts a named project as a committed repository, and suffixes a take
 
         assert.equal(first.workspaceRoot, path.join(root, "pinball-stats"));
         assert.equal(second.workspaceRoot, path.join(root, "pinball-stats-2"));
+
+        // A chosen parent takes the same free-name rule, and a relative one is refused.
+        const parent = path.join(baseDir, "elsewhere", "apps");
+        yield* fileSystem.makeDirectory(path.join(parent, "pinball-stats"), { recursive: true });
+        const moved = yield* folders.createNamedProject({ name: "Pinball Stats", parent });
+        assert.equal(moved.workspaceRoot, path.join(parent, "pinball-stats-2"));
+        const refused = yield* Effect.flip(
+          folders.createNamedProject({ name: "Pinball Stats", parent: "apps" }),
+        );
+        assert.equal(refused._tag, "NamedProjectFolderError");
+        assert.isFalse(yield* fileSystem.exists(path.resolve("apps", "pinball-stats")));
         assert.isUndefined(first.commitError);
         const project = Option.getOrThrow(yield* projects.getById(first.projectId));
         assert.equal(project.title, "Pinball Stats");

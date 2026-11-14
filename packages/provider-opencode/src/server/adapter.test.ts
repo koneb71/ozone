@@ -2212,7 +2212,14 @@ describe("OpenCodeAdapterV2", () => {
           },
         },
         {},
-        { options: [{ id: "variant", value: "high" }], interactionMode: "plan" },
+        // The picker's default agent rides along with every selection; the Plan switch outranks it.
+        {
+          options: [
+            { id: "variant", value: "high" },
+            { id: "agent", value: "build" },
+          ],
+          interactionMode: "plan",
+        },
       );
       yield* harness.startTurn();
       const snapshot = yield* harness.runtime.readThreadSnapshot({

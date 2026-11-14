@@ -166,6 +166,8 @@ export const OzoneAppsListResult = Schema.Struct({
   templates: Schema.Array(OzoneTemplateSummary),
   docker: OzoneDockerStatus,
   deleted: Schema.Array(OzoneDeletedApp).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+  /** Ozone's own folder for apps, used until the user chooses another. */
+  defaultDirectory: Schema.String.pipe(Schema.withDecodingDefaultKey(Effect.succeed(""))),
 });
 export type OzoneAppsListResult = typeof OzoneAppsListResult.Type;
 

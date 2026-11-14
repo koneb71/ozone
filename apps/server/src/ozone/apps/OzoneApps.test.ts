@@ -24,6 +24,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as ServerConfig from "../../config.ts";
 import * as ManagedProjectFolders from "../../project/ManagedProjectFolders.ts";
 import * as ProjectService from "../../project/ProjectService.ts";
+import * as ServerSettings from "../../serverSettings.ts";
 import * as GitVcsDriver from "../../vcs/GitVcsDriver.ts";
 import * as AppData from "../data/AppData.ts";
 import * as AppDeploy from "../deploy/AppDeploy.ts";
@@ -74,6 +75,8 @@ const makeHarness = Effect.gen(function* () {
   const configContext = yield* Layer.build(
     ServerConfig.layerTest(root, { prefix: "ozone-apps-home-" }),
   );
+  const settingsContext = yield* Layer.build(ServerSettings.layerTest());
+  const settings = Context.get(settingsContext, ServerSettings.ServerSettingsService);
   const backups = path.join(
     Context.get(configContext, ServerConfig.ServerConfig).stateDir,
     "ozone",
@@ -148,15 +151,19 @@ const makeHarness = Effect.gen(function* () {
             ),
         }),
         Layer.succeedContext(configContext),
+        Layer.succeedContext(settingsContext),
         Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
           namedProjectsRoot: root,
           createNamedProject: Effect.fn("TestFolders.createNamedProject")(function* (input) {
             const index = yield* Ref.updateAndGet(created, (count) => count + 1);
-            const workspaceRoot = path.join(root, input.name.toLowerCase().replaceAll(" ", "-"));
+            const workspaceRoot = path.join(
+              input.parent ?? root,
+              input.name.toLowerCase().replaceAll(" ", "-"),
+            );
             yield* (
               (yield* Ref.get(folderIsAFile))
                 ? fs.writeFileString(workspaceRoot, "in the way")
-                : fs.makeDirectory(workspaceRoot)
+                : fs.makeDirectory(workspaceRoot, { recursive: true })
             ).pipe(Effect.orDie);
             return { projectId: ProjectId.make(`a1b2c3-project-${index}`), workspaceRoot };
           }),
@@ -206,6 +213,7 @@ const makeHarness = Effect.gen(function* () {
     backupFails,
     folderIsAFile,
     deployedState,
+    settings,
     habits,
     habitsRoot,
     backups,
@@ -214,8 +222,9 @@ const makeHarness = Effect.gen(function* () {
 
 it.effect("OzoneApps creates an app from the template, registers it and starts it", () =>
   Effect.gen(function* () {
-    const { apps, root, registered, commits, started, fs, path } = yield* makeHarness;
+    const { apps, root, registered, commits, started, settings, fs, path } = yield* makeHarness;
 
+    assert.strictEqual((yield* apps.list).defaultDirectory, root);
     const first = yield* apps.create({ name: "Habit tracker" });
     assert.deepStrictEqual(
       { ...first.app, createdAt: "" },
@@ -288,6 +297,13 @@ it.effect("OzoneApps creates an app from the template, registers it and starts i
     const second = yield* apps.create({ name: "Recipe box" });
     assert.strictEqual(second.app.port, 41_002);
     assert.strictEqual(second.workspaceRoot, path.join(root, "recipe-box"));
+
+    // Once a place is chosen, new apps go there and the earlier ones stay where they are.
+    const chosen = path.join(root, "my apps");
+    yield* settings.updateSettings({ appsDirectory: chosen });
+    const third = yield* apps.create({ name: "Reading list" });
+    assert.strictEqual(third.workspaceRoot, path.join(chosen, "reading-list"));
+    assert.isTrue(yield* fs.exists(path.join(first.workspaceRoot, "ozone.json")));
   }).pipe(Effect.provide(Layer.merge(NodeServices.layer, NodeCrypto.layer))),
 );
 

@@ -47,6 +47,8 @@ it.effect.each(TEMPLATES.map((template) => template.id))(
       assert.include(yield* read("AGENTS.md"), "<!-- ozone:instructions -->");
       assert.isTrue(has("package-lock.json"));
       assert.isTrue(has("dev"));
+      // Windows cannot run a script with no extension, so each helper has a twin it can.
+      assert.isTrue(has("dev.cmd"));
 
       const migrations = manifest.migrations?.directory;
       if (migrations !== undefined) {

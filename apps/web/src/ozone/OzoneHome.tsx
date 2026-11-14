@@ -1,3 +1,4 @@
+import type { ModelSelection } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { ArrowUpIcon, HammerIcon, MessageCircleIcon, PaperclipIcon, XIcon } from "lucide-react";
 import { type DragEvent, type KeyboardEvent, useRef, useState } from "react";
@@ -17,13 +18,19 @@ import { Switch } from "~/components/ui/switch";
 import { Textarea } from "~/components/ui/textarea";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { WorkspacePageHeader } from "~/components/WorkspacePageHeader";
+import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
 import { isElectron } from "~/env";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { workspaceAreaProps } from "~/lib/workspaceFocus";
-import { usePrimaryEnvironmentId } from "~/state/environments";
+import { appAtomRegistry } from "~/rpc/atomRegistry";
+import { usePrimaryEnvironment } from "~/state/environments";
 import { useEnvironmentQuery } from "~/state/query";
+import { environmentServerConfigsAtom, serverEnvironment } from "~/state/server";
+import { useAtomCommand } from "~/state/use-atom-command";
 
+import { AppsFolderDialog } from "./AppsFolderDialog";
 import { DeletedApps, HomeApps } from "./HomeApps";
+import { HomeModelPicker } from "./HomeModelPicker";
 import { OzoneMark } from "./OzoneMark";
 import { ozoneEnvironment } from "./state";
 import { useOzoneLaunch } from "./useOzoneLaunch";
@@ -52,7 +59,11 @@ const DEFAULT_TEMPLATE_ID = "web-app";
 
 export function OzoneHome() {
   const contentArea = workspaceAreaProps("home", 1, "Home");
-  const environmentId = usePrimaryEnvironmentId();
+  const environment = usePrimaryEnvironment();
+  const environmentId = environment?.environmentId ?? null;
+  const saveSettings = useAtomCommand(serverEnvironment.updateSettings, { reportFailure: false });
+  // Open while the first build waits for the folder apps are kept in.
+  const [askingFolder, setAskingFolder] = useState(false);
   const launch = useOzoneLaunch();
   const [mode, setMode] = useState<HomeMode>("build");
   const [prompt, setPrompt] = useState("");
@@ -67,30 +78,61 @@ export function OzoneHome() {
     Schema.Boolean,
   );
   const [templateId, setTemplateId] = useState(DEFAULT_TEMPLATE_ID);
+  // Null until a model is picked: the build or chat then starts on the default.
+  const [model, setModel] = useState<ModelSelection | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const apps = useEnvironmentQuery(
     environmentId === null ? null : ozoneEnvironment.apps({ environmentId, input: {} }),
   );
   const copy = MODE_COPY[mode];
+  const folderIsOnThisMachine =
+    isElectron &&
+    environment !== null &&
+    (environment.entry.target._tag === "PrimaryConnectionTarget" ||
+      isDesktopLocalConnectionTarget(environment.entry.target));
   const templates = apps.data?.templates ?? [];
   const docker = apps.data?.docker;
   const dockerMissing = mode === "build" && docker !== undefined && !docker.available;
   const canSubmit =
     environmentId !== null && !launching && !dockerMissing && prompt.trim().length > 0;
 
-  const submit = async () => {
+  const submit = async (folderChosen = false) => {
     if (!canSubmit || environmentId === null) return;
+    const chosenFolder = appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)
+      ?.settings.appsDirectory;
+    // An older server has no such setting and keeps apps in its own folder.
+    if (mode === "build" && !folderChosen && chosenFolder === "") {
+      setError(null);
+      setAskingFolder(true);
+      return;
+    }
     setLaunching(true);
     setError(null);
     const text = prompt.trim();
     const outcome =
       mode === "build"
-        ? await launch.build(environmentId, text, { files, reviewPlans, templateId })
+        ? await launch.build(environmentId, text, { files, reviewPlans, templateId, model })
         : files.length > 0
-          ? await launch.chatWithFiles(environmentId, text, files)
-          : await launch.chat(environmentId, text);
+          ? await launch.chatWithFiles(environmentId, text, files, model)
+          : await launch.chat(environmentId, text, model);
     setLaunching(false);
     if (outcome !== null) setError(outcome);
+  };
+
+  const chooseFolder = async (directory: string) => {
+    if (environmentId === null) return;
+    setLaunching(true);
+    const saved = await saveSettings({
+      environmentId,
+      input: { patch: { appsDirectory: directory } },
+    });
+    setLaunching(false);
+    setAskingFolder(false);
+    if (saved._tag === "Failure") {
+      setError("The folder could not be saved, so nothing was built. Try again.");
+      return;
+    }
+    await submit(true);
   };
 
   // The thread's own composer prepares attachments. A chat opens it at once with the text typed
@@ -108,7 +150,12 @@ export function OzoneHome() {
       return;
     }
     setLaunching(true);
-    const outcome = await launch.chatWithFiles(environmentId, prompt.trim(), [...files, ...added]);
+    const outcome = await launch.chatWithFiles(
+      environmentId,
+      prompt.trim(),
+      [...files, ...added],
+      model,
+    );
     setLaunching(false);
     if (outcome !== null) setError(outcome);
   };
@@ -223,6 +270,14 @@ export function OzoneHome() {
                 </Toggle>
               </ToggleGroup>
               <div className="ms-auto flex items-center gap-1">
+                {environmentId === null ? null : (
+                  <HomeModelPicker
+                    environmentId={environmentId}
+                    value={model}
+                    disabled={launching}
+                    onChange={setModel}
+                  />
+                )}
                 {mode === "build" && templates.length > 1 ? (
                   <Select
                     value={templateId}
@@ -310,6 +365,16 @@ export function OzoneHome() {
                 </Button>
               </AlertAction>
             </Alert>
+          ) : null}
+          {askingFolder ? (
+            <AppsFolderDialog
+              defaultDirectory={apps.data?.defaultDirectory ?? ""}
+              machine={folderIsOnThisMachine ? null : (environment?.label ?? null)}
+              canBrowse={folderIsOnThisMachine}
+              saving={launching}
+              onCancel={() => setAskingFolder(false)}
+              onConfirm={(directory) => void chooseFolder(directory)}
+            />
           ) : null}
           {error === null ? null : (
             <Alert variant="error">

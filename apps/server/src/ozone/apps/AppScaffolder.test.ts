@@ -5,7 +5,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
 import { OZONE_APP_INSTRUCTIONS } from "./appInstructions.ts";
-import { appSlug, safeAppName, scaffold } from "./AppScaffolder.ts";
+import { addWindowsHelper, appSlug, safeAppName, scaffold } from "./AppScaffolder.ts";
 import { readTemplateTree } from "./templates.ts";
 
 describe("AppScaffolder", () => {
@@ -93,6 +93,30 @@ describe("AppScaffolder", () => {
       assert.deepStrictEqual(yield* fs.readFile(path.join(workspaceRoot, "logo.bin")), binary);
       // Entry points stay executable.
       assert.strictEqual((yield* fs.stat(path.join(workspaceRoot, "dev"))).mode & 0o111, 0o111);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("adds the Windows helper to an app that lacks it, on Windows only", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const workspaceRoot = yield* fs.makeTempDirectoryScoped({ prefix: "ozone-helper-" });
+      const helper = path.join(workspaceRoot, "dev.cmd");
+      const add = (platform: NodeJS.Platform) =>
+        addWindowsHelper({ platform, workspaceRoot, templateId: "web-app" });
+
+      // Not an Ozone app's folder: nothing to pair the helper with.
+      assert.isFalse(yield* add("win32"));
+      yield* fs.writeFileString(path.join(workspaceRoot, "dev"), "#!/bin/sh\n");
+      assert.isFalse(yield* add("darwin"));
+      assert.isFalse(yield* fs.exists(helper));
+
+      assert.isTrue(yield* add("win32"));
+      assert.include(yield* fs.readFileString(helper), "docker compose %OZONE_DEV_MODE% app %*");
+
+      yield* fs.writeFileString(helper, "mine");
+      assert.isFalse(yield* add("win32"));
+      assert.strictEqual(yield* fs.readFileString(helper), "mine");
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 });
