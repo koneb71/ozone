@@ -136,6 +136,7 @@ import { useShallow } from "zustand/react/shallow";
 import {
   isAtomCommandInterrupted,
   mapAtomCommandResult,
+  settlePromise,
   squashAtomCommandFailure,
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
@@ -373,6 +374,8 @@ import {
   useSystemComposerBanners,
 } from "./chat/useSystemComposerBanners";
 import { useOzoneComposer } from "../ozone/useOzoneComposer";
+import { planReviewBannerItem } from "./chat/ComposerPlanReview";
+import { planAwaitingAnswer } from "./chat/planReview.logic";
 import { useDraftHeroLayoutTransition } from "./chat/useDraftHeroLayoutTransition";
 import { useLocalDispatchState } from "./chat/useLocalDispatchState";
 import { draftFanoutSelectionsAtom, draftSendState } from "./chat/chatViewSend";
@@ -1314,6 +1317,10 @@ export default function ChatView(props: ChatViewProps) {
   const ozoneComposerBannerItems = useOzoneComposer(activeThreadRef, activeProject?.id ?? null);
   // An app's thread plans through its build, with its own "Plan first" switch.
   const isOzoneAppThread = ozoneComposerBannerItems.some((item) => item.id === "ozone-app");
+  const setComposerInteractionMode = useComposerDraftStore((store) => store.setInteractionMode);
+  // The plan the person already answered here, so its notice does not come back.
+  const [answeredPlanId, setAnsweredPlanId] = useState<string | null>(null);
+  const [planAnswerPending, setPlanAnswerPending] = useState(false);
   const providerInstanceEntries = providerInstanceEntriesFor(
     providerStatuses,
     settings,
@@ -2573,6 +2580,51 @@ export default function ChatView(props: ChatViewProps) {
           },
         })
       : null;
+  const awaitedPlan = planAwaitingAnswer(timelineEntries);
+  const showPlanReview =
+    awaitedPlan !== null &&
+    awaitedPlan.id !== answeredPlanId &&
+    isServerThread &&
+    canOperateThread &&
+    !isOzoneAppThread &&
+    !isWorking;
+  const leavePlanMode = async () => {
+    setComposerInteractionMode(composerDraftTarget, null);
+    if (!activeThread) return;
+    // The thread keeps its mode too, so it follows the switch before the next turn starts.
+    await persistThreadSettingsForNextTurn({
+      threadId: activeThread.id,
+      createdAt: activeThread.createdAt,
+      runtimeMode,
+      interactionMode: DEFAULT_INTERACTION_MODE,
+    });
+  };
+  const approvePlan = async () => {
+    if (awaitedPlan === null || planAnswerPending) return;
+    setPlanAnswerPending(true);
+    await leavePlanMode();
+    const sent = await settlePromise(() => sendAppMessage("Approved. Implement the plan."));
+    setPlanAnswerPending(false);
+    if (sent._tag === "Failure" && activeThread) {
+      const error = squashAtomCommandFailure(sent);
+      setThreadError(
+        activeThread.id,
+        error instanceof Error ? error.message : "Could not approve the plan.",
+      );
+      return;
+    }
+    setAnsweredPlanId(awaitedPlan.id);
+  };
+  const revisePlan = () => {
+    if (awaitedPlan === null) return;
+    setAnsweredPlanId(awaitedPlan.id);
+    focusComposerStable();
+  };
+  const declinePlan = async () => {
+    if (awaitedPlan === null || planAnswerPending) return;
+    setAnsweredPlanId(awaitedPlan.id);
+    await leavePlanMode();
+  };
   const composerBannerItems = (() => {
     const fallbackSelection = draftFallback?.selection;
     const defaultSelection =
@@ -2627,6 +2679,18 @@ export default function ChatView(props: ChatViewProps) {
     const usageLimitsItems = usageLimitsBanner === null ? [] : [usageLimitsBanner];
     const projectCloneItems = projectCloneBannerItem === null ? [] : [projectCloneBannerItem];
     // An approval's feedback goes to that approval; the armed session waits for the next message.
+    const planReviewItems =
+      showPlanReview && awaitedPlan !== null
+        ? [
+            planReviewBannerItem({
+              planMarkdown: awaitedPlan.planMarkdown,
+              busy: planAnswerPending,
+              onApprove: () => void approvePlan(),
+              onRevise: revisePlan,
+              onDecline: () => void declinePlan(),
+            }),
+          ]
+        : [];
     const freshSessionItems =
       freshSessionAvailable && freshSessionArmed && activePendingApproval === null
         ? [freshSessionBannerItem(() => disarmFreshSession(routeThreadKey))]
@@ -2640,6 +2704,7 @@ export default function ChatView(props: ChatViewProps) {
         ...usageLimitsItems,
         ...projectCloneItems,
         ...freshSessionItems,
+        ...planReviewItems,
         ...systemComposerBannerItems,
         ...ozoneComposerBannerItems,
       ];
@@ -2652,6 +2717,7 @@ export default function ChatView(props: ChatViewProps) {
       ...usageLimitsItems,
       ...projectCloneItems,
       ...freshSessionItems,
+      ...planReviewItems,
       ...systemComposerBannerItems,
       ...ozoneComposerBannerItems,
       branchMismatchBannerItem({

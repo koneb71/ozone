@@ -59,7 +59,9 @@ See [images and videos](#images-and-videos-in-messages) for previewing and savin
 
 Turn on **Plan** beside the model picker and the agent reads the project and proposes a plan
 without changing anything. Plan stays on for the thread, so you can ask for changes to the plan.
-Turn it off and send your go-ahead to have the agent do the work. An app's thread has
+When a plan is ready, a notice above the message box offers **Approve**, which leaves plan mode
+and has the agent do the work, **Revise**, which keeps planning so you can ask for changes, and
+**Decline**, which leaves plan mode and sends nothing. An app's thread has
 **Plan first** above the message box instead, which plans the whole build.
 
 ## Send while the agent is working
