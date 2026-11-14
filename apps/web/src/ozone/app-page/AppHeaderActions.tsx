@@ -1,6 +1,7 @@
 import type { EnvironmentId, OzoneApp } from "@t3tools/contracts";
 import {
   EllipsisIcon,
+  ExternalLinkIcon,
   HammerIcon,
   MessageSquareIcon,
   PlayIcon,
@@ -18,14 +19,20 @@ import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { StatusDot } from "../ui/StatusDot";
 import { DELETE_APP_DESCRIPTION, useDeleteApp } from "../useDeleteApp";
 import { useOpenAppThread } from "../useOpenAppThread";
+import { DeployButton } from "./DeployButton";
+import type { AppDeploy } from "./useAppDeploy";
 import { useAppRuntime } from "./useAppRuntime";
 
 /** The app's state and the actions on its containers, in the page's header. */
 export function AppHeaderActions(props: {
   readonly app: OzoneApp;
   readonly environmentId: EnvironmentId;
+  readonly deploy: AppDeploy;
+  /** The Deploy section is open, so a button that only leads there has nothing to add. */
+  readonly onDeploySection: boolean;
 }) {
   const { app, environmentId } = props;
+  const production = props.deploy.status;
   const runtime = useAppRuntime(app, environmentId);
   const thread = useOpenAppThread(environmentId);
   const removal = useDeleteApp(environmentId);
@@ -50,6 +57,19 @@ export function AppHeaderActions(props: {
         <MessageSquareIcon />
         <span className="max-sm:sr-only">Open thread</span>
       </Button>
+      {production?.state === "running" && production.url !== null ? (
+        <Button
+          render={<a href={production.url} rel="noreferrer" target="_blank" />}
+          size="xs"
+          variant="ghost"
+        >
+          <ExternalLinkIcon />
+          <span className="max-sm:sr-only">Open site</span>
+        </Button>
+      ) : null}
+      {props.onDeploySection && props.deploy.action?.kind === "open" ? null : (
+        <DeployButton deploy={props.deploy} />
+      )}
       <Menu>
         <MenuTrigger
           aria-label={`More actions for ${app.name}`}

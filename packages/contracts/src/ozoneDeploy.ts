@@ -60,6 +60,8 @@ export const OzoneDeployStatus = Schema.Struct({
   message: Schema.NullOr(Schema.String),
   /** The statements of a migration the last deploy held back because it can lose data. */
   migration: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
+  /** The app's newest commit. It differs from `commitSha` when production is behind. */
+  headSha: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
 });
 export type OzoneDeployStatus = typeof OzoneDeployStatus.Type;
 
@@ -76,6 +78,13 @@ export const OzoneDeployRunInput = Schema.Struct({
   bringData: Schema.optionalKey(Schema.Boolean),
 });
 export type OzoneDeployRunInput = typeof OzoneDeployRunInput.Type;
+
+/** Deploys the newest commit where the app was last deployed. */
+export const OzoneRedeployInput = Schema.Struct({
+  projectId: ProjectId,
+  acceptMigrations: Schema.optionalKey(Schema.Boolean),
+});
+export type OzoneRedeployInput = typeof OzoneRedeployInput.Type;
 
 /** What started a deploy. */
 export const OzoneDeployTrigger = Schema.Literals(["person", "build", "webhook", "rollback"]);

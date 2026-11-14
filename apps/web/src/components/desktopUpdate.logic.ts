@@ -120,6 +120,31 @@ export function getDesktopUpdateButtonTooltip(state: DesktopUpdateState): string
   return "Up to date";
 }
 
+/** The words on the sidebar's update control, or null when there is nothing to act on. */
+export function getDesktopUpdateButtonLabel(state: DesktopUpdateState): string | null {
+  if (state.status === "downloading") {
+    return typeof state.downloadPercent === "number"
+      ? `Downloading ${Math.floor(state.downloadPercent)}%`
+      : "Downloading";
+  }
+  const action = resolveDesktopUpdateButtonAction(state);
+  if (action === "install") return "Restart to update";
+  if (action === "download") {
+    return state.availableVersion ? `Update to ${state.availableVersion}` : "Update";
+  }
+  return null;
+}
+
+/** The version to announce: one that became available and was not announced before. */
+export function desktopUpdateToAnnounce(
+  state: DesktopUpdateState | null,
+  announced: string | null,
+): string | null {
+  if (state?.status !== "available" || !state.availableVersion) return null;
+  if (state.notAppliedVersion === state.availableVersion) return null;
+  return state.availableVersion === announced ? null : state.availableVersion;
+}
+
 export function getDesktopUpdateInstallConfirmationMessage(
   state: Pick<DesktopUpdateState, "availableVersion" | "downloadedVersion">,
 ): string {

@@ -18,6 +18,7 @@ import {
   canCheckForUpdate,
   getArm64IntelBuildWarningDescription,
   getDesktopUpdateActionError,
+  getDesktopUpdateButtonLabel,
   getDesktopUpdateButtonTooltip,
   getDesktopUpdateDownloadedVersion,
   getDesktopUpdateIdleTooltip,
@@ -166,7 +167,7 @@ export async function downloadLocalUpdate(
   }
 }
 
-async function installLocalUpdate(
+export async function installLocalUpdate(
   bridge: DesktopBridge,
   reportError: ReportLocalUpdateError = toastUpdateError,
   expectedVersion?: string,
@@ -460,13 +461,16 @@ function SidebarUpdateControl() {
     );
   }
 
+  // Words beside the icon whenever a click would update, so it is not mistaken for decoration.
+  const label = runsEverything ? "Update" : state ? getDesktopUpdateButtonLabel(state) : null;
   const updateButton = (
     <button
       type="button"
       aria-label={idleTooltip?.detail ? `${tooltip}: ${idleTooltip.detail}` : tooltip}
       aria-disabled={isInteractionDisabled || undefined}
       className={cn(
-        "inline-flex size-8 items-center justify-center rounded-full outline-hidden ring-ring transition-colors focus-visible:ring-2 focus-visible:ring-inset",
+        "inline-flex h-8 items-center justify-center gap-1.5 rounded-full outline-hidden ring-ring transition-colors focus-visible:ring-2 focus-visible:ring-inset",
+        label === null ? "w-8" : "ps-2 pe-3 font-medium text-xs whitespace-nowrap",
         isInteractionDisabled ? "cursor-not-allowed" : "cursor-pointer",
         showUpdateIconState
           ? cn(
@@ -504,6 +508,7 @@ function SidebarUpdateControl() {
       }}
     >
       {statusIcon}
+      {label}
     </button>
   );
 

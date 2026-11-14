@@ -100,7 +100,8 @@ import { AdvancedSettings } from "./AdvancedSettings";
 import { PullRequestLinksOpenInAppSetting } from "./IntegrationsSettings";
 import { StorageCleanupSections } from "./StorageSettings";
 import { useCheckProviderUpdates } from "../ProviderUpdatesAction";
-import { downloadLocalUpdate } from "../sidebar/SidebarUpdatePill";
+import { BrowserVersionRow } from "../../ozone/BrowserVersionRow";
+import { downloadLocalUpdate, installLocalUpdate } from "../sidebar/SidebarUpdatePill";
 
 const RESPONSE_STREAMING_MODE_LABELS: Record<ResponseStreamingMode, string> = {
   turn: "Wait for the full response",
@@ -153,7 +154,7 @@ function AboutVersionSection() {
     const action = updateState ? resolveDesktopUpdateButtonAction(updateState) : "none";
 
     if (action === "download") {
-      void downloadLocalUpdate(bridge, { notifyDownloaded: false });
+      void downloadLocalUpdate(bridge, { notifyDownloaded: true });
       return;
     }
 
@@ -183,18 +184,7 @@ function AboutVersionSection() {
         setIsUpdateActionPending(false);
         return;
       }
-      void bridge
-        .installUpdate()
-        .catch((error: unknown) => {
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: "Could not install update",
-              description: error instanceof Error ? error.message : "Install failed.",
-            }),
-          );
-        })
-        .finally(() => setIsUpdateActionPending(false));
+      void installLocalUpdate(bridge).finally(() => setIsUpdateActionPending(false));
       return;
     }
 
@@ -2076,13 +2066,11 @@ export function AboutSettingsPanel() {
         {isElectron ? (
           <AboutVersionSection />
         ) : (
-          <>
-            <SettingsRow
-              id={searchableSetting("app-version").id}
-              title={<AboutVersionTitle />}
-              description="Current version of the application."
-            />
-          </>
+          <BrowserVersionRow
+            id={searchableSetting("app-version").id}
+            title={<AboutVersionTitle />}
+            environmentId={primaryEnvironmentId}
+          />
         )}
         {primaryEnvironmentId === null ? null : (
           <SettingsRow

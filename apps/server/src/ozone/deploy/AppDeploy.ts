@@ -100,6 +100,7 @@ export class AppDeploy extends Context.Service<
     readonly redeploy: (
       projectId: ProjectId,
       trigger: OzoneDeployTrigger,
+      acceptMigrations?: boolean,
     ) => Effect.Effect<OzoneDeployStatus, OzoneAppError>;
     /** Starts a redeploy for the app whose webhook token this is, without waiting for it. */
     readonly redeployByToken: (
@@ -157,6 +158,7 @@ const NOT_DEPLOYED: OzoneDeployStatus = {
   deployedAt: null,
   message: null,
   migration: null,
+  headSha: null,
 };
 
 /** The variables the app runs with in production: Ozone's own first, then the app's over them. */
@@ -349,10 +351,12 @@ const make = Effect.gen(function* () {
         commitSha: last?.commitSha ?? null,
         deployedAt: last?.deployedAt ?? null,
         migration: heldBack.get(projectId)?.statements.join("\n") ?? null,
+        headSha: yield* repo.head(app.workspaceRoot),
       };
       if (doing !== undefined) return { ...base, state: "deploying" as const, message: doing };
       if (failure !== null) return { ...base, state: "failed" as const, message: failure };
-      if (last === null) return { ...NOT_DEPLOYED, migration: base.migration };
+      if (last === null)
+        return { ...NOT_DEPLOYED, migration: base.migration, headSha: base.headSha };
       if (last.target.dokploy !== null) {
         const state = yield* dokploy.state(app, last.target.dokploy);
         return { ...base, state, message: null };
@@ -1041,9 +1045,13 @@ const make = Effect.gen(function* () {
   const redeploy = Effect.fn("AppDeploy.redeploy")(function* (
     projectId: ProjectId,
     trigger: OzoneDeployTrigger,
+    acceptMigrations = false,
   ) {
     const { last } = yield* deployed(projectId);
-    return yield* deploy({ projectId, target: last.target }, { trigger });
+    return yield* deploy(
+      { projectId, target: last.target, ...(acceptMigrations ? { acceptMigrations } : {}) },
+      { trigger },
+    );
   });
 
   return AppDeploy.of({
@@ -1181,8 +1189,8 @@ const make = Effect.gen(function* () {
         ),
       );
     }),
-    redeploy: Effect.fn("AppDeploy.redeployToTheEnd")((projectId, trigger) =>
-      toTheEnd(redeploy(projectId, trigger)),
+    redeploy: Effect.fn("AppDeploy.redeployToTheEnd")((projectId, trigger, acceptMigrations) =>
+      toTheEnd(redeploy(projectId, trigger, acceptMigrations)),
     ),
     redeployByToken: Effect.fn("AppDeploy.redeployByToken")(function* (token) {
       if (!/^[0-9a-f]{64}$/.test(token)) return "unknown" as const;

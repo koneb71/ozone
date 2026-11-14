@@ -54,6 +54,7 @@ import { MonitoringSection } from "./MonitoringSection";
 import { NotificationsSection } from "./NotificationsSection";
 import { OverviewSection } from "./OverviewSection";
 import { ServersSection } from "./ServersSection";
+import { useAppDeploy, type AppDeploy } from "./useAppDeploy";
 
 const SECTION_ICON: Record<AppSection, LucideIcon> = {
   overview: BoxIcon,
@@ -91,15 +92,8 @@ function AppPage(props: {
     ozoneEnvironment.apps({ environmentId: props.environmentId, input: {} }),
   );
   const app = apps.data?.apps.find((entry) => entry.projectId === props.projectId) ?? null;
-  const deployed =
-    useEnvironmentQuery(
-      app === null
-        ? null
-        : ozoneEnvironment.deployStatus({
-            environmentId: props.environmentId,
-            input: { projectId: props.projectId },
-          }),
-    ).data?.target != null;
+  const deploy = useAppDeploy(app, props.environmentId);
+  const deployed = deploy.status?.target != null;
 
   return (
     <AppRouteModal label={app === null ? "App" : app.name}>
@@ -118,7 +112,12 @@ function AppPage(props: {
             </WorkspaceBreadcrumb>
             <div className="ms-auto flex shrink-0 items-center gap-1">
               {app === null ? null : (
-                <AppHeaderActions app={app} environmentId={props.environmentId} />
+                <AppHeaderActions
+                  app={app}
+                  environmentId={props.environmentId}
+                  deploy={deploy}
+                  onDeploySection={props.section === "deploy"}
+                />
               )}
               <AppRouteModalClose />
             </div>
@@ -144,7 +143,7 @@ function AppPage(props: {
                 app={app}
                 environmentId={props.environmentId}
                 section={props.section}
-                deployed={deployed}
+                deploy={deploy}
               />
             )}
           </div>
@@ -158,24 +157,25 @@ function Section(props: {
   readonly app: OzoneApp;
   readonly environmentId: EnvironmentId;
   readonly section: AppSection;
-  readonly deployed: boolean;
+  readonly deploy: AppDeploy;
 }) {
   const shared = { app: props.app, environmentId: props.environmentId };
+  const deployed = props.deploy.status?.target != null;
   switch (props.section) {
     case "overview":
-      return <OverviewSection {...shared} />;
+      return <OverviewSection {...shared} deploy={props.deploy} />;
     case "data":
-      return <DataSection {...shared} deployed={props.deployed} />;
+      return <DataSection {...shared} deployed={deployed} />;
     case "history":
       return <HistorySection {...shared} />;
     case "environment":
       return <EnvironmentSection {...shared} />;
     case "build":
-      return <BuildSection {...shared} deployed={props.deployed} />;
+      return <BuildSection {...shared} deployed={deployed} />;
     case "logs":
       return <LogsSection {...shared} />;
     case "deploy":
-      return <DeploySection {...shared} />;
+      return <DeploySection {...shared} deploy={props.deploy} />;
     case "deployments":
       return <DeploymentsSection {...shared} />;
     case "monitoring":

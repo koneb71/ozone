@@ -112,6 +112,10 @@ export function createOzoneEnvironmentAtoms<R, E>(
       label: "environment-data:ozone:deploy",
       tag: OZONE_WS_METHODS.deployRun,
     }),
+    redeploy: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:redeploy",
+      tag: OZONE_WS_METHODS.deployRedeploy,
+    }),
     stopDeploy: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:ozone:stop-deploy",
       tag: OZONE_WS_METHODS.deployStop,
@@ -143,6 +147,10 @@ export function createOzoneEnvironmentAtoms<R, E>(
     deployWebhook: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:ozone:deploy-webhook",
       tag: OZONE_WS_METHODS.deployWebhook,
+    }),
+    checkVersion: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:check-version",
+      tag: OZONE_WS_METHODS.versionCheck,
     }),
     checkServer: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:ozone:check-server",

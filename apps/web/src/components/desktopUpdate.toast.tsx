@@ -5,7 +5,7 @@ import {
   getDesktopUpdateDownloadedVersion,
   getDesktopUpdateReleaseUrl,
 } from "./desktopUpdate.logic";
-import { toastManager } from "./ui/toast";
+import { stackedThreadToast, toastManager } from "./ui/toast";
 
 type DesktopUpdateShell = Pick<DesktopBridge, "openExternal">;
 
@@ -54,9 +54,21 @@ export function showDesktopUpdateDownloadedToast(
     title: "Update downloaded",
     description: (
       <>
-        Restart the app from the update button to install it.
+        Choose Restart to update in the sidebar to install it.
         {releaseUrl ? <ReleaseNotesLink releaseUrl={releaseUrl} shell={shell} /> : null}
       </>
     ),
   });
+}
+
+/** Says once that a version is out, for when the sidebar and its update control are hidden. */
+export function showDesktopUpdateAvailableToast(version: string, onUpdate: () => void): void {
+  toastManager.add(
+    stackedThreadToast({
+      type: "info",
+      title: `Ozone ${version} is available`,
+      description: "It downloads in the background, then asks before it restarts.",
+      actionProps: { children: "Update", onClick: onUpdate },
+    }),
+  );
 }

@@ -22,6 +22,7 @@ import {
   OzoneDeployOutputResult,
   OzoneDeployRollbackInput,
   OzoneDeployRunInput,
+  OzoneRedeployInput,
   OzoneDeployStatus,
   OzoneDeployStatusInput,
   OzoneDeployWebhookInput,
@@ -199,6 +200,14 @@ export type OzoneAppDeleteInput = typeof OzoneAppDeleteInput.Type;
 
 export const OzoneAppRestoreInput = Schema.Struct({ slug: ShortText });
 export type OzoneAppRestoreInput = typeof OzoneAppRestoreInput.Type;
+
+/** The newest published Ozone beside the one this server runs. */
+export const OzoneVersionCheck = Schema.Struct({
+  current: Schema.String,
+  latest: Schema.String,
+  newer: Schema.Boolean,
+});
+export type OzoneVersionCheck = typeof OzoneVersionCheck.Type;
 
 export class OzoneAppError extends Schema.TaggedError<OzoneAppError>()("OzoneAppError", {
   /** Clients branch on the named reasons and show the message for `failed`. */
@@ -415,6 +424,7 @@ export const OZONE_WS_METHODS = {
   envRemove: "ozone.env.remove",
   deployStatus: "ozone.deploy.status",
   deployRun: "ozone.deploy.run",
+  deployRedeploy: "ozone.deploy.redeploy",
   deployStop: "ozone.deploy.stop",
   deployHistory: "ozone.deploy.history",
   deployOutput: "ozone.deploy.output",
@@ -432,6 +442,7 @@ export const OZONE_WS_METHODS = {
   notifySet: "ozone.notify.set",
   notifyRemove: "ozone.notify.remove",
   notifyTest: "ozone.notify.test",
+  versionCheck: "ozone.version.check",
 } as const;
 
 type OzoneWsMethod = (typeof OZONE_WS_METHODS)[keyof typeof OZONE_WS_METHODS];
@@ -461,6 +472,7 @@ export const OZONE_OPERATE_RPC_SCOPES = {
   [OZONE_WS_METHODS.envRemove]: AuthOrchestrationOperateScope,
   // Runs the app where others can reach it, with this machine's Docker or SSH access.
   [OZONE_WS_METHODS.deployRun]: AuthOrchestrationOperateScope,
+  [OZONE_WS_METHODS.deployRedeploy]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.deployStop]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.deployRollback]: AuthOrchestrationOperateScope,
   // The URL it shows is a credential: anyone with it can deploy the app.
@@ -476,6 +488,8 @@ export const OZONE_OPERATE_RPC_SCOPES = {
   [OZONE_WS_METHODS.notifySet]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.notifyRemove]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.notifyTest]: AuthOrchestrationOperateScope,
+  // It reaches out to GitHub from the server, so a read-only session cannot start it.
+  [OZONE_WS_METHODS.versionCheck]: AuthOrchestrationOperateScope,
 } as const;
 
 /** Spread into the server's scope map, which must name every method. */
@@ -611,6 +625,11 @@ export const OzoneWsRpcs = [
     success: OzoneDeployStatus,
     error: OzoneRpcError,
   }),
+  Rpc.make(OZONE_WS_METHODS.deployRedeploy, {
+    payload: OzoneRedeployInput,
+    success: OzoneDeployStatus,
+    error: OzoneRpcError,
+  }),
   Rpc.make(OZONE_WS_METHODS.deployStop, {
     payload: OzoneDeployStatusInput,
     success: OzoneDeployStatus,
@@ -694,6 +713,11 @@ export const OzoneWsRpcs = [
   Rpc.make(OZONE_WS_METHODS.notifyTest, {
     payload: OzoneNotifyRemoveInput,
     success: Schema.Struct({}),
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.versionCheck, {
+    payload: Schema.Struct({}),
+    success: OzoneVersionCheck,
     error: OzoneRpcError,
   }),
 ] as const;

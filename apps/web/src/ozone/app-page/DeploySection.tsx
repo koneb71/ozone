@@ -7,7 +7,7 @@ import type {
 } from "@t3tools/contracts";
 import { Link } from "@tanstack/react-router";
 import { CopyIcon, ExternalLinkIcon, RocketIcon, SquareIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import {
   SettingsPageContainer,
@@ -33,8 +33,17 @@ import { useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
 
-import { phaseTone } from "../appPage.logic";
-import { DOMAIN, HOST, HOST_INFO } from "../deploy.logic";
+import { metaLine } from "../appPage.logic";
+import {
+  DOMAIN,
+  HOST,
+  HOST_INFO,
+  deployActionOf,
+  deployStateLine,
+  deployTone,
+  isBehind,
+  sameTarget,
+} from "../deploy.logic";
 import { ozoneEnvironment } from "../state";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { LoadingRow } from "../ui/SectionRows";
@@ -43,6 +52,7 @@ import { StatusDot } from "../ui/StatusDot";
 import { useOzoneCommand } from "../ui/useOzoneCommand";
 import { RemoteRow, useAppRemote } from "./RemoteRow";
 import { ServerSection } from "./ServerRows";
+import type { AppDeploy } from "./useAppDeploy";
 
 const URL_PATTERN = /^https?:\/\/\S+$/;
 const placeOf = (target: Pick<OzoneDeployTarget, "host" | "dokploy" | "hosted">) =>
@@ -56,58 +66,25 @@ const placeOf = (target: Pick<OzoneDeployTarget, "host" | "dokploy" | "hosted">)
 /** The picker's value for a host typed before servers could be saved. */
 const TYPED = "typed";
 
-function stateLine(status: OzoneDeployStatus): string {
-  // Held back before anything changed: what ran before still runs.
-  if (status.migration !== null && status.state === "failed") {
-    return status.deployedAt === null ? "Not deployed" : "Still on the previous version";
-  }
-  switch (status.state) {
-    case "none":
-      return "Not deployed";
-    case "deploying":
-      return status.message ?? "Deploying";
-    case "running":
-      return "Running";
-    case "stopped":
-      return "Stopped";
-    case "failed":
-      return "The last deploy failed";
-  }
-}
-
-const stateTone = (status: OzoneDeployStatus) =>
-  status.state === "running"
-    ? phaseTone("running")
-    : status.state === "deploying"
-      ? phaseTone("starting")
-      : status.state === "failed"
-        ? phaseTone("failed")
-        : phaseTone("stopped");
-
 /** Runs the app's production build where people can reach it. */
 export function DeploySection(props: {
   readonly app: OzoneApp;
   readonly environmentId: EnvironmentId;
+  readonly deploy: AppDeploy;
 }) {
-  const target = { environmentId: props.environmentId, input: { projectId: props.app.projectId } };
-  const status = useEnvironmentQuery(ozoneEnvironment.deployStatus(target));
+  const status = props.deploy.status;
   const saved = useEnvironmentQuery(
     ozoneEnvironment.savedServers({ environmentId: props.environmentId, input: {} }),
   );
   return (
     <SettingsPageContainer>
-      {status.data === null || (saved.data === null && saved.error === null) ? (
+      {status === null || (saved.data === null && saved.error === null) ? (
         <SettingsSection title="Production">
           <LoadingRow label="Loading the deploy" />
         </SettingsSection>
       ) : (
         // The form starts from where the app was last deployed, once that is known.
-        <DeployForm
-          {...props}
-          status={status.data}
-          servers={saved.data?.servers ?? []}
-          refresh={status.refresh}
-        />
+        <DeployForm {...props} status={status} servers={saved.data?.servers ?? []} />
       )}
     </SettingsPageContainer>
   );
@@ -116,9 +93,9 @@ export function DeploySection(props: {
 function DeployForm(props: {
   readonly app: OzoneApp;
   readonly environmentId: EnvironmentId;
+  readonly deploy: AppDeploy;
   readonly status: OzoneDeployStatus;
   readonly servers: ReadonlyArray<OzoneSavedServer>;
-  readonly refresh: () => void;
 }) {
   const { status, servers } = props;
   const last = status.target;
@@ -134,7 +111,7 @@ function DeployForm(props: {
         ) ?? null);
   const deploy = useAtomCommand(ozoneEnvironment.deploy, { reportFailure: false });
   const stopDeploy = useAtomCommand(ozoneEnvironment.stopDeploy, { reportFailure: false });
-  const { working, run } = useOzoneCommand();
+  const { working, busy, run } = props.deploy;
   const [where, setWhere] = useState<"here" | "server">(
     last === null || (last.host === null && last.dokploy === null && last.hosted === null)
       ? "here"
@@ -176,7 +153,6 @@ function DeployForm(props: {
   const remoteMissing = remote.need.kind === "create" || remote.need.kind === "sign-in";
   const invalid =
     hostProblem !== null || domainProblem !== null || urlProblem !== null || remoteMissing;
-  const busy = working !== null || status.state === "deploying";
   const chosenDokploy = where === "server" && chosen?.kind === "dokploy" ? chosen.id : null;
   const chosenHosted = where === "server" && chosen?.kind === "host" ? chosen.id : null;
   const chosenHost =
@@ -192,14 +168,6 @@ function DeployForm(props: {
     chosenHost !== last.host
       ? placeOf(last)
       : null;
-
-  const refresh = props.refresh;
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- polls the server's deploy status, which names the step that runs, while a deploy is under way
-  useEffect(() => {
-    if (!busy) return;
-    const timer = window.setInterval(refresh, 2_000);
-    return () => window.clearInterval(timer);
-  }, [busy, refresh]);
 
   const targetOf = (): OzoneDeployTarget => ({
     host: chosenHost,
@@ -221,14 +189,25 @@ function DeployForm(props: {
         },
       }),
     );
-    props.refresh();
   };
   const stop = async () => {
     await run("stop", `Could not stop ${props.app.name}`, () =>
       stopDeploy({ environmentId: props.environmentId, input: { projectId: props.app.projectId } }),
     );
-    props.refresh();
   };
+  // Unchanged, the form names where the app already runs, so the button says what it sends there.
+  const elsewhere = last !== null && !invalid && !sameTarget(targetOf(), last);
+  const action = deployActionOf(status);
+  const main =
+    action.kind === "busy"
+      ? action
+      : last === null
+        ? { label: "Deploy", primary: true }
+        : elsewhere
+          ? { label: "Deploy here instead", primary: true }
+          : action.kind === "open"
+            ? { label: "Try again", primary: true }
+            : action;
 
   return (
     <>
@@ -251,44 +230,58 @@ function DeployForm(props: {
       )}
       {status.migration === null && status.state === "failed" && status.message !== null ? (
         <Alert variant="error">
-          <AlertTitle>The last deploy failed</AlertTitle>
+          <AlertTitle>Last deploy failed</AlertTitle>
           <AlertDescription>
             <OutputView text={status.message} label="What went wrong" />
           </AlertDescription>
         </Alert>
       ) : null}
 
-      <SettingsSection
-        title="Production"
-        headerAction={
-          <div className="flex items-center gap-1">
-            {status.state === "running" ? (
-              <Button disabled={busy} size="xs" variant="ghost" onClick={() => setConfirm("stop")}>
-                {working === "stop" ? <Spinner /> : <SquareIcon />}
-                <span className="max-sm:sr-only">Stop</span>
-              </Button>
-            ) : null}
-            <Button disabled={busy || invalid} size="xs" onClick={() => void deployNow()}>
-              {busy && working !== "stop" ? <Spinner /> : <RocketIcon />}
-              {status.state === "none" ? "Deploy" : "Deploy again"}
-            </Button>
-          </div>
-        }
-      >
+      <SettingsSection title="Production">
         <SettingsRow
           title={
             <span className="flex items-center gap-2">
-              <StatusDot {...stateTone(status)} />
-              {stateLine(status)}
+              <StatusDot {...deployTone(status)} />
+              {deployStateLine(status)}
             </span>
           }
           description={
             status.deployedAt === null
               ? "Builds the last commit for production, with a database of its own."
-              : `Deployed ${formatRelativeTimeLabel(status.deployedAt)}${status.commitSha === null ? "" : ` from ${status.commitSha.slice(0, 7)}`}`
+              : metaLine([
+                  `Deployed ${formatRelativeTimeLabel(status.deployedAt)}${status.commitSha === null ? "" : ` from ${status.commitSha.slice(0, 7)}`}`,
+                  isBehind(status) && "A newer version is ready",
+                ])
           }
           control={
-            status.url !== null && status.state === "running" ? (
+            <div className="flex items-center gap-1">
+              {status.state === "running" ? (
+                <Button
+                  disabled={busy}
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setConfirm("stop")}
+                >
+                  {working === "stop" ? <Spinner /> : <SquareIcon />}
+                  <span className="max-sm:sr-only">Stop production</span>
+                </Button>
+              ) : null}
+              <Button
+                disabled={busy || invalid}
+                size="sm"
+                variant={main.primary ? "default" : "outline"}
+                onClick={() => void deployNow()}
+              >
+                {busy && working !== "stop" ? <Spinner /> : <RocketIcon />}
+                {main.label}
+              </Button>
+            </div>
+          }
+        />
+        {status.url !== null && status.state === "running" ? (
+          <SettingsRow
+            title="Address"
+            control={
               <Button
                 render={<a href={status.url} rel="noreferrer" target="_blank" />}
                 size="xs"
@@ -297,12 +290,12 @@ function DeployForm(props: {
                 <span className="font-mono">{status.url.replace(/^https?:\/\//, "")}</span>
                 <ExternalLinkIcon />
               </Button>
-            ) : undefined
-          }
-        />
+            }
+          />
+        ) : null}
       </SettingsSection>
 
-      <SettingsSection title="Target">
+      <SettingsSection title="Where it runs">
         <SettingsRow
           title="Where"
           description={
@@ -471,7 +464,7 @@ function DeployForm(props: {
         onOpenChange={(open) => setConfirm(open ? "stop" : null)}
         title={`Stop the deployed ${props.app.name}?`}
         description="People can no longer reach it. Its data is kept for the next deploy."
-        confirmLabel="Stop"
+        confirmLabel="Stop production"
         destructive
         onConfirm={() => void stop()}
       />

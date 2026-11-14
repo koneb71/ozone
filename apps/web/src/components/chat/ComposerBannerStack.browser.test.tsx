@@ -25,6 +25,25 @@ it("puts machine notices first, whatever order the notices arrive in", async () 
   expect(screen.container.textContent).toBe("OfflineBranch changed");
 });
 
+it("folds a notice's details away and back, and follows its default until a person chooses", async () => {
+  const build = (defaultOpen: boolean): ComposerBannerStackItem => ({
+    ...notice("Build complete"),
+    children: <p>Add a book</p>,
+    collapsible: { defaultOpen, what: "tasks" },
+  });
+  await using screen = await render(<ComposerBannerStack items={[build(true)]} />);
+  await expect.element(screen.getByText("Add a book")).toBeInTheDocument();
+
+  // The build finishes: the list folds by itself.
+  await screen.rerender(<ComposerBannerStack items={[build(false)]} />);
+  await expect.element(screen.getByText("Add a book")).not.toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole("button", { name: "Show tasks" }));
+  await expect.element(screen.getByText("Add a book")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Hide tasks" }));
+  await expect.element(screen.getByText("Add a book")).not.toBeInTheDocument();
+});
+
 it("leaves the next attachment its own top edge when there are no notices", async () => {
   await using screen = await render(
     <ComposerBanner.Column>

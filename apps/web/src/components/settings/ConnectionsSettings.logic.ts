@@ -94,8 +94,9 @@ export function isWslSettingsRowVisible(input: {
  * Once client/server versions match, this passive Version label follows the sidebar update action,
  * including retryable failures. Rechecks retain downloaded-update labels; `state` is null outside desktop.
  */
-export function resolveLocalVersionStatusLabel(state: DesktopUpdateState | null): string {
-  if (!state) return "Up to date";
+export function resolveLocalVersionStatusLabel(state: DesktopUpdateState | null): string | null {
+  // Nothing checks for a newer version outside the desktop app, so nothing is claimed.
+  if (!state) return null;
   if (state.status === "downloading") {
     return state.availableVersion
       ? `Downloading update ${state.availableVersion}`

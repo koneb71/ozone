@@ -77,6 +77,27 @@ const checkForUpdatesFromMenu = Effect.gen(function* () {
       message: `Ozone ${updateState.currentVersion} is currently the newest version available.`,
       buttons: ["OK"],
     });
+  } else if (updateState.status === "available" && updateState.availableVersion !== null) {
+    const choice = yield* electronDialog.showMessageBox({
+      type: "info",
+      title: "Update available",
+      message: `Ozone ${updateState.availableVersion} is available.`,
+      detail: `You have ${updateState.currentVersion}. It downloads in the background, then asks before it restarts.`,
+      buttons: ["Download", "Later"],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (choice.response === 0) yield* updates.download;
+  } else if (updateState.status === "downloaded" && updateState.downloadedVersion !== null) {
+    const choice = yield* electronDialog.showMessageBox({
+      type: "info",
+      title: "Update ready",
+      message: `Ozone ${updateState.downloadedVersion} is ready to install.`,
+      buttons: ["Restart to update", "Later"],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (choice.response === 0) yield* updates.install;
   } else if (updateState.status === "error") {
     yield* electronDialog.showMessageBox({
       type: "warning",

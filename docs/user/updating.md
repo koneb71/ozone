@@ -4,6 +4,18 @@ The app you use and the server running your agents can be on different machines.
 When a server is behind your web or desktop app, the update button at the bottom
 of the sidebar and **Settings → Environments** offer to update it.
 
+## Find an update
+
+The desktop app looks for a new release by itself. When one is out, the control at the bottom of
+the sidebar says **Update to** and the version, then **Restart to update** once it has
+downloaded. A notice appears once per version, so you see it with the sidebar closed, and
+**Check for Updates…** in the app's menu offers the download too. Nothing installs or restarts
+until you say so.
+
+In a browser, Ozone never looks by itself. Open **Settings → About** and press **Check for
+Updates**; the server that runs Ozone asks GitHub and, when a newer release exists, shows the
+`ozone update` command to run on that machine.
+
 ## Update everything at once
 
 The update button at the bottom of the sidebar updates every connected machine

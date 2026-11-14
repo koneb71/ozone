@@ -31,6 +31,8 @@ import { useLocation, useNavigate } from "@tanstack/react-router";
 import { T, useGT, useMessages } from "gt-react";
 
 import { cn } from "../../lib/utils";
+import { useDesktopUpdateState } from "../../state/desktopUpdate";
+import { resolveDesktopUpdateButtonAction } from "../desktopUpdate.logic";
 import { Button } from "../ui/button";
 import { Kbd } from "../ui/kbd";
 import {
@@ -109,6 +111,17 @@ function scrollResultIntoView(row: HTMLElement | null) {
 function SettingsSectionIcon({ to }: { to: SettingsPath }) {
   const Icon = SETTINGS_SECTION_ICONS[to];
   return <Icon className="size-4 shrink-0 text-(--sidebar-icon-color)" />;
+}
+
+// Subscribes on its own so download progress does not re-render the whole nav.
+function UpdateWaitingDot() {
+  const state = useDesktopUpdateState();
+  if (state === null || resolveDesktopUpdateButtonAction(state) === "none") return null;
+  return (
+    <span className="ms-auto size-1.5 shrink-0 rounded-full bg-primary">
+      <span className="sr-only">Update available</span>
+    </span>
+  );
 }
 
 export function SettingsSidebarNav({ pathname }: { pathname: string }) {
@@ -402,6 +415,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                                   >
                                     {m(SETTINGS_SECTION_LABELS[to])}
                                   </span>
+                                  {to === "/settings/about" ? <UpdateWaitingDot /> : null}
                                 </SidebarMenuButton>
                               </SidebarMenuItem>
                             );

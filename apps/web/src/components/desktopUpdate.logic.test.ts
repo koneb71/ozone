@@ -3,6 +3,8 @@ import type { DesktopUpdateState } from "@t3tools/contracts";
 
 import {
   canCheckForUpdate,
+  desktopUpdateToAnnounce,
+  getDesktopUpdateButtonLabel,
   getDesktopUpdateButtonTooltip,
   getDesktopUpdateReleaseHistoryUrl,
   getDesktopUpdateReleaseUrl,
@@ -88,5 +90,35 @@ describe("canCheckForUpdate", () => {
         downloadedVersion: "1.1.0",
       }),
     ).toBe(true);
+  });
+});
+
+describe("the update control's words", () => {
+  it.each([
+    [{ status: "idle" }, null],
+    [{ status: "up-to-date" }, null],
+    [{ status: "available", availableVersion: "1.2.0" }, "Update to 1.2.0"],
+    [
+      { status: "downloading", availableVersion: "1.2.0", downloadPercent: 40.7 },
+      "Downloading 40%",
+    ],
+    [{ status: "downloaded", downloadedVersion: "1.2.0" }, "Restart to update"],
+    [{ status: "error", errorContext: "download", availableVersion: "1.2.0" }, "Update to 1.2.0"],
+  ] as const)("%j", (extra, label) => {
+    expect(getDesktopUpdateButtonLabel({ ...baseState, ...extra })).toBe(label);
+  });
+
+  it("announces a version once, and never one that failed to apply", () => {
+    const available: DesktopUpdateState = {
+      ...baseState,
+      status: "available",
+      availableVersion: "1.2.0",
+    };
+    expect(desktopUpdateToAnnounce(available, null)).toBe("1.2.0");
+    expect(desktopUpdateToAnnounce(available, "1.1.0")).toBe("1.2.0");
+    expect(desktopUpdateToAnnounce(available, "1.2.0")).toBeNull();
+    expect(desktopUpdateToAnnounce({ ...available, notAppliedVersion: "1.2.0" }, null)).toBeNull();
+    expect(desktopUpdateToAnnounce({ ...available, status: "downloading" }, null)).toBeNull();
+    expect(desktopUpdateToAnnounce(null, null)).toBeNull();
   });
 });

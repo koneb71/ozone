@@ -1,4 +1,4 @@
-import { InfoIcon } from "lucide-react";
+import { ChevronDownIcon, ChevronUpIcon, InfoIcon } from "lucide-react";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "../ui/button";
@@ -20,6 +20,8 @@ export interface ComposerBannerStackItem {
   readonly title: ReactNode;
   readonly description?: ReactNode;
   readonly children?: ReactNode;
+  /** Lets a person fold `children` away. `what` names them: "Hide tasks", "Show tasks". */
+  readonly collapsible?: { readonly defaultOpen: boolean; readonly what: string };
   readonly actions?: ReactNode;
   readonly dismissLabel?: string;
   readonly onDismiss?: () => void;
@@ -170,6 +172,10 @@ function NoticeCard({
   readonly item: ComposerBannerStackItem;
   readonly detached?: boolean;
 }) {
+  // Null until the person chooses, so the notice's own default can change under it.
+  const [chosen, setChosen] = useState<boolean | null>(null);
+  const foldable = item.collapsible !== undefined && Boolean(item.children);
+  const open = !foldable || (chosen ?? item.collapsible?.defaultOpen ?? true);
   return (
     <ComposerBanner.Root
       role={item.variant === "error" || item.variant === "warning" ? "alert" : undefined}
@@ -206,9 +212,20 @@ function NoticeCard({
             </NoticeText>
           ) : null}
         </ComposerBanner.Content>
-        {item.actions || item.onDismiss ? (
+        {item.actions || item.onDismiss || foldable ? (
           <ComposerBanner.Actions className="min-w-14 sm:min-w-12">
             {item.actions}
+            {foldable ? (
+              <Button
+                aria-expanded={open}
+                aria-label={`${open ? "Hide" : "Show"} ${item.collapsible?.what ?? "details"}`}
+                size="icon-xs"
+                variant="ghost-muted"
+                onClick={() => setChosen(!open)}
+              >
+                {open ? <ChevronDownIcon /> : <ChevronUpIcon />}
+              </Button>
+            ) : null}
             {item.onDismiss ? (
               <ComposerBanner.Dismiss
                 aria-label={item.dismissLabel ?? "Dismiss warning"}
@@ -218,7 +235,9 @@ function NoticeCard({
           </ComposerBanner.Actions>
         ) : null}
       </ComposerBanner.Row>
-      {item.children ? <ComposerBanner.Children>{item.children}</ComposerBanner.Children> : null}
+      {item.children && open ? (
+        <ComposerBanner.Children>{item.children}</ComposerBanner.Children>
+      ) : null}
     </ComposerBanner.Root>
   );
 }

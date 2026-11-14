@@ -122,5 +122,7 @@ export function buildBannerItem(
         }
       : {}),
     children: <BuildDetail build={build} />,
+    // A finished build folds its list away; one that still needs watching or a yes stays open.
+    collapsible: { defaultOpen: snapshot?.status !== "complete", what: "tasks" },
   };
 }

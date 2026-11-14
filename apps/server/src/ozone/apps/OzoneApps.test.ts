@@ -120,6 +120,7 @@ const makeHarness = Effect.gen(function* () {
                 deployedAt: null,
                 message: null,
                 migration: null,
+                headSha: null,
               })),
             ),
         }),

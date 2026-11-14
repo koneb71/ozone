@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import type { OzoneSavedServer } from "@t3tools/contracts";
+import type { OzoneDeployStatus, OzoneSavedServer } from "@t3tools/contracts";
 
 import {
   channelFromDraft,
+  deployActionOf,
+  sameTarget,
   remoteNeedOf,
   serverFromDraft,
   type ChannelDraft,
@@ -141,5 +143,47 @@ describe("remoteNeedOf", () => {
     ).toBe("sign-in");
     expect(remoteNeedOf({ ...ready, server: dokploy, hasRemote: null }).kind).toBe("checking");
     expect(remoteNeedOf({ ...ready, server: dokploy, signedIn: null }).kind).toBe("checking");
+  });
+});
+
+describe("deployActionOf", () => {
+  const here = { host: null, dokploy: null, hosted: null, publicUrl: null, domain: null };
+  const status = (extra: Partial<OzoneDeployStatus>): OzoneDeployStatus => ({
+    state: "running",
+    target: here,
+    url: "http://localhost:42005",
+    commitSha: "aaa",
+    deployedAt: "2026-11-14T00:00:00.000Z",
+    message: null,
+    migration: null,
+    headSha: "aaa",
+    ...extra,
+  });
+  const never = { target: null, url: null, commitSha: null, deployedAt: null };
+
+  it.each([
+    ["never deployed", status({ ...never, state: "none" }), "open", "Deploy", true],
+    ["first deploy running", status({ ...never, state: "deploying" }), "busy", "Deploying…", false],
+    ["first deploy failed", status({ ...never, state: "failed" }), "open", "Try again", true],
+    ["up to date", status({}), "push", "Deploy again", false],
+    ["behind the newest commit", status({ headSha: "bbb" }), "push", "Push update", true],
+    ["no commit to compare", status({ headSha: null }), "push", "Deploy again", false],
+    ["stopped", status({ state: "stopped" }), "push", "Deploy", true],
+    ["last deploy failed", status({ state: "failed" }), "push", "Try again", true],
+    [
+      "a migration was held back",
+      status({ state: "failed", migration: "DROP TABLE notes;" }),
+      "open",
+      "Review migration",
+      true,
+    ],
+  ] as const)("%s", (_name, input, kind, label, primary) => {
+    expect(deployActionOf(input)).toEqual({ kind, label, primary });
+  });
+
+  it("tells a changed form from where the app already runs", () => {
+    expect(sameTarget(here, { ...here })).toBe(true);
+    expect(sameTarget(here, { ...here, host: "deploy@example.com" })).toBe(false);
+    expect(sameTarget(here, { ...here, domain: "notes.example.com" })).toBe(false);
   });
 });

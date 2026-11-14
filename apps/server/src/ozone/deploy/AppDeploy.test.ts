@@ -512,7 +512,12 @@ it.effect("keeps each deploy with its output, and rolls back code alone or with 
     const { deploy, steps, forget, commit, notices, head } = yield* makeHarness();
     yield* deploy.deploy({ projectId, target: here });
     const second = yield* commit("notes.ts", "Add notes");
-    yield* deploy.deploy({ projectId, target: here });
+    // Production is behind the newest commit until it is sent to where the app already runs.
+    assert.include(yield* deploy.status(projectId), { commitSha: head, headSha: second });
+    assert.include(yield* deploy.redeploy(projectId, "person"), {
+      commitSha: second,
+      headSha: second,
+    });
 
     const { deployments } = yield* deploy.history(projectId);
     assert.deepStrictEqual(

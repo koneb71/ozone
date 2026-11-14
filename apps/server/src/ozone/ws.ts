@@ -12,6 +12,7 @@ import {
   type OzoneDeployOutputInput,
   type OzoneDeployRollbackInput,
   type OzoneDeployRunInput,
+  type OzoneRedeployInput,
   type OzoneDeployWebhookInput,
   type OzoneNotifyChannel,
   type OzoneServerAddInput,
@@ -43,6 +44,7 @@ import * as Notifier from "./deploy/Notifier.ts";
 import * as SavedServers from "./deploy/SavedServers.ts";
 import * as AppEnv from "./env/AppEnv.ts";
 import * as AppHistory from "./history/AppHistory.ts";
+import * as OzoneRelease from "./OzoneRelease.ts";
 import * as AppRuntime from "./runtime/AppRuntime.ts";
 
 const make = Effect.gen(function* () {
@@ -57,6 +59,7 @@ const make = Effect.gen(function* () {
   const servers = yield* AppServers.AppServers;
   const notifier = yield* Notifier.Notifier;
   const saved = yield* SavedServers.SavedServers;
+  const release = yield* OzoneRelease.OzoneRelease;
   const buildSnapshot = (build: OzoneBuild | null) => ({
     build,
     status: build === null ? ("planning" as const) : BuildModel.statusOf(build),
@@ -99,6 +102,8 @@ const make = Effect.gen(function* () {
     [OZONE_WS_METHODS.deployStatus]: (input: { readonly projectId: ProjectId }) =>
       deploys.status(input.projectId),
     [OZONE_WS_METHODS.deployRun]: (input: OzoneDeployRunInput) => deploys.deploy(input),
+    [OZONE_WS_METHODS.deployRedeploy]: (input: OzoneRedeployInput) =>
+      deploys.redeploy(input.projectId, "person", input.acceptMigrations),
     [OZONE_WS_METHODS.deployStop]: (input: { readonly projectId: ProjectId }) =>
       deploys.stop(input.projectId),
     [OZONE_WS_METHODS.deployHistory]: (input: { readonly projectId: ProjectId }) =>
@@ -122,6 +127,7 @@ const make = Effect.gen(function* () {
     [OZONE_WS_METHODS.notifyRemove]: (input: { readonly id: string }) => notifier.remove(input.id),
     [OZONE_WS_METHODS.notifyTest]: (input: { readonly id: string }) =>
       Effect.as(notifier.test(input.id), {}),
+    [OZONE_WS_METHODS.versionCheck]: () => release.check,
   };
 });
 
@@ -157,6 +163,7 @@ export class OzoneWsHandlers extends Context.Reference<Effect.Success<typeof mak
       [OZONE_WS_METHODS.envRemove]: () => notProvided,
       [OZONE_WS_METHODS.deployStatus]: () => notProvided,
       [OZONE_WS_METHODS.deployRun]: () => notProvided,
+      [OZONE_WS_METHODS.deployRedeploy]: () => notProvided,
       [OZONE_WS_METHODS.deployStop]: () => notProvided,
       [OZONE_WS_METHODS.deployHistory]: () => notProvided,
       [OZONE_WS_METHODS.deployOutput]: () => notProvided,
@@ -174,6 +181,7 @@ export class OzoneWsHandlers extends Context.Reference<Effect.Success<typeof mak
       [OZONE_WS_METHODS.notifySet]: () => notProvided,
       [OZONE_WS_METHODS.notifyRemove]: () => notProvided,
       [OZONE_WS_METHODS.notifyTest]: () => notProvided,
+      [OZONE_WS_METHODS.versionCheck]: () => notProvided,
     }),
   },
 ) {}

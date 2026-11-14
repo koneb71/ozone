@@ -14,13 +14,17 @@ import { Spinner } from "~/components/ui/spinner";
 import { useEnvironmentQuery } from "~/state/query";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
 
-import { metaLine, phaseTone } from "../appPage.logic";
+import { metaLine } from "../appPage.logic";
+import { deployStateLine, deployTone, isBehind } from "../deploy.logic";
 import { ozoneEnvironment } from "../state";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { OutputView } from "../ui/OutputView";
+import { LoadingRow } from "../ui/SectionRows";
 import { StatusDot } from "../ui/StatusDot";
 import { useOpenAppThread } from "../useOpenAppThread";
+import { DeployButton } from "./DeployButton";
 import { useOpenAppPage } from "./navigation";
+import type { AppDeploy } from "./useAppDeploy";
 import { useAppRuntime } from "./useAppRuntime";
 
 const TEMPLATE_LABEL: Record<string, string> = {
@@ -33,6 +37,7 @@ const TEMPLATE_LABEL: Record<string, string> = {
 export function OverviewSection(props: {
   readonly app: OzoneApp;
   readonly environmentId: EnvironmentId;
+  readonly deploy: AppDeploy;
 }) {
   const { app, environmentId } = props;
   const runtime = useAppRuntime(app, environmentId);
@@ -46,10 +51,7 @@ export function OverviewSection(props: {
         : ozoneEnvironment.buildStatus({ environmentId, input: { threadId: latest.id } }),
     ).data ?? null;
   const headline = buildHeadline(build);
-  const deploy =
-    useEnvironmentQuery(
-      ozoneEnvironment.deployStatus({ environmentId, input: { projectId: app.projectId } }),
-    ).data ?? null;
+  const deploy = props.deploy.status;
   const [confirmMigration, setConfirmMigration] = useState(false);
   const migration = runtime.status?.migration ?? null;
 
@@ -119,45 +121,31 @@ export function OverviewSection(props: {
       </SettingsSection>
 
       <SettingsSection title="Production">
-        {deploy === null || deploy.target === null ? (
+        {deploy === null ? (
+          <LoadingRow label="Loading production" />
+        ) : deploy.target === null ? (
           <SettingsRow
-            title="Not deployed"
+            title={deployStateLine(deploy)}
             description="Run the production build on this computer or on a server."
-            control={
-              <Button
-                size="xs"
-                variant="outline"
-                onClick={() => void openPage(environmentId, app.projectId, "deploy")}
-              >
-                Deploy
-              </Button>
-            }
+            control={<DeployButton deploy={props.deploy} />}
           />
         ) : (
           <>
             <SettingsRow
-              title="Status"
-              description={deploy.state === "failed" ? (deploy.message ?? undefined) : undefined}
-              control={
-                <span className="flex items-center gap-2 text-sm">
-                  <StatusDot
-                    {...(deploy.state === "running"
-                      ? phaseTone("running")
-                      : deploy.state === "deploying"
-                        ? phaseTone("starting")
-                        : deploy.state === "failed"
-                          ? phaseTone("failed")
-                          : phaseTone("stopped"))}
-                  />
-                  {deploy.state === "running"
-                    ? "Running"
-                    : deploy.state === "deploying"
-                      ? "Deploying"
-                      : deploy.state === "failed"
-                        ? "Last deploy failed"
-                        : "Stopped"}
+              title={
+                <span className="flex items-center gap-2">
+                  <StatusDot {...deployTone(deploy)} />
+                  {deployStateLine(deploy)}
                 </span>
               }
+              description={
+                deploy.state === "failed"
+                  ? (deploy.message ?? undefined)
+                  : isBehind(deploy)
+                    ? "A newer version is ready to go out."
+                    : undefined
+              }
+              control={<DeployButton deploy={props.deploy} />}
             />
             {deploy.url === null ? null : (
               <SettingsRow

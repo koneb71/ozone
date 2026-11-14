@@ -1,4 +1,6 @@
 import type {
+  OzoneDeployStatus,
+  OzoneDeployTarget,
   OzoneDeployTrigger,
   OzoneDeploymentEntry,
   OzoneHostProvider,
@@ -7,6 +9,8 @@ import type {
   OzoneSavedServer,
   OzoneServerAddInput,
 } from "@t3tools/contracts";
+
+import { phaseTone } from "./appPage.logic";
 
 export const HOST = /^(?:[A-Za-z0-9._-]+@)?[A-Za-z0-9][A-Za-z0-9.-]*(?::\d{1,5})?$/;
 export const DOMAIN = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/;
@@ -35,6 +39,87 @@ export function durationLabel(entry: OzoneDeploymentEntry): string | null {
   return seconds < 60
     ? `${seconds}s`
     : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
+}
+
+/** The state of production in a few words, the same wherever it is shown. */
+export function deployStateLine(status: OzoneDeployStatus): string {
+  // Held back before anything changed: what ran before still runs.
+  if (status.migration !== null && status.state === "failed") {
+    return status.deployedAt === null ? "Not deployed" : "Still on the previous version";
+  }
+  switch (status.state) {
+    case "none":
+      return "Not deployed";
+    case "deploying":
+      return status.message ?? "Deploying";
+    case "running":
+      return "Running";
+    case "stopped":
+      return "Stopped";
+    case "failed":
+      return "Last deploy failed";
+  }
+}
+
+export function deployTone(status: OzoneDeployStatus) {
+  switch (status.state) {
+    case "running":
+      return phaseTone("running");
+    case "deploying":
+      return phaseTone("starting");
+    case "failed":
+      return phaseTone("failed");
+    case "none":
+    case "stopped":
+      return phaseTone("stopped");
+  }
+}
+
+/** Production runs a commit older than the app's newest one. */
+export function isBehind(status: OzoneDeployStatus): boolean {
+  return (
+    status.target !== null &&
+    status.headSha !== null &&
+    status.commitSha !== null &&
+    status.headSha !== status.commitSha
+  );
+}
+
+/**
+ * The one deploy button an app shows. `open` needs a choice first, so it leads to the Deploy
+ * section; `push` sends the newest commit to where the app already runs.
+ */
+export type DeployAction =
+  | { readonly kind: "open"; readonly label: string; readonly primary: true }
+  | { readonly kind: "busy"; readonly label: string; readonly primary: false }
+  | { readonly kind: "push"; readonly label: string; readonly primary: boolean };
+
+export function deployActionOf(status: OzoneDeployStatus): DeployAction {
+  if (status.state === "deploying") return { kind: "busy", label: "Deploying…", primary: false };
+  if (status.migration !== null) return { kind: "open", label: "Review migration", primary: true };
+  if (status.target === null) {
+    return {
+      kind: "open",
+      label: status.state === "failed" ? "Try again" : "Deploy",
+      primary: true,
+    };
+  }
+  if (status.state === "failed") return { kind: "push", label: "Try again", primary: true };
+  if (status.state !== "running") return { kind: "push", label: "Deploy", primary: true };
+  return isBehind(status)
+    ? { kind: "push", label: "Push update", primary: true }
+    : { kind: "push", label: "Deploy again", primary: false };
+}
+
+/** Two targets that put the app in the same place, at the same address. */
+export function sameTarget(a: OzoneDeployTarget, b: OzoneDeployTarget): boolean {
+  return (
+    a.host === b.host &&
+    a.dokploy === b.dokploy &&
+    a.hosted === b.hosted &&
+    a.domain === b.domain &&
+    a.publicUrl === b.publicUrl
+  );
 }
 
 export type ChannelKind = OzoneNotifyChannel["kind"];

@@ -52,6 +52,12 @@ starts the proxy that serves domains.
    there.
 4. Press **Deploy**.
 
+The same button sits at the top of the app's page, whichever section you are in. It reads
+**Deploy** until the app is deployed, **Push update** when the app has changes production does
+not have yet, and **Deploy again** when production is current. Pushing an update sends the
+newest commit to where the app already runs. To move it somewhere else, change **Where it runs**
+on the Deploy page and press **Deploy here instead**.
+
 Each deploy builds the app's last commit, applies its database migrations and starts it. A
 migration that could lose data is held back until you apply it. On Dokploy and hosting platforms
 Ozone cannot take a snapshot first, so apply such a migration on the host.
@@ -80,7 +86,7 @@ GitHub under **Settings**, **Source control** first.
 - **Deployments** lists every deploy with its output. When Ozone runs the containers, roll back
   to any of them, with the data from then if you ask.
 - **Monitoring** shows each container's CPU, memory, network and logs when Ozone runs them.
-- **Stop** takes the app offline and keeps its data for the next deploy.
+- **Stop production** takes the app offline and keeps its data for the next deploy.
 - **Deploy from a script** gives the app a URL that redeploys it when called.
 - **Notifications** tells Slack, Discord, Telegram or any webhook how each deploy went.
 - **Build** can deploy by itself whenever a build completes.

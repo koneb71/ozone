@@ -31,6 +31,7 @@ import * as OzoneDeployWebhook from "./deploy/webhook.ts";
 import * as AppEnv from "./env/AppEnv.ts";
 import * as AppHistory from "./history/AppHistory.ts";
 import * as OzoneMcpHandlers from "./mcp/handlers.ts";
+import * as OzoneRelease from "./OzoneRelease.ts";
 import { OzoneToolkit } from "./mcp/tools.ts";
 import * as AppCompose from "./runtime/AppCompose.ts";
 import * as AppRuntime from "./runtime/AppRuntime.ts";
@@ -62,6 +63,7 @@ export const layer = Layer.mergeAll(OzoneWs.layer, AutoDeploy.layer).pipe(
       Dokploy.layer,
       HostDrivers.layer,
       GitHubDeployKeys.layer,
+      OzoneRelease.layer,
     ),
   ),
   Layer.provideMerge(BuildGates.layer),

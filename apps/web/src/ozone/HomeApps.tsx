@@ -1,13 +1,6 @@
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentId, OzoneApp, OzoneDeletedApp } from "@t3tools/contracts";
-import {
-  DatabaseIcon,
-  EllipsisIcon,
-  RocketIcon,
-  ScrollTextIcon,
-  SlidersHorizontalIcon,
-  Trash2Icon,
-} from "lucide-react";
+import { EllipsisIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 
 import { SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
@@ -22,7 +15,8 @@ import { useAtomCommand } from "~/state/use-atom-command";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
 
 import { useOpenAppPage } from "./app-page/navigation";
-import { metaLine, phaseTone, type AppSection } from "./appPage.logic";
+import { APP_MENU_PAGES } from "./app-page/menuPages";
+import { metaLine, phaseTone } from "./appPage.logic";
 import { runtimePhaseLabel } from "@t3tools/client-runtime/state/ozone";
 import { ozoneEnvironment } from "./state";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
@@ -56,17 +50,6 @@ export function HomeApps(props: {
     </SettingsSection>
   );
 }
-
-const MENU: ReadonlyArray<{
-  readonly section: AppSection;
-  readonly label: string;
-  readonly icon: typeof DatabaseIcon;
-}> = [
-  { section: "overview", label: "App page", icon: SlidersHorizontalIcon },
-  { section: "deploy", label: "Deploy", icon: RocketIcon },
-  { section: "data", label: "Data", icon: DatabaseIcon },
-  { section: "logs", label: "Logs", icon: ScrollTextIcon },
-];
 
 function AppRow(props: {
   readonly app: OzoneApp;
@@ -109,7 +92,7 @@ function AppRow(props: {
               <EllipsisIcon />
             </MenuTrigger>
             <MenuPopup align="end">
-              {MENU.map(({ section, label: itemLabel, icon: Icon }) => (
+              {APP_MENU_PAGES.map(({ section, label: itemLabel, icon: Icon }) => (
                 <MenuItem
                   key={section}
                   onClick={() => void openPage(environmentId, app.projectId, section)}
