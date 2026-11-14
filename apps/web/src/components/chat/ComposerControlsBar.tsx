@@ -5,6 +5,7 @@ import { type AppModelOption } from "../../modelSelection";
 import { CircleAlertIcon } from "lucide-react";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
 import { ComposerControl } from "./ComposerControl";
+import { ComposerPlanToggle } from "./ComposerPlanToggle";
 import {
   ComposerFooterModeControls,
   ComposerModelPicker,
@@ -56,6 +57,7 @@ export function ComposerControlsBar(props: {
   effortDisplay: EffortDisplay;
   /** The strip under a new thread names the permissions, so the row does not repeat them. */
   permissionsShownInStrip: boolean;
+  planModeAvailable: boolean;
   compatibleRuntimeMode: RuntimeMode;
   defaultRuntimeMode: RuntimeMode | undefined;
   compatibleRuntimeModeOptions: ReadonlyArray<RuntimeModeOption>;
@@ -263,6 +265,15 @@ export function ComposerControlsBar(props: {
   ) : (
     <>
       {composerModelPicker}
+      {props.planModeAvailable ? (
+        <ComposerPlanToggle
+          target={routeKind === "draft" && draftId ? draftId : routeThreadRef}
+          isDraft={routeKind === "draft"}
+          size={controlSize}
+          iconOnly={composerControlsCollapsed}
+          disabled={composerControlsHidden}
+        />
+      ) : null}
 
       <>
         {restingBlockDefs.map((def, index) => {

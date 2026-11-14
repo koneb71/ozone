@@ -1312,6 +1312,8 @@ export default function ChatView(props: ChatViewProps) {
   });
   // An app's notices join the composer's, and files picked on Home reach it.
   const ozoneComposerBannerItems = useOzoneComposer(activeThreadRef, activeProject?.id ?? null);
+  // An app's thread plans through its build, with its own "Plan first" switch.
+  const isOzoneAppThread = ozoneComposerBannerItems.some((item) => item.id === "ozone-app");
   const providerInstanceEntries = providerInstanceEntriesFor(
     providerStatuses,
     settings,
@@ -3669,6 +3671,7 @@ export default function ChatView(props: ChatViewProps) {
                                   (activeThreadShell ?? activeThread)?.pullRequests
                                 }
                                 onComposerOverlayHeightChange={publishComposerOverlayHeightStable}
+                                planModeAvailable={!isOzoneAppThread}
                                 permissionsShownInStrip={
                                   showComposerContextStrip && !isServerThread
                                 }

@@ -55,6 +55,13 @@ converted to JPEG; photos over the image limit are also resized to fit.
 
 See [images and videos](#images-and-videos-in-messages) for previewing and saving media.
 
+## Plan before the work
+
+Turn on **Plan** beside the model picker and the agent reads the project and proposes a plan
+without changing anything. Plan stays on for the thread, so you can ask for changes to the plan.
+Turn it off and send your go-ahead to have the agent do the work. An app's thread has
+**Plan first** above the message box instead, which plans the whole build.
+
 ## Send while the agent is working
 
 Choose **Settings → Chat → Follow-up behavior** to queue
