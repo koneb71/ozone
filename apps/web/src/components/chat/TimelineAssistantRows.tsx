@@ -8,6 +8,7 @@ import { GitForkIcon, ReplyIcon } from "lucide-react";
 import { captureAssistantMessageOpening } from "~/lib/assistantTextSelection";
 import { responseContextRecord } from "~/lib/composerContextRecords";
 import { Button } from "../ui/button";
+import { planCardFooter } from "./planReview.logic";
 import { ProposedPlanCard } from "./ProposedPlanCard";
 import { HtmlRenderFrame } from "./HtmlRenderFrame";
 import { McpAppFrame } from "./McpAppFrame";
@@ -299,10 +300,26 @@ export function ProposedPlanTimelineRow({
   row: Extract<TimelineRow, { kind: "proposed-plan" }>;
 }) {
   const ctx = use(TimelineRowCtx);
+  const { isWorking } = use(TimelineRowActivityCtx);
+  const planId = row.proposedPlan.id;
+  const planReview = ctx.planReview;
 
   return (
     <div className="min-w-0 px-1 py-0.5">
       <ProposedPlanCard
+        review={
+          planReview === undefined
+            ? undefined
+            : {
+                footer: planCardFooter({
+                  status: row.proposedPlan.status,
+                  awaited: planReview.awaitedPlanId === planId && !isWorking,
+                }),
+                busy: planReview.busy,
+                onAnswer: (answer) => planReview.onAnswer(planId, answer),
+              }
+        }
+        onView={planReview === undefined ? undefined : () => planReview.onView(planId)}
         planMarkdown={row.proposedPlan.planMarkdown}
         environmentId={ctx.activeThreadEnvironmentId}
         threadRef={ctx.threadRef ?? undefined}

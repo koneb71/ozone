@@ -72,6 +72,7 @@ import {
   ProviderInstanceId,
   type ServerProvider,
   type ScopedThreadRef,
+  PlanId,
   type ThreadId,
   ProviderInteractionMode,
   resolveIdleCompaction,
@@ -377,7 +378,7 @@ import { planFirstMessage } from "../ozone/home.logic";
 import { ozoneEnvironment } from "../ozone/state";
 import { useAppPlansFirst, useOzoneComposer } from "../ozone/useOzoneComposer";
 import { planReviewBannerItem } from "./chat/ComposerPlanReview";
-import { planToAnswer } from "./chat/planReview.logic";
+import { type PlanAnswer, planToAnswer } from "./chat/planReview.logic";
 import { useDraftHeroLayoutTransition } from "./chat/useDraftHeroLayoutTransition";
 import { useLocalDispatchState } from "./chat/useLocalDispatchState";
 import { draftFanoutSelectionsAtom, draftSendState } from "./chat/chatViewSend";
@@ -1888,7 +1889,7 @@ export default function ChatView(props: ChatViewProps) {
     scheduleComposerFocus();
   };
   const insertArtifactTemplateStable = useStableCallback(insertArtifactTemplate);
-  const sendAppMessage = async (text: string) => {
+  const sendAppMessage = async (text: string, answersPlanId?: PlanId) => {
     if (!isServerThread || activeThreadId === null) {
       throw new Error("Messages from apps need a started thread.");
     }
@@ -1900,6 +1901,10 @@ export default function ChatView(props: ChatViewProps) {
         runtimeMode,
         interactionMode: DEFAULT_INTERACTION_MODE,
         dispatchMode: "queue",
+        // The server marks the plan completed, which is what its card shows as approved.
+        ...(answersPlanId === undefined
+          ? {}
+          : { sourceProposedPlan: { threadId: activeThreadId, planId: answersPlanId } }),
       },
     });
     if (result._tag === "Failure") {
@@ -2587,10 +2592,11 @@ export default function ChatView(props: ChatViewProps) {
   // An app's lead with Plan first on plans in plan mode. Most providers file a plan card; one
   // that only writes its plan leaves it as a message, unless it is waiting on a question.
   const appLeadPlansHere = isOzoneAppThread && activeThread?.interactionMode === "plan";
-  const awaitedPlan = planToAnswer(
-    timelineEntries,
-    appLeadPlansHere && activePendingUserInput === null,
-  );
+  // A plan waits only in plan mode. Declining leaves it, so a declined plan stays declined.
+  const awaitedPlan =
+    activeThread?.interactionMode === "plan"
+      ? planToAnswer(timelineEntries, appLeadPlansHere && activePendingUserInput === null)
+      : null;
   const showPlanReview =
     awaitedPlan !== null &&
     awaitedPlan.id !== answeredPlanId &&
@@ -2620,7 +2626,12 @@ export default function ChatView(props: ChatViewProps) {
       });
     }
     await leavePlanMode();
-    const sent = await settlePromise(() => sendAppMessage("Approved. Implement the plan."));
+    const sent = await settlePromise(() =>
+      sendAppMessage(
+        "Approved. Implement the plan.",
+        awaitedPlan.kind === "card" ? PlanId.make(awaitedPlan.id) : undefined,
+      ),
+    );
     setPlanAnswerPending(false);
     if (sent._tag === "Failure" && activeThread) {
       const error = squashAtomCommandFailure(sent);
@@ -2642,6 +2653,45 @@ export default function ChatView(props: ChatViewProps) {
     setAnsweredPlanId(awaitedPlan.id);
     await leavePlanMode();
   };
+  const changePendingCustomAnswerStable = useStableCallback(
+    onChangeActivePendingUserInputCustomAnswer,
+  );
+  // Shown in the conversation; the composer answers the same question when typed into.
+  const timelineQuestion =
+    activePendingUserInput === null || !isServerThread
+      ? undefined
+      : {
+          prompt: activePendingUserInput,
+          disabled: !canOperateThread,
+          isResponding: activePendingIsResponding,
+          answers: activePendingDraftAnswers,
+          questionIndex: activePendingQuestionIndex,
+          onToggleOption: onSelectActivePendingUserInputOptionStable,
+          onChangeCustomAnswer: changePendingCustomAnswerStable,
+          onAdvance: onAdvanceActivePendingUserInputStable,
+          onPrevious: onPreviousActivePendingUserInputQuestionStable,
+          onDismiss: onDismissUserInputStable,
+        };
+  const answerPlan = (planId: string, answer: PlanAnswer) => {
+    if (awaitedPlan?.id !== planId) return;
+    if (answer === "approve") void approvePlan();
+    else if (answer === "keep") revisePlan();
+    else void declinePlan();
+  };
+  const answerPlanStable = useStableCallback(answerPlan);
+  const viewPlanStable = useStableCallback((planId: string) => {
+    if (activeThreadRef !== null) useRightPanelStore.getState().openPlan(activeThreadRef, planId);
+  });
+  // Plan cards carry their own answer; only a plan with no card is asked about over the composer.
+  const timelinePlanReview =
+    isServerThread && canOperateThread
+      ? {
+          awaitedPlanId: showPlanReview && awaitedPlan?.kind === "card" ? awaitedPlan.id : null,
+          busy: planAnswerPending,
+          onAnswer: answerPlanStable,
+          onView: viewPlanStable,
+        }
+      : undefined;
   const composerBannerItems = (() => {
     const fallbackSelection = draftFallback?.selection;
     const defaultSelection =
@@ -2697,7 +2747,7 @@ export default function ChatView(props: ChatViewProps) {
     const projectCloneItems = projectCloneBannerItem === null ? [] : [projectCloneBannerItem];
     // An approval's feedback goes to that approval; the armed session waits for the next message.
     const planReviewItems =
-      showPlanReview && awaitedPlan !== null
+      showPlanReview && awaitedPlan?.kind === "written"
         ? [
             planReviewBannerItem({
               planMarkdown: awaitedPlan.planMarkdown,
@@ -3261,6 +3311,14 @@ export default function ChatView(props: ChatViewProps) {
     return embedded ? null : <NoActiveThreadState />;
   }
 
+  const openPlanId =
+    renderedRightPanelSurface?.kind === "plan" ? renderedRightPanelSurface.planId : null;
+  const openPlanSurface =
+    openPlanId === null
+      ? null
+      : (timelineEntries
+          .flatMap((entry) => (entry.kind === "proposed-plan" ? [entry.proposedPlan] : []))
+          .find((plan) => plan.id === openPlanId) ?? null);
   const rightPanelContent = activeThreadRef ? (
     <RightPanelSurfaceContent
       surface={renderedRightPanelSurface}
@@ -3276,6 +3334,14 @@ export default function ChatView(props: ChatViewProps) {
       onSendAnnotation={sendPreviewAnnotationStable}
       onCloseSurface={closeRightPanelSurface}
       sideChatParentPanel={sideChatParentPanel}
+      plan={{
+        proposedPlan: openPlanSurface,
+        review: timelinePlanReview,
+        environmentId: activeThread.environmentId,
+        cwd: gitCwd ?? undefined,
+        workspaceRoot: activeWorkspaceRoot,
+        isWorking,
+      }}
       terminal={{
         launchContext: activeTerminalLaunchContext ?? null,
         keybindings,
@@ -3463,6 +3529,8 @@ export default function ChatView(props: ChatViewProps) {
             >
               <WorkspaceMutationIdContext value={workspaceMutationId}>
                 <ThreadTimeline
+                  planReview={timelinePlanReview}
+                  question={timelineQuestion}
                   pendingApprovals={pendingApprovals}
                   heldApprovalRequestIds={heldApprovalRequestIds}
                   respondingRequestIds={respondingRequestIds}
@@ -3736,9 +3804,6 @@ export default function ChatView(props: ChatViewProps) {
                                 activePendingProgress={activePendingProgress}
                                 activePendingResolvedAnswers={activePendingResolvedAnswers}
                                 activePendingIsResponding={activePendingIsResponding}
-                                activePendingDraftAnswers={activePendingDraftAnswers}
-                                activePendingQuestionIndex={activePendingQuestionIndex}
-                                respondingRequestIds={respondingRequestIds}
                                 runtimeMode={runtimeMode}
                                 defaultRuntimeMode={defaultRuntimeMode}
                                 lockedProvider={modelPickerLockedProvider}
@@ -3785,13 +3850,6 @@ export default function ChatView(props: ChatViewProps) {
                                 onSend={onComposerSendStable}
                                 onResume={onComposerResumeStable}
                                 onInterrupt={onInterruptStable}
-                                onSelectActivePendingUserInputOption={
-                                  onSelectActivePendingUserInputOptionStable
-                                }
-                                onAdvanceActivePendingUserInput={
-                                  onAdvanceActivePendingUserInputStable
-                                }
-                                onDismissActivePendingUserInput={onDismissUserInputStable}
                                 onPreviousActivePendingUserInputQuestion={
                                   onPreviousActivePendingUserInputQuestionStable
                                 }

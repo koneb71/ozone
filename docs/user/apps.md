@@ -29,9 +29,9 @@ Ozone creates the project in a git repository of its own, starts its containers 
 thread where the build runs. The preview opens beside the thread when the app is up.
 
 To see the plan before any work starts, turn on **Plan first**. The agent then cannot change
-anything while it plans: it reads the app, asks you its questions, and shows its plan above the
-message box with **Approve**, **Revise** and **Decline**. Approve starts the build. Revise keeps
-it planning while you say what to change. Decline drops the plan.
+anything while it plans: it reads the app, asks you its questions on a card in the conversation,
+and shows its plan on a card with **View plan**, **Approve**, **Keep planning** and **Decline**.
+Approve starts the build. Keep planning lets you say what to change. Decline drops the plan.
 
 Plan first applies to every request while it is on, including a small change to an app that is
 already built. Turn it off when you want quick edits made straight away. The same switch sits

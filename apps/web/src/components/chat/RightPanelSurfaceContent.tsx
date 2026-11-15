@@ -24,6 +24,10 @@ import { PullRequestDetailPanel } from "../pullRequest/PullRequestDetailPanel";
 import { PullRequestDetailGhost } from "../pullRequest/PullRequestGhosts";
 import { PullRequestsUnavailableState } from "../pullRequest/PullRequestsUnavailableState";
 import { ThreadPullRequestsPanel } from "../pullRequest/ThreadPullRequestsPanel";
+import type { ProposedPlan } from "../../types";
+import { planCardFooter } from "./planReview.logic";
+import { ProposedPlanCard } from "./ProposedPlanCard";
+import type { TimelinePlanReview } from "./timelineRowContext";
 
 const PreviewPanel = lazy(() =>
   import("../preview/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
@@ -38,6 +42,54 @@ type RightPanelTerminalProps = Omit<
   PersistentThreadTerminalPanelProps,
   "visible" | "threadRef" | "surface"
 >;
+
+/** The plan the open plan tab shows, found by the chat view in the thread's conversation. */
+export interface RightPanelPlanProps {
+  /** Null when the plan is not in the loaded conversation any more. */
+  readonly proposedPlan: ProposedPlan | null;
+  readonly review: TimelinePlanReview | undefined;
+  readonly environmentId: EnvironmentId;
+  readonly cwd: string | undefined;
+  readonly workspaceRoot: string | undefined;
+  /** The agent is working, so no plan waits for an answer. */
+  readonly isWorking: boolean;
+}
+
+/** A whole plan beside the conversation, answered here as on its card. */
+function PlanPanel(props: RightPanelPlanProps & { readonly threadRef: ScopedThreadRef }) {
+  const { proposedPlan, review } = props;
+  if (proposedPlan === null) {
+    return (
+      <p className="p-6 text-muted-foreground text-sm">
+        This plan is no longer in the loaded conversation.
+      </p>
+    );
+  }
+  return (
+    <div className="h-full min-h-0 overflow-y-auto p-3">
+      <ProposedPlanCard
+        full
+        planMarkdown={proposedPlan.planMarkdown}
+        environmentId={props.environmentId}
+        threadRef={props.threadRef}
+        cwd={props.cwd}
+        workspaceRoot={props.workspaceRoot}
+        review={
+          review === undefined
+            ? undefined
+            : {
+                footer: planCardFooter({
+                  status: proposedPlan.status,
+                  awaited: review.awaitedPlanId === proposedPlan.id && !props.isWorking,
+                }),
+                busy: review.busy,
+                onAnswer: (answer) => review.onAnswer(proposedPlan.id, answer),
+              }
+        }
+      />
+    </div>
+  );
+}
 
 interface RightPanelPullRequestProps {
   readonly capabilityKnown: boolean;
@@ -77,6 +129,7 @@ export function RightPanelSurfaceContent(props: {
   readonly onCloseSurface: (surface: RightPanelSurface) => void;
   readonly terminal: RightPanelTerminalProps;
   readonly pullRequest: RightPanelPullRequestProps;
+  readonly plan: RightPanelPlanProps;
   readonly files: RightPanelFileProps;
   readonly sideChatParentPanel: SideChatParentPanel;
 }) {
@@ -173,6 +226,8 @@ export function RightPanelSurfaceContent(props: {
     }
     case "pull-requests":
       return <ThreadPullRequestsPanel threadRef={threadRef} />;
+    case "plan":
+      return <PlanPanel key={surface.id} threadRef={threadRef} {...props.plan} />;
     case "side-chat":
       // Not lazy: revealing a suspended tiptap editor tears down its view and crashes the composer.
       return (

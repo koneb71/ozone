@@ -35,6 +35,7 @@ import { type HandoffTimelineRun } from "./V2LifecycleRow";
  * Where an expanded row reads an item's detail and a command's output. The owner's rows read them
  * from the environment; the guest page reads them through its own routes.
  */
+import type { PlanAnswer } from "./planReview.logic";
 export interface TurnItemSource {
   readonly detail: TurnItemDetailSource;
   readonly commandOutput: (target: {
@@ -43,7 +44,17 @@ export interface TurnItemSource {
   }) => Atom.Atom<AsyncResult.AsyncResult<CommandOutputView, unknown>>;
 }
 
+/** How the conversation's plan cards are answered and opened. Absent in read-only views. */
+export interface TimelinePlanReview {
+  /** The plan the person is being asked about, if any. */
+  readonly awaitedPlanId: string | null;
+  readonly busy: boolean;
+  readonly onAnswer: (planId: string, answer: PlanAnswer) => void;
+  readonly onView: (planId: string) => void;
+}
+
 export interface TimelineRowSharedState {
+  planReview: TimelinePlanReview | undefined;
   pendingApprovals: ReadonlyMap<RuntimeRequestId, PendingApproval>;
   respondingRequestIds: ReadonlyArray<RuntimeRequestId>;
   canOperateThread: boolean;

@@ -17,7 +17,8 @@ import {
   normalizePlanMarkdownForExport,
 } from "../../proposedPlan";
 import ChatMarkdown from "../ChatMarkdown";
-import { EllipsisIcon } from "lucide-react";
+import { CheckIcon, EllipsisIcon, PanelRightOpenIcon } from "lucide-react";
+import type { PlanAnswer } from "./planReview.logic";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
@@ -38,6 +39,13 @@ import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
 
+/** What the person can do with a plan from its card, and what became of the plan. */
+export interface PlanCardReview {
+  readonly footer: "answer" | "approved" | "replaced" | null;
+  readonly busy: boolean;
+  readonly onAnswer: (answer: PlanAnswer) => void;
+}
+
 export const ProposedPlanCard = memo(function ProposedPlanCard({
   planMarkdown,
   environmentId,
@@ -45,6 +53,9 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
   cwd,
   workspaceRoot,
   findActive = false,
+  review,
+  onView,
+  full = false,
 }: {
   planMarkdown: string;
   environmentId: EnvironmentId;
@@ -52,6 +63,12 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
   cwd: string | undefined;
   workspaceRoot: string | undefined;
   findActive?: boolean;
+  /** Absent where the plan cannot be answered, as in the guest view. */
+  review?: PlanCardReview | undefined;
+  /** Opens the whole plan beside the conversation. Absent hides "View plan". */
+  onView?: (() => void) | undefined;
+  /** Shows the whole plan with no fold, as the side panel does. */
+  full?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const canWriteFiles = useEnvironmentScope(environmentId, AuthFilesystemWriteScope);
@@ -75,7 +92,7 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
   });
   const title = proposedPlanTitle(planMarkdown) ?? "Proposed plan";
   const lineCount = planMarkdown.split("\n").length;
-  const canCollapse = planMarkdown.length > 900 || lineCount > 20;
+  const canCollapse = !full && (planMarkdown.length > 900 || lineCount > 20);
   const displayedPlanMarkdown = stripDisplayedPlanMarkdown(planMarkdown);
   const collapsedPreview = canCollapse
     ? buildCollapsedProposedPlanPreviewMarkdown(planMarkdown, { maxLines: 10 })
@@ -167,25 +184,33 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
             {title}
           </h3>
         </div>
-        <Menu>
-          <MenuTrigger
-            render={<Button aria-label="Plan actions" size="icon-xs" variant="outline" />}
-          >
-            <EllipsisIcon aria-hidden="true" className="size-4" />
-          </MenuTrigger>
-          <MenuPopup align="end">
-            <MenuItem onClick={handleCopyPlan}>
-              {isCopied ? "Copied!" : "Copy to clipboard"}
-            </MenuItem>
-            <MenuItem onClick={handleDownload}>Download as markdown</MenuItem>
-            <MenuItem
-              onClick={openSaveDialog}
-              disabled={!canWriteFiles || !workspaceRoot || isSavingToWorkspace}
+        <div className="flex items-center gap-1.5">
+          {onView === undefined ? null : (
+            <Button size="xs" variant="outline" onClick={onView}>
+              <PanelRightOpenIcon />
+              View plan
+            </Button>
+          )}
+          <Menu>
+            <MenuTrigger
+              render={<Button aria-label="Plan actions" size="icon-xs" variant="outline" />}
             >
-              Save to workspace
-            </MenuItem>
-          </MenuPopup>
-        </Menu>
+              <EllipsisIcon aria-hidden="true" className="size-4" />
+            </MenuTrigger>
+            <MenuPopup align="end">
+              <MenuItem onClick={handleCopyPlan}>
+                {isCopied ? "Copied!" : "Copy to clipboard"}
+              </MenuItem>
+              <MenuItem onClick={handleDownload}>Download as markdown</MenuItem>
+              <MenuItem
+                onClick={openSaveDialog}
+                disabled={!canWriteFiles || !workspaceRoot || isSavingToWorkspace}
+              >
+                Save to workspace
+              </MenuItem>
+            </MenuPopup>
+          </Menu>
+        </div>
       </div>
       <div className="mt-4">
         <div
@@ -230,6 +255,12 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
           </div>
         ) : null}
       </div>
+
+      {review === undefined || review.footer === null ? null : (
+        <div className="mt-4 border-border/80 border-t pt-4">
+          <PlanReviewFooter review={review} />
+        </div>
+      )}
 
       <Dialog
         open={isSaveDialogOpen}
@@ -304,5 +335,73 @@ function SavePlanToWorkspaceForm({
         </Button>
       </DialogFooter>
     </>
+  );
+}
+
+function PlanReviewFooter({ review }: { review: PlanCardReview }) {
+  if (review.footer !== "answer") {
+    return (
+      <span className="flex items-center gap-1.5 text-muted-foreground text-sm">
+        {review.footer === "approved" ? <CheckIcon className="size-4" /> : null}
+        {review.footer === "approved" ? "Approved" : "Replaced by a newer plan"}
+      </span>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <span className="font-medium text-foreground text-sm">Go ahead with this plan?</span>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Button
+          disabled={review.busy}
+          size="sm"
+          variant="ghost"
+          onClick={() => review.onAnswer("decline")}
+        >
+          Decline
+        </Button>
+        <Button
+          disabled={review.busy}
+          size="sm"
+          variant="outline"
+          onClick={() => review.onAnswer("keep")}
+        >
+          Keep planning
+        </Button>
+        <Button disabled={review.busy} size="sm" onClick={() => review.onAnswer("approve")}>
+          <CheckIcon />
+          Approve
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The question a waiting plan asks, at the end of the conversation. Shown when the agent wrote
+ * more after its plan card, which would otherwise leave the answer scrolled out of sight.
+ */
+export function PlanAnswerCard(props: {
+  readonly planMarkdown: string;
+  readonly review: PlanCardReview;
+  readonly onView: () => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-border/80 bg-card/70 p-4 sm:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Badge variant="secondary">Plan</Badge>
+          <h3 className="truncate font-medium text-foreground text-sm">
+            {proposedPlanTitle(props.planMarkdown) ?? "Proposed plan"}
+          </h3>
+        </div>
+        <Button size="xs" variant="outline" onClick={props.onView}>
+          <PanelRightOpenIcon />
+          View plan
+        </Button>
+      </div>
+      <div className="mt-4 border-border/80 border-t pt-4">
+        <PlanReviewFooter review={props.review} />
+      </div>
+    </div>
   );
 }

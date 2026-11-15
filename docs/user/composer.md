@@ -59,10 +59,15 @@ See [images and videos](#images-and-videos-in-messages) for previewing and savin
 
 Turn on **Plan** beside the model picker and the agent reads the project and proposes a plan
 without changing anything. Plan stays on for the thread, so you can ask for changes to the plan.
-When a plan is ready, a notice above the message box offers **Approve**, which leaves plan mode
-and has the agent do the work, **Revise**, which keeps planning so you can ask for changes, and
-**Decline**, which leaves plan mode and sends nothing. An app's thread has
-**Plan first** above the message box instead, which plans the whole build.
+
+When the agent needs a decision from you, its question appears as a card in the conversation:
+pick an option, or type your own answer in **Other**, then **Next** or **Submit**. The number
+keys pick options, and what you type in the message box is the same typed answer.
+
+The plan appears as a card too. **View plan** opens the whole plan beside the conversation.
+**Approve** leaves plan mode and has the agent do the work, **Keep planning** stays in plan mode
+so you can ask for changes, and **Decline** leaves plan mode and sends nothing. An app's thread
+has **Plan first** above the message box instead, which plans every request the same way.
 
 ## Send while the agent is working
 

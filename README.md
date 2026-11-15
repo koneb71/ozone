@@ -38,7 +38,8 @@ it as read, and see how many are left to read." This is the app it built:
   Environment, Build and Logs while you build, then Deploy, Deployments and Monitoring for
   production. It is laid out like Settings.
 - **Lets you steer.** Turn on "Plan first", on Home or above the message box in an app's thread,
-  and the build starts only when you say so. Each app's Build page chooses the model its workers
+  and the agent cannot change anything until you approve its plan: it asks its questions and
+  shows the plan on cards in the conversation. Each app's Build page chooses the model its workers
   use, so a large lead can direct cheaper workers.
 - **Keeps your data.** An app's database lives in a volume that only a confirmed **Delete app**
   removes, after a snapshot, and Home can bring a deleted app back with that data. Every finished

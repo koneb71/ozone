@@ -649,6 +649,17 @@ describe("rightPanelStore", () => {
     });
   });
 
+  it("keeps a plan tab that names its plan, unlike the old sidebar's tab", () => {
+    const surfaces = [{ id: "plan:plan-1", kind: "plan", planId: "plan-1" }];
+    expect(
+      migratePersistedRightPanelState({
+        byThreadKey: {
+          "env-1:thread-A": { isOpen: true, activeSurfaceId: "plan:plan-1", surfaces },
+        },
+      }).byThreadKey["env-1:thread-A"],
+    ).toEqual({ isOpen: true, activeSurfaceId: "plan:plan-1", surfaces });
+  });
+
   it.each([
     { kind: "plan", isOpen: true },
     { kind: "agents", isOpen: true },

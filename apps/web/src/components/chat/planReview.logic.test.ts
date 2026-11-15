@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import type { TimelineEntry } from "../../session-logic";
-import { planAwaitingAnswer, planToAnswer, writtenPlanAwaitingAnswer } from "./planReview.logic";
+import {
+  planAwaitingAnswer,
+  planCardFooter,
+  planToAnswer,
+  writtenPlanAwaitingAnswer,
+} from "./planReview.logic";
 
 const message = (id: string, role: "user" | "assistant") =>
   ({
@@ -10,12 +15,12 @@ const message = (id: string, role: "user" | "assistant") =>
     createdAt: "",
     message: { id, role, text: `# ${id}` },
   }) as unknown as TimelineEntry;
-const plan = (id: string) =>
+const plan = (id: string, status = "active") =>
   ({
     id,
     kind: "proposed-plan",
     createdAt: "",
-    proposedPlan: { id, planMarkdown: `# ${id}` },
+    proposedPlan: { id, planMarkdown: `# ${id}`, status },
   }) as unknown as TimelineEntry;
 
 describe("planAwaitingAnswer", () => {
@@ -32,6 +37,12 @@ describe("planAwaitingAnswer", () => {
       "the person already replied",
       [message("u1", "user"), plan("p1"), message("u2", "user")],
       null,
+    ],
+    ["a plan already approved", [message("u1", "user"), plan("p1", "completed")], null],
+    [
+      "a plan replaced by a newer one",
+      [message("u1", "user"), plan("p1", "superseded"), plan("p2")],
+      "p2",
     ],
     ["an empty thread", [], null],
   ])("%s", (_name, entries, expected) => {
@@ -68,5 +79,18 @@ describe("planToAnswer", () => {
     ["a written plan elsewhere, or while a question waits", written, false, null],
   ])("%s", (_name, entries, writtenPlanCounts, expected) => {
     expect(planToAnswer(entries, writtenPlanCounts)?.id ?? null).toBe(expected);
+  });
+});
+
+describe("planCardFooter", () => {
+  it.each([
+    ["the plan being asked about", "active", true, "answer"],
+    ["an older plan still marked active", "active", false, null],
+    ["an approved plan", "completed", false, "approved"],
+    ["an approved plan, however it is asked", "completed", true, "approved"],
+    ["a plan a newer one replaced", "superseded", false, "replaced"],
+    ["a draft", "draft", false, null],
+  ] as const)("%s", (_name, status, awaited, expected) => {
+    expect(planCardFooter({ status, awaited })).toBe(expected);
   });
 });

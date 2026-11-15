@@ -69,10 +69,26 @@ export function shouldRedirectInputToComposer(event: Event): boolean {
   return true;
 }
 
+/**
+ * Set to a count N by something on screen that takes the keys 1 to N itself, such as a question's
+ * options. Those digits are then not typing meant for the composer.
+ */
+export const DIGIT_SHORTCUTS_ATTRIBUTE = "data-digit-shortcuts";
+
+function isClaimedDigit(event: KeyboardEvent): boolean {
+  const digit = Number.parseInt(event.key, 10);
+  if (Number.isNaN(digit) || digit < 1) return false;
+  const claimed = document
+    .querySelector(`[${DIGIT_SHORTCUTS_ATTRIBUTE}]`)
+    ?.getAttribute(DIGIT_SHORTCUTS_ATTRIBUTE);
+  return claimed !== null && claimed !== undefined && digit <= Number(claimed);
+}
+
 export function shouldTypeToFocusComposer(event: KeyboardEvent): boolean {
   if (event.isComposing) return false;
   if (event.metaKey || event.ctrlKey || event.altKey) return false;
   if (event.key.length !== 1) return false;
+  if (isClaimedDigit(event)) return false;
   if (!shouldRedirectInputToComposer(event)) return false;
   if (isSurfaceLauncherKey(event)) return false;
 

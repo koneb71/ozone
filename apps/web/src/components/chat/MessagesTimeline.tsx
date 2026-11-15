@@ -6,6 +6,8 @@ import { ThreadFindTimelineContext } from "./ThreadFindProvider";
 import { MarkdownFindContext } from "./markdownFindContext";
 import { useChatCanvas } from "./ChatCanvasContext";
 import { WorkLogBlock } from "./WorkLog";
+import { PlanAnswerCard } from "./ProposedPlanCard";
+import { type TimelineQuestion, TimelineQuestionCard } from "./TimelineQuestionCard";
 import { TimelinePendingApprovalRow } from "./TimelinePendingApprovalRow";
 import type { WorktreeSetupSnapshot } from "@t3tools/contracts";
 import { deriveTimelineMinimapItems } from "./timelineMinimapItems";
@@ -217,6 +219,9 @@ export interface MessagesTimelineHistoryControls {
 }
 
 interface MessagesTimelineProps {
+  planReview?: TimelineRowSharedState["planReview"];
+  /** The question the agent waits on, shown as a card at the end of the conversation. */
+  question?: TimelineQuestion | undefined;
   pendingApprovals?: ReadonlyArray<PendingApproval>;
   heldApprovalRequestIds?: ReadonlySet<string> | undefined;
   respondingRequestIds?: TimelineRowSharedState["respondingRequestIds"];
@@ -337,6 +342,8 @@ export function MessagesTimeline(props: MessagesTimelineProps) {
 }
 
 const ConversationTimeline = memo(function ConversationTimeline({
+  planReview,
+  question,
   pendingApprovals = EMPTY_PENDING_APPROVALS,
   heldApprovalRequestIds,
   respondingRequestIds = EMPTY_RESPONDING_REQUEST_IDS,
@@ -1078,7 +1085,24 @@ const ConversationTimeline = memo(function ConversationTimeline({
       .filter(isVisiblePendingApproval)
       .map((approval) => [approval.requestId, approval]),
   );
+  // Its card answers a waiting plan when the card ends the conversation. When the agent wrote
+  // more after it, the question moves to the end, where it can be seen.
+  const awaitedPlan =
+    planReview?.awaitedPlanId == null
+      ? undefined
+      : timelineEntries
+          .flatMap((entry) => (entry.kind === "proposed-plan" ? [entry.proposedPlan] : []))
+          .find((plan) => plan.id === planReview.awaitedPlanId);
+  const lastEntry = timelineEntries.at(-1);
+  const awaitedPlanEndsConversation =
+    awaitedPlan !== undefined &&
+    lastEntry?.kind === "proposed-plan" &&
+    lastEntry.proposedPlan.id === awaitedPlan.id;
   const sharedState: TimelineRowSharedState = {
+    planReview:
+      planReview === undefined || awaitedPlanEndsConversation
+        ? planReview
+        : { ...planReview, awaitedPlanId: null },
     pendingApprovals: pendingApprovalsByRequestId,
     respondingRequestIds,
     canOperateThread,
@@ -1352,6 +1376,36 @@ const ConversationTimeline = memo(function ConversationTimeline({
       onGrow={onFooterGrow}
     >
       {footer}
+      {planReview === undefined ||
+      awaitedPlan === undefined ||
+      awaitedPlanEndsConversation ||
+      isWorking ? null : (
+        <div className="messages-timeline-row-frame">
+          <div className="chat-content-lane overflow-x-clip px-1 py-1" data-timeline-root="true">
+            <PlanAnswerCard
+              planMarkdown={awaitedPlan.planMarkdown}
+              review={{
+                footer: "answer",
+                busy: planReview.busy,
+                onAnswer: (answer) => planReview.onAnswer(awaitedPlan.id, answer),
+              }}
+              onView={() => planReview.onView(awaitedPlan.id)}
+            />
+          </div>
+        </div>
+      )}
+      {question === undefined ? null : (
+        <div className="messages-timeline-row-frame">
+          <div className="chat-content-lane overflow-x-clip px-1 py-1" data-timeline-root="true">
+            <TimelineQuestionCard
+              key={question.prompt.requestId}
+              {...question}
+              cwd={markdownCwd}
+              threadRef={citationThreadRef ?? undefined}
+            />
+          </div>
+        </div>
+      )}
       {unmatchedPendingApprovals.length > 0 ? (
         <TimelineRowCtx value={sharedState}>
           <div className="messages-timeline-row-frame">
