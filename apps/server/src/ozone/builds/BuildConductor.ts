@@ -3,7 +3,6 @@ import {
   ozoneAppUrl,
   OzoneAppError,
   type OzoneBuild,
-  type OzoneBuildAdvanceInput,
   type OzoneBuildCheckResult,
   type OzoneBuildPlanInput,
   type OzoneBuildReport,
@@ -55,10 +54,7 @@ export class BuildConductor extends Context.Service<
       input: OzoneBuildPlanInput,
     ) => Effect.Effect<OzoneBuildReport, OzoneAppError>;
     /** Safe to call again at any time: it first settles what happened, then takes the next step. */
-    readonly advance: (
-      lead: BuildLead,
-      input?: OzoneBuildAdvanceInput,
-    ) => Effect.Effect<OzoneBuildReport, OzoneAppError>;
+    readonly advance: (lead: BuildLead) => Effect.Effect<OzoneBuildReport, OzoneAppError>;
     readonly resolve: (
       lead: BuildLead,
       input: OzoneBuildResolveInput,
@@ -295,10 +291,7 @@ const make = Effect.gen(function* () {
       yield* change(lead, (current, at) => BuildModel.reopened(current, lost, at));
   });
 
-  const advance = Effect.fn("BuildConductor.advance")(function* (
-    lead: BuildLead,
-    input: OzoneBuildAdvanceInput,
-  ) {
+  const advance = Effect.fn("BuildConductor.advance")(function* (lead: BuildLead) {
     const deadline = (yield* Clock.currentTimeMillis) + Duration.toMillis(lead.patience);
     const patienceLeft = Effect.map(Clock.currentTimeMillis, (at) =>
       Duration.millis(Math.max(0, deadline - at)),
@@ -310,10 +303,8 @@ const make = Effect.gen(function* () {
 
     const planned = yield* load(lead);
     if (planned.tasks.length === 0) return report(lead, planned);
-    if (planned.approval === "pending") {
-      if (input.approved !== true) return report(lead, planned);
-      yield* change(lead, BuildModel.approved);
-    }
+    // Only BuildReview.approve, which a person starts, lets a waiting plan run.
+    if (planned.approval === "pending") return report(lead, planned);
     yield* reopenLost(lead, planned);
 
     let finalRan = false;
@@ -443,8 +434,8 @@ const make = Effect.gen(function* () {
         }),
       ),
     ),
-    advance: Effect.fn("BuildConductor.advance")((lead, input) =>
-      exclusively(lead.threadId, advance(lead, input ?? {})),
+    advance: Effect.fn("BuildConductor.advance")((lead) =>
+      exclusively(lead.threadId, advance(lead)),
     ),
     resolve: Effect.fn("BuildConductor.resolve")((lead, input) =>
       exclusively(lead.threadId, resolve(lead, input)),

@@ -852,6 +852,8 @@ describe("BuildConductor", () => {
       const planned = yield* conductor.plan(lead, plan(task("page")));
       assert.strictEqual(planned.status, "review");
       assert.strictEqual(planned.next, NEXT.review);
+      // The lead has no way to start it: asking again changes nothing.
+      assert.strictEqual((yield* conductor.advance(lead)).status, "review");
       assert.strictEqual((yield* conductor.advance(lead)).status, "review");
       assert.deepStrictEqual(yield* steps, []);
 
@@ -859,12 +861,6 @@ describe("BuildConductor", () => {
       yield* review.approve(threadId);
       assert.strictEqual(yield* Queue.take(wakes), "Plan approved");
       assert.strictEqual((yield* conductor.advance(lead)).status, "complete");
-
-      // A go-ahead in the chat counts too, but only when the lead says it is one.
-      const second = yield* makeHarness({ reviewPlans: true });
-      yield* second.conductor.plan(second.lead, plan(task("page")));
-      const told = yield* second.conductor.advance(second.lead, { approved: true });
-      assert.strictEqual(told.status, "complete");
     }).pipe(Effect.provide(layerTest)),
   );
 });

@@ -375,7 +375,7 @@ import {
 } from "./chat/useSystemComposerBanners";
 import { useOzoneComposer } from "../ozone/useOzoneComposer";
 import { planReviewBannerItem } from "./chat/ComposerPlanReview";
-import { planAwaitingAnswer } from "./chat/planReview.logic";
+import { planAwaitingAnswer, writtenPlanAwaitingAnswer } from "./chat/planReview.logic";
 import { useDraftHeroLayoutTransition } from "./chat/useDraftHeroLayoutTransition";
 import { useLocalDispatchState } from "./chat/useLocalDispatchState";
 import { draftFanoutSelectionsAtom, draftSendState } from "./chat/chatViewSend";
@@ -2580,13 +2580,18 @@ export default function ChatView(props: ChatViewProps) {
           },
         })
       : null;
-  const awaitedPlan = planAwaitingAnswer(timelineEntries);
+  // An app's lead plans through Ozone's build card, except one started in plan mode because its
+  // provider has no build tools: that plan is a message, answered here.
+  const appLeadPlansHere = isOzoneAppThread && activeThread?.interactionMode === "plan";
+  const awaitedPlan = appLeadPlansHere
+    ? writtenPlanAwaitingAnswer(timelineEntries)
+    : planAwaitingAnswer(timelineEntries);
   const showPlanReview =
     awaitedPlan !== null &&
     awaitedPlan.id !== answeredPlanId &&
     isServerThread &&
     canOperateThread &&
-    !isOzoneAppThread &&
+    (!isOzoneAppThread || appLeadPlansHere) &&
     !isWorking;
   const leavePlanMode = async () => {
     setComposerInteractionMode(composerDraftTarget, null);

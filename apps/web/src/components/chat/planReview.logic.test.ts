@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import type { TimelineEntry } from "../../session-logic";
-import { planAwaitingAnswer } from "./planReview.logic";
+import { planAwaitingAnswer, writtenPlanAwaitingAnswer } from "./planReview.logic";
 
 const message = (id: string, role: "user" | "assistant") =>
-  ({ id, kind: "message", createdAt: "", message: { id, role } }) as unknown as TimelineEntry;
+  ({
+    id,
+    kind: "message",
+    createdAt: "",
+    message: { id, role, text: `# ${id}` },
+  }) as unknown as TimelineEntry;
 const plan = (id: string) =>
   ({
     id,
@@ -31,5 +36,25 @@ describe("planAwaitingAnswer", () => {
     ["an empty thread", [], null],
   ])("%s", (_name, entries, expected) => {
     expect(planAwaitingAnswer(entries)?.id ?? null).toBe(expected);
+  });
+});
+
+describe("writtenPlanAwaitingAnswer", () => {
+  it.each([
+    ["the agent answered", [message("u1", "user"), message("a1", "assistant")], "a1"],
+    [
+      "its last message of several",
+      [message("u1", "user"), message("a1", "assistant"), message("a2", "assistant")],
+      "a2",
+    ],
+    ["no answer yet", [message("u1", "user")], null],
+    [
+      "the person already replied",
+      [message("u1", "user"), message("a1", "assistant"), message("u2", "user")],
+      null,
+    ],
+    ["an empty thread", [], null],
+  ])("%s", (_name, entries, expected) => {
+    expect(writtenPlanAwaitingAnswer(entries)?.id ?? null).toBe(expected);
   });
 });

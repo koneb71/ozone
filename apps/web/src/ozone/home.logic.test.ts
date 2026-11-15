@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { appNameFromPrompt } from "./home.logic";
+import { appNameFromPrompt, buildKickoff, PLAN_FIRST_REQUEST } from "./home.logic";
 
 describe("appNameFromPrompt", () => {
   it.each([
@@ -18,5 +18,39 @@ describe("appNameFromPrompt", () => {
     ["build", "Build"],
   ])("names %j %j", (prompt, name) => {
     expect(appNameFromPrompt(prompt)).toBe(name);
+  });
+});
+
+describe("buildKickoff", () => {
+  const provider = { displayName: "Agent", supportsBuildTools: true, hasPlanMode: true };
+  const kickoff = (reviewPlans: boolean, change: Partial<typeof provider> = {}) =>
+    buildKickoff({ prompt: "a habit tracker", reviewPlans, provider: { ...provider, ...change } });
+
+  it.each([
+    ["plan first off", kickoff(false), "a habit tracker", "default"],
+    [
+      "plan first, with build tools",
+      kickoff(true),
+      `a habit tracker\n\n${PLAN_FIRST_REQUEST}`,
+      "default",
+    ],
+    [
+      "plan first, no build tools",
+      kickoff(true, { supportsBuildTools: false }),
+      "a habit tracker",
+      "plan",
+    ],
+    [
+      "no build tools and plan first off",
+      kickoff(false, { supportsBuildTools: false, hasPlanMode: false }),
+      "a habit tracker",
+      "default",
+    ],
+  ])("%s", (_name, result, text, interactionMode) => {
+    expect(result).toEqual({ kind: "start", text, interactionMode });
+  });
+
+  it("refuses when the provider can neither file a plan nor plan on its own", () => {
+    expect(kickoff(true, { supportsBuildTools: false, hasPlanMode: false }).kind).toBe("refuse");
   });
 });

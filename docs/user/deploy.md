@@ -45,6 +45,9 @@ starts the proxy that serves domains.
 
 ## Deploy
 
+The Deploy button appears once the app has started successfully for the first time. Before
+that there is nothing to deploy.
+
 1. Open the app's page and choose **Deploy**.
 2. Choose **This computer** or **A server**, and pick the server.
 3. Optionally give a domain. Point it at the server first. Ozone serves it over HTTPS and swaps

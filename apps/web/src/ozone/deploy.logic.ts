@@ -89,6 +89,18 @@ export function isBehind(status: OzoneDeployStatus): boolean {
  * The one deploy button an app shows. `open` needs a choice first, so it leads to the Deploy
  * section; `push` sends the newest commit to where the app already runs.
  */
+/**
+ * An app can be deployed once it has come up healthy: before that there is nothing to send. One
+ * that is already in production is never hidden, whatever its record says.
+ */
+export function isDeployable(input: {
+  readonly firstStartedAt: string | null | undefined;
+  readonly running: boolean;
+  readonly status: Pick<OzoneDeployStatus, "target">;
+}): boolean {
+  return (input.firstStartedAt ?? null) !== null || input.running || input.status.target !== null;
+}
+
 export type DeployAction =
   | { readonly kind: "open"; readonly label: string; readonly primary: true }
   | { readonly kind: "busy"; readonly label: string; readonly primary: false }

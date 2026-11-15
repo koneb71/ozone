@@ -4,7 +4,12 @@ import {
   type AtomCommandResult,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import type { EnvironmentId, ModelSelection, ProjectId } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  ModelSelection,
+  ProjectId,
+  ProviderInteractionMode,
+} from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 
 import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
@@ -25,7 +30,7 @@ import { useOrchestrationCommand } from "~/state/use-orchestration-command";
 import { buildThreadRouteParams } from "~/threadRoutes";
 import { DEFAULT_INTERACTION_MODE } from "~/types";
 
-import { appNameFromPrompt } from "./home.logic";
+import { appNameFromPrompt, buildKickoff } from "./home.logic";
 import { queueHomeFiles } from "./homeFiles";
 import { ozoneEnvironment } from "./state";
 
@@ -43,7 +48,7 @@ const failureMessage = (
 /** What a new thread in this project would use, read at call time. A chosen model wins. */
 function newThreadDefaults(
   environmentId: EnvironmentId,
-  projectId: ProjectId,
+  projectId: ProjectId | null,
   chosen: ModelSelection | null,
 ) {
   const settings = appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.settings;
@@ -57,10 +62,16 @@ function newThreadDefaults(
       : settings.defaultModelSelection === null
         ? resolveProjectDefaultProviderModelSelection(providers, settings, projectId)
         : resolveDefaultProviderModelSelection(providers, settings.defaultModelSelection);
-  return modelSelection === null
-    ? null
-    : { modelSelection, runtimeMode: settings.defaultRuntimeMode };
+  if (modelSelection === null) return null;
+  return {
+    modelSelection,
+    runtimeMode: settings.defaultRuntimeMode,
+    provider: providers.find((provider) => provider.instanceId === modelSelection.instanceId),
+  };
 }
+
+const NO_MODEL_READY =
+  "No model is ready yet. Open Settings, choose Providers and sign in to Claude, then try again. Claude Code must be installed on this machine first.";
 
 /** A draft opens on the default model; the one picked on Home replaces it. */
 function chooseDraftModel(draftId: DraftId, model: ModelSelection | null) {
@@ -83,14 +94,19 @@ export function useOzoneLaunch() {
     projectId: ProjectId,
     text: string,
     model: ModelSelection | null,
+    // A build's first message can say more than the prompt its thread is named after.
+    kickoff: { readonly title: string; readonly interactionMode: ProviderInteractionMode } = {
+      title: text,
+      interactionMode: DEFAULT_INTERACTION_MODE,
+    },
   ): Promise<LaunchOutcome> => {
     const defaults = newThreadDefaults(environmentId, projectId, model);
     if (defaults === null) {
-      return "No model is ready yet. Open Settings, choose Providers and sign in to Claude, then try again. Claude Code must be installed on this machine first.";
+      return NO_MODEL_READY;
     }
     const threadId = newThreadId();
     const createdAt = new Date().toISOString();
-    const title = deriveThreadTitleSeed({ text, attachments: [] });
+    const title = deriveThreadTitleSeed({ text: kickoff.title, attachments: [] });
     const started = await startThreadTurn({
       environmentId,
       input: {
@@ -99,14 +115,14 @@ export function useOzoneLaunch() {
         modelSelection: defaults.modelSelection,
         titleSeed: title,
         runtimeMode: defaults.runtimeMode,
-        interactionMode: DEFAULT_INTERACTION_MODE,
+        interactionMode: kickoff.interactionMode,
         bootstrap: {
           createThread: {
             projectId,
             title,
             modelSelection: defaults.modelSelection,
             runtimeMode: defaults.runtimeMode,
-            interactionMode: DEFAULT_INTERACTION_MODE,
+            interactionMode: kickoff.interactionMode,
             branch: null,
             worktreePath: null,
             createdAt,
@@ -133,6 +149,19 @@ export function useOzoneLaunch() {
     },
   ): Promise<LaunchOutcome> => {
     const { files, reviewPlans, templateId, model } = options;
+    // Settled before the app exists, so a model that cannot do what was asked makes nothing.
+    const defaults = newThreadDefaults(environmentId, null, model);
+    if (defaults === null) return NO_MODEL_READY;
+    const kickoff = buildKickoff({
+      prompt,
+      reviewPlans,
+      provider: {
+        displayName: defaults.provider?.displayName ?? "This model",
+        supportsBuildTools: defaults.provider?.supportsBuildTools !== false,
+        hasPlanMode: defaults.provider?.showInteractionModeToggle !== false,
+      },
+    });
+    if (kickoff.kind === "refuse") return kickoff.message;
     const created = await createApp({
       environmentId,
       input: { name: appNameFromPrompt(prompt), templateId, settings: { reviewPlans } },
@@ -147,11 +176,23 @@ export function useOzoneLaunch() {
     );
     if (!arrived)
       return "The app was created, but it has not reached this window. Reload to see it.";
-    if (files.length === 0) return startThread(environmentId, projectId, prompt, model);
+    if (files.length === 0) {
+      return startThread(environmentId, projectId, kickoff.text, defaults.modelSelection, {
+        title: prompt,
+        interactionMode: kickoff.interactionMode,
+      });
+    }
     // The composer prepares attachments, so the request waits in it for the person to send.
-    const draft = await handleNewThread(scopeProjectRef(environmentId, projectId), { prompt });
+    const draft = await handleNewThread(scopeProjectRef(environmentId, projectId), {
+      prompt: kickoff.text,
+    });
     if (draft === null) return "The app was created. Open it from the list to start its build.";
-    chooseDraftModel(draft.draftId, model);
+    chooseDraftModel(draft.draftId, defaults.modelSelection);
+    if (kickoff.interactionMode === "plan") {
+      const drafts = useComposerDraftStore.getState();
+      drafts.setInteractionMode(draft.draftId, "plan");
+      drafts.setDraftThreadContext(draft.draftId, { interactionMode: "plan" });
+    }
     queueHomeFiles(scopeThreadRef(environmentId, draft.threadId), files, { startsBuild: true });
     return null;
   };

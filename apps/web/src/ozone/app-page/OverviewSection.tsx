@@ -126,7 +126,11 @@ export function OverviewSection(props: {
         ) : deploy.target === null ? (
           <SettingsRow
             title={deployStateLine(deploy)}
-            description="Run the production build on this computer or on a server."
+            description={
+              props.deploy.deployable
+                ? "Run the production build on this computer or on a server."
+                : "Start the app once, then you can deploy it."
+            }
             control={<DeployButton deploy={props.deploy} />}
           />
         ) : (

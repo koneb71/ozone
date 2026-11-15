@@ -32,6 +32,8 @@ export class AppRegistry extends Context.Service<
     readonly resolve: (projectId: ProjectId) => Effect.Effect<ResolvedApp, OzoneAppError>;
     readonly register: (app: OzoneApp) => Effect.Effect<void, OzoneAppError>;
     readonly unregister: (projectId: ProjectId) => Effect.Effect<void, OzoneAppError>;
+    /** Records the first healthy start. Later calls change nothing. */
+    readonly markStarted: (projectId: ProjectId, at: string) => Effect.Effect<void, OzoneAppError>;
     /** Changes how the app's builds run, and returns the app as it is afterwards. */
     readonly configure: (
       projectId: ProjectId,
@@ -56,6 +58,7 @@ const CREATE_APPS_TABLE = `CREATE TABLE IF NOT EXISTS ozone_apps (
 // Added after the first apps existed. SQLite has no "add column if missing", so a second run fails
 // and is ignored.
 const ADD_SETTINGS_COLUMN = `ALTER TABLE ozone_apps ADD COLUMN settings_json TEXT NOT NULL DEFAULT '{}'`;
+const ADD_FIRST_STARTED_COLUMN = `ALTER TABLE ozone_apps ADD COLUMN first_started_at TEXT`;
 
 const SettingsJson = Schema.fromJsonString(OzoneAppSettings);
 const encodeSettings = Schema.encodeEffect(SettingsJson);
@@ -78,6 +81,7 @@ export const make = Effect.gen(function* () {
 
   yield* sql.unsafe(CREATE_APPS_TABLE).pipe(Effect.orDie);
   yield* sql.unsafe(ADD_SETTINGS_COLUMN).pipe(Effect.ignore);
+  yield* sql.unsafe(ADD_FIRST_STARTED_COLUMN).pipe(Effect.ignore);
 
   const columns = sql`
     project_id AS "projectId",
@@ -86,7 +90,8 @@ export const make = Effect.gen(function* () {
     template_id AS "templateId",
     port AS "port",
     created_at AS "createdAt",
-    settings_json AS "settings"
+    settings_json AS "settings",
+    first_started_at AS "firstStartedAt"
   `;
   const selectApps = SqlSchema.findAll({
     Request: Schema.Void,
@@ -142,6 +147,12 @@ export const make = Effect.gen(function* () {
         Effect.mapError(storageFailed("save the app's settings")),
       );
       return { ...app.value, settings };
+    }),
+    markStarted: Effect.fn("AppRegistry.markStarted")(function* (projectId, at) {
+      yield* sql`
+        UPDATE ozone_apps SET first_started_at = ${at}
+        WHERE project_id = ${projectId} AND first_started_at IS NULL
+      `.pipe(Effect.mapError(storageFailed("record that the app started")));
     }),
     unregister: Effect.fn("AppRegistry.unregister")(function* (projectId) {
       yield* sql`DELETE FROM ozone_apps WHERE project_id = ${projectId}`.pipe(

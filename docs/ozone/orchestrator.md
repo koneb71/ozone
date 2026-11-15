@@ -76,9 +76,10 @@ report says so. Its brief and the parser of its verdicts are in
 [`verification.ts`](../../apps/server/src/ozone/builds/verification.ts).
 
 **A plan can wait for the person.** With the app's "Show me the plan" setting, a first plan runs
-nothing until the person starts it from the build card, which wakes the lead, or the lead passes
-`approved` after the person said so in the chat. A revision of a plan that has started is not
-reviewed again: it adds to what the person already approved.
+nothing until the person starts it from the build card, which wakes the lead. The lead has no way
+to start it: an agent told to build something reads that as permission, so a go-ahead it could
+pass along would be worth nothing. A revision of a plan that has started is not reviewed again:
+it adds to what the person already approved.
 
 **Workers can run on another model.** The lead keeps the model of its thread. Each app can name a
 model for its workers and tester, which is passed to `delegate_task` as its target.

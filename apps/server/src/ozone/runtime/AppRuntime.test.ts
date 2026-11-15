@@ -97,9 +97,11 @@ const makeHarness = (options: { readonly hostCa?: boolean; readonly docker?: "mi
         }),
       }),
     );
+    // Every time the runtime recorded the app's first healthy start.
+    const firstStarts = yield* Ref.make<ReadonlyArray<string>>([]);
     const registry = Layer.mock(AppRegistry.AppRegistry)({
       resolve: () =>
-        Effect.succeed({
+        Effect.map(Ref.get(firstStarts), (recorded) => ({
           app: {
             projectId,
             slug: "habits-a1b2c3",
@@ -108,10 +110,12 @@ const makeHarness = (options: { readonly hostCa?: boolean; readonly docker?: "mi
             port: 41_000,
             createdAt: "2026-01-01T00:00:00.000Z",
             settings: DEFAULT_OZONE_APP_SETTINGS,
+            firstStartedAt: recorded[0] ?? null,
           },
           workspaceRoot,
           manifest,
-        }),
+        })),
+      markStarted: (_projectId, at) => Ref.update(firstStarts, (recorded) => [...recorded, at]),
     });
     const snapshots = yield* Queue.unbounded<string>();
     const snapshotFails = yield* Ref.make(false);
@@ -167,6 +171,7 @@ const makeHarness = (options: { readonly hostCa?: boolean; readonly docker?: "mi
       runtime,
       containers,
       started,
+      firstStarts,
       statuses,
       watch,
       composeCalls,
@@ -282,6 +287,9 @@ describe("AppRuntime", () => {
       const running = yield* Queue.take(harness.statuses);
       assert.strictEqual(running.phase, "running");
       assert.strictEqual(running.url, "http://localhost:41000");
+      // Recorded when it first comes up, and not again on a later look.
+      yield* harness.runtime.status(projectId);
+      assert.lengthOf(yield* Ref.get(harness.firstStarts), 1);
       assert.deepStrictEqual(running.services, [
         service("app", "running", "healthy"),
         service("db", "running", "healthy"),

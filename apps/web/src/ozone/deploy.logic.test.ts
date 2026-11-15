@@ -5,6 +5,7 @@ import type { OzoneDeployStatus, OzoneSavedServer } from "@t3tools/contracts";
 import {
   channelFromDraft,
   deployActionOf,
+  isDeployable,
   sameTarget,
   remoteNeedOf,
   serverFromDraft,
@@ -185,5 +186,18 @@ describe("deployActionOf", () => {
     expect(sameTarget(here, { ...here })).toBe(true);
     expect(sameTarget(here, { ...here, host: "deploy@example.com" })).toBe(false);
     expect(sameTarget(here, { ...here, domain: "notes.example.com" })).toBe(false);
+  });
+});
+
+describe("isDeployable", () => {
+  const target = { kind: "local" } as unknown as OzoneDeployStatus["target"];
+  it.each([
+    ["never started, never deployed", null, false, null, false],
+    ["no record of a start yet", undefined, false, null, false],
+    ["running right now", null, true, null, true],
+    ["started once, stopped since", "2026-01-01T00:00:00.000Z", false, null, true],
+    ["already in production, start never recorded", null, false, target, true],
+  ])("%s", (_name, firstStartedAt, running, deployed, expected) => {
+    expect(isDeployable({ firstStartedAt, running, status: { target: deployed } })).toBe(expected);
   });
 });

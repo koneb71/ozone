@@ -621,6 +621,8 @@ export function openCode2CommandsToServerProviderSlashCommands(
 // OpenCode has no reviewer; Auto asks like Supervised.
 const OPENCODE_2_PRESENTATION = {
   ...OPENCODE_PRESENTATION,
+  // Matches `supportsMcpTools: false` in the v2 adapter.
+  supportsBuildTools: false,
   supportedRuntimeModes: ["approval-required", "auto-accept-edits", "auto", "full-access"],
 } as const;
 

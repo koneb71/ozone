@@ -66,7 +66,7 @@ export const NEXT = {
   plan: "There is no plan yet. Call ozone_build_plan with the spec, the acceptance criteria and the tasks.",
   planned: "The plan is saved. Call ozone_build_advance to start the first task.",
   review:
-    "The plan is saved, and nothing is built until the user approves it. Tell the user in a few sentences what you plan to build, and that they start it from the plan shown above the message box. Then end your turn; you are woken when they approve. If they ask for changes, call ozone_build_plan again. If they tell you in the chat to go ahead, call ozone_build_advance with `approved: true`.",
+    "The plan is saved, and nothing is built until the user approves it. Tell the user in a few sentences what you plan to build, and that they start it from the plan shown above the message box. Then end your turn; you are woken when they approve. If they ask for changes, call ozone_build_plan again. You cannot start it for them: if they tell you in the chat to go ahead, ask them to press Start on the plan above the message box.",
   advance: "Call ozone_build_advance.",
   complete: (url: string, verification: OzoneBuildVerification) =>
     [

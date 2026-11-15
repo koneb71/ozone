@@ -93,7 +93,7 @@ it.effect("AppRegistry records apps and resolves each one's folder and manifest"
       ["moved-away", "bare", "broken", "habits"],
     );
     assert.deepStrictEqual(yield* registry.resolve(habits.projectId), {
-      app: habits,
+      app: { ...habits, firstStartedAt: null },
       workspaceRoot: path.join(root, "habits"),
       manifest,
     });
@@ -108,6 +108,14 @@ it.effect("AppRegistry records apps and resolves each one's folder and manifest"
     // Registered once, but upstream no longer has the project.
     assert.strictEqual(yield* reasonFor("moved-away"), "not_an_app");
     assert.strictEqual(yield* reasonFor("never-registered"), "not_an_app");
+
+    // The first healthy start is recorded once and kept.
+    yield* registry.markStarted(habits.projectId, "2026-03-01T00:00:00.000Z");
+    yield* registry.markStarted(habits.projectId, "2026-04-01T00:00:00.000Z");
+    assert.strictEqual(
+      (yield* registry.resolve(habits.projectId)).app.firstStartedAt,
+      "2026-03-01T00:00:00.000Z",
+    );
 
     // The port is the app's for life: a second app cannot be given it.
     const duplicate = yield* Effect.flip(

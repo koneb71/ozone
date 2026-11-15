@@ -29,7 +29,8 @@ Ozone creates the project in a git repository of its own, starts its containers 
 thread where the build runs. The preview opens beside the thread when the app is up.
 
 To see the plan before any work starts, turn on **Plan first**. The build then waits until you
-start it, and you can ask for changes to the plan first. The same switch sits above the message
+start it, and you can ask for changes to the plan first. Only **Start** on the plan begins the
+build: the agent cannot start it for you, so telling it to go ahead in the chat is not enough. The same switch sits above the message
 box in an app's thread, and as **Show me the plan first** on the app's Build page.
 
 ## What a build does

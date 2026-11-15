@@ -82,6 +82,13 @@ export function DeploySection(props: {
         <SettingsSection title="Production">
           <LoadingRow label="Loading the deploy" />
         </SettingsSection>
+      ) : !props.deploy.deployable ? (
+        <SettingsSection title="Production">
+          <SettingsRow
+            title="Nothing to deploy yet"
+            description="Start the app once, then you can deploy it."
+          />
+        </SettingsSection>
       ) : (
         // The form starts from where the app was last deployed, once that is known.
         <DeployForm {...props} status={status} servers={saved.data?.servers ?? []} />

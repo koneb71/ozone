@@ -332,6 +332,9 @@ export const make = Effect.gen(function* () {
       services,
       operation: (yield* Ref.get(operations)).get(projectId),
     });
+    if (derived.phase === "running" && (resolved.app.firstStartedAt ?? null) === null) {
+      yield* registry.markStarted(projectId, updatedAt).pipe(Effect.ignore);
+    }
     return {
       projectId,
       phase: derived.phase,

@@ -132,6 +132,8 @@ export const OzoneApp = Schema.Struct({
   settings: OzoneAppSettings.pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(DEFAULT_OZONE_APP_SETTINGS)),
   ),
+  /** When the app first came up healthy. Until then there is nothing to deploy. */
+  firstStartedAt: Schema.optionalKey(Schema.NullOr(IsoDateTime)),
 });
 export type OzoneApp = typeof OzoneApp.Type;
 

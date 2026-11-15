@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import { useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
 
-import { deployActionOf } from "../deploy.logic";
+import { deployActionOf, isDeployable } from "../deploy.logic";
 import { ozoneEnvironment } from "../state";
 import { useOzoneCommand } from "../ui/useOzoneCommand";
 import { useOpenAppPage } from "./navigation";
@@ -20,6 +20,11 @@ export function useAppDeploy(app: OzoneApp | null, environmentId: EnvironmentId)
       ? null
       : ozoneEnvironment.deployStatus({ environmentId, input: { projectId: app.projectId } }),
   );
+  const phase = useEnvironmentQuery(
+    app === null
+      ? null
+      : ozoneEnvironment.runtimeStatus({ environmentId, input: { projectId: app.projectId } }),
+  ).data?.phase;
   const redeploy = useAtomCommand(ozoneEnvironment.redeploy, { reportFailure: false });
   const { working, run: runOne } = useOzoneCommand();
   const openPage = useOpenAppPage();
@@ -43,7 +48,12 @@ export function useAppDeploy(app: OzoneApp | null, environmentId: EnvironmentId)
     refresh();
     return result;
   };
-  const action = status === null ? null : deployActionOf(status);
+  const deployable =
+    app !== null &&
+    status !== null &&
+    isDeployable({ firstStartedAt: app.firstStartedAt, running: phase === "running", status });
+  // No button until there is something to deploy.
+  const action = status === null || !deployable ? null : deployActionOf(status);
   const act = async () => {
     if (app === null || action === null || action.kind === "busy") return;
     if (action.kind === "open") {
@@ -55,7 +65,7 @@ export function useAppDeploy(app: OzoneApp | null, environmentId: EnvironmentId)
     );
   };
 
-  return { status, action, working, busy, run, act };
+  return { status, action, deployable, working, busy, run, act };
 }
 
 export type AppDeploy = ReturnType<typeof useAppDeploy>;

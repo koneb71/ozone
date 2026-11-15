@@ -169,16 +169,6 @@ export type OzoneBuildRuling = typeof OzoneBuildRuling.Type;
 /** The id that names the verification instead of a task when the lead rules on it. */
 export const OZONE_VERIFICATION_ID = "verification";
 
-export const OzoneBuildAdvanceInput = Schema.Struct({
-  approved: Schema.optionalKey(
-    Schema.Boolean.annotate({
-      description:
-        "Only for a plan that waits for approval: true when the user has just told you, in their own words, to build it as it is.",
-    }),
-  ),
-});
-export type OzoneBuildAdvanceInput = typeof OzoneBuildAdvanceInput.Type;
-
 export const OzoneBuildResolveInput = Schema.Struct({
   taskId: TaskId.annotate({
     description: `A blocked task's id, or \`${OZONE_VERIFICATION_ID}\` to rule on what the tester found.`,
