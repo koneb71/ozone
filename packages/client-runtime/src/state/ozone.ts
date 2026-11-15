@@ -310,27 +310,23 @@ export function buildHeadline(snapshot: OzoneBuildSnapshot | null): BuildHeadlin
   return { tone: "info", title: `Building · ${progress}`, detail: undefined, busy: false };
 }
 
-export interface RuntimePhaseLabel {
-  readonly label: string;
-  readonly tone: "success" | "info" | "warning" | "error" | "outline";
-}
-
-export function runtimePhaseLabel(phase: OzoneRuntimePhase | undefined): RuntimePhaseLabel {
+/** The app's runtime state in a word or two, as Home and the app's page show it. */
+export function runtimePhaseLabel(phase: OzoneRuntimePhase | undefined): string {
   switch (phase) {
     case "running":
-      return { label: "Running", tone: "success" };
+      return "Running";
     case "starting":
-      return { label: "Starting", tone: "info" };
+      return "Starting";
     case "unhealthy":
-      return { label: "Unhealthy", tone: "warning" };
+      return "Unhealthy";
     case "failed":
-      return { label: "Failed", tone: "error" };
+      return "Failed";
     case "unavailable":
-      return { label: "Docker needed", tone: "warning" };
+      return "Docker needed";
     case "stopped":
-      return { label: "Stopped", tone: "outline" };
+      return "Stopped";
     case undefined:
-      return { label: "Checking", tone: "outline" };
+      return "Checking";
   }
 }
 

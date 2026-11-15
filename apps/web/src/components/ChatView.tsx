@@ -3038,11 +3038,7 @@ export default function ChatView(props: ChatViewProps) {
         planFirstMessage({
           prompt: text,
           reviewPlans: true,
-          provider: {
-            displayName: activeProviderStatus?.displayName ?? "This model",
-            supportsBuildTools: activeProviderStatus?.supportsBuildTools !== false,
-            hasPlanMode: activeProviderStatus?.showInteractionModeToggle !== false,
-          },
+          hasPlanMode: activeProviderStatus?.showInteractionModeToggle !== false,
         })
     : undefined;
   const { onSend } = useComposerSend({

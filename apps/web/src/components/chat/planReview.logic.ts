@@ -35,9 +35,8 @@ export function planAwaitingAnswer(entries: ReadonlyArray<TimelineEntry>): Await
 }
 
 /**
- * A plan written as an ordinary message. An agent in plan mode that has no plan card to file,
- * such as one without Ozone's build tools, leaves its plan this way: its last message since the
- * person's.
+ * A plan written as an ordinary message. A provider whose plan mode files no plan card, such as
+ * OpenCode, leaves its plan this way: its last message since the person's.
  */
 export function writtenPlanAwaitingAnswer(
   entries: ReadonlyArray<TimelineEntry>,

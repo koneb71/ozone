@@ -18,7 +18,7 @@ export function LoadingRow(props: { readonly label: string }) {
   );
 }
 
-function ErrorRow(props: { readonly message: string; readonly control?: ReactNode }) {
+function ErrorRow(props: { readonly message: string }) {
   return (
     <SettingsRow
       title={
@@ -28,19 +28,12 @@ function ErrorRow(props: { readonly message: string; readonly control?: ReactNod
         </span>
       }
       description={props.message}
-      control={props.control}
     />
   );
 }
 
-export function EmptyRow(props: {
-  readonly title: string;
-  readonly description?: string;
-  readonly control?: ReactNode;
-}) {
-  return (
-    <SettingsRow title={props.title} description={props.description} control={props.control} />
-  );
+export function EmptyRow(props: { readonly title: string; readonly description?: string }) {
+  return <SettingsRow title={props.title} description={props.description} />;
 }
 
 /** Loading, failure and empty, in that order, before the rows themselves. */

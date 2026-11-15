@@ -26,34 +26,21 @@ const PLAN_FIRST_SUFFIX = `\n\n${PLAN_FIRST_REQUEST}`;
 /**
  * How a message to an app's lead goes out when the user asked to see the plan first: a build's
  * first message, and every request after it. A provider with a plan mode runs the turn in it, so
- * the lead cannot change anything while it plans. One without, but with Ozone's build tools, is
- * asked to file a plan that waits on the build card. One with neither cannot honour the request.
+ * the lead cannot change anything while it plans. One without is asked to file a plan with
+ * Ozone's build tools, where it waits on the build card.
  */
 export function planFirstMessage(input: {
   readonly prompt: string;
   readonly reviewPlans: boolean;
-  readonly provider: {
-    readonly displayName: string;
-    readonly supportsBuildTools: boolean;
-    readonly hasPlanMode: boolean;
-  };
-}):
-  | { readonly kind: "start"; readonly text: string; readonly interactionMode: "default" | "plan" }
-  | { readonly kind: "refuse"; readonly message: string } {
-  const { prompt, provider } = input;
-  if (!input.reviewPlans) return { kind: "start", text: prompt, interactionMode: "default" };
-  if (provider.hasPlanMode) return { kind: "start", text: prompt, interactionMode: "plan" };
-  if (provider.supportsBuildTools) {
-    return {
-      kind: "start",
-      // A draft Home prepared already carries it.
-      text: prompt.endsWith(PLAN_FIRST_SUFFIX) ? prompt : `${prompt}${PLAN_FIRST_SUFFIX}`,
-      interactionMode: "default",
-    };
-  }
+  readonly hasPlanMode: boolean;
+}): { readonly text: string; readonly interactionMode: "default" | "plan" } {
+  const { prompt } = input;
+  if (!input.reviewPlans) return { text: prompt, interactionMode: "default" };
+  if (input.hasPlanMode) return { text: prompt, interactionMode: "plan" };
   return {
-    kind: "refuse",
-    message: `${provider.displayName} cannot show a plan before it builds. Turn Plan first off, or pick another model.`,
+    // A draft Home prepared already carries it.
+    text: prompt.endsWith(PLAN_FIRST_SUFFIX) ? prompt : `${prompt}${PLAN_FIRST_SUFFIX}`,
+    interactionMode: "default",
   };
 }
 

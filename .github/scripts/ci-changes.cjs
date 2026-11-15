@@ -173,22 +173,4 @@ function decide(files, packages, full) {
   };
 }
 
-function main() {
-  const args = process.argv.slice(2);
-  const pathsIndex = args.indexOf("--paths");
-  const files =
-    pathsIndex === -1
-      ? null
-      : fs
-          .readFileSync(args[pathsIndex + 1], "utf8")
-          .split("\n")
-          .filter(Boolean);
-  const { affected, outputs } = decide(files, readWorkspace(), args.includes("--full"));
-
-  console.error(`Affected packages: ${affected.join(", ") || "none"}`);
-  for (const [key, value] of Object.entries(outputs)) console.log(`${key}=${value}`);
-}
-
 module.exports = { readWorkspace, decide };
-
-if (require.main === module) main();

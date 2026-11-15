@@ -3,15 +3,13 @@
   // Exported types are part of our contracts even before they have consumers.
   "rules": { "types": "off", "nsTypes": "off" },
   // These executables are supplied by the OS or installed separately from npm.
-  "ignoreBinaries": ["file", "mkfifo", "pkill", "pkg-config", "plutil", "sips"],
+  "ignoreBinaries": ["file", "pkg-config"],
   "workspaces": {
     ".": {
       // Keep vendored reference repositories outside the root project.
       "project": ["*.{js,mjs,cjs,ts,mts,cts}", ".github/**/*.cjs"],
       // check-changed.ts imports the mapping of changes to checks from here.
       "entry": [".github/scripts/ci-changes.cjs"],
-      "vite": { "entry": [".github/**/*.test.cjs"] },
-      "vitest": { "entry": [".github/**/*.test.cjs"] },
       "github-actions": {
         "config": [".github/workflows/*.{yml,yaml}", ".github/**/action.{yml,yaml}"],
       },
@@ -24,8 +22,6 @@
       // ozone-release.yml runs the desktop launch check through xvfb-run, which knip
       // does not trace.
       "entry": [
-        // These fixture scripts are injected into a browser page by path.
-        "fixtures/*/*.js",
         "knip-schemas.ts",
         "linux-after-pack.ts",
         // e2e loads its config and the scenarios by path, and starts the app script.

@@ -149,19 +149,14 @@ export function useOzoneLaunch() {
     },
   ): Promise<LaunchOutcome> => {
     const { files, reviewPlans, templateId, model } = options;
-    // Settled before the app exists, so a model that cannot do what was asked makes nothing.
+    // Settled before the app exists, so a build with no model ready makes nothing.
     const defaults = newThreadDefaults(environmentId, null, model);
     if (defaults === null) return NO_MODEL_READY;
     const kickoff = planFirstMessage({
       prompt,
       reviewPlans,
-      provider: {
-        displayName: defaults.provider?.displayName ?? "This model",
-        supportsBuildTools: defaults.provider?.supportsBuildTools !== false,
-        hasPlanMode: defaults.provider?.showInteractionModeToggle !== false,
-      },
+      hasPlanMode: defaults.provider?.showInteractionModeToggle !== false,
     });
-    if (kickoff.kind === "refuse") return kickoff.message;
     const created = await createApp({
       environmentId,
       input: { name: appNameFromPrompt(prompt), templateId, settings: { reviewPlans } },

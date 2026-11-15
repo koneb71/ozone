@@ -27,41 +27,21 @@ describe("appNameFromPrompt", () => {
 });
 
 describe("planFirstMessage", () => {
-  const provider = { displayName: "Agent", supportsBuildTools: true, hasPlanMode: true };
-  const kickoff = (reviewPlans: boolean, change: Partial<typeof provider> = {}) =>
-    planFirstMessage({
-      prompt: "a habit tracker",
-      reviewPlans,
-      provider: { ...provider, ...change },
-    });
+  const kickoff = (reviewPlans: boolean, hasPlanMode = true) =>
+    planFirstMessage({ prompt: "a habit tracker", reviewPlans, hasPlanMode });
 
   it.each([
     ["plan first off", kickoff(false), "a habit tracker", "default"],
     ["plan first, with a plan mode", kickoff(true), "a habit tracker", "plan"],
     [
-      "plan first, a plan mode and no build tools",
-      kickoff(true, { supportsBuildTools: false }),
-      "a habit tracker",
-      "plan",
-    ],
-    [
-      "plan first, build tools and no plan mode",
-      kickoff(true, { hasPlanMode: false }),
+      "plan first, no plan mode",
+      kickoff(true, false),
       `a habit tracker\n\n${PLAN_FIRST_REQUEST}`,
       "default",
     ],
-    [
-      "neither, and plan first off",
-      kickoff(false, { supportsBuildTools: false, hasPlanMode: false }),
-      "a habit tracker",
-      "default",
-    ],
+    ["no plan mode, and plan first off", kickoff(false, false), "a habit tracker", "default"],
   ])("%s", (_name, result, text, interactionMode) => {
-    expect(result).toEqual({ kind: "start", text, interactionMode });
-  });
-
-  it("refuses when the provider can neither file a plan nor plan on its own", () => {
-    expect(kickoff(true, { supportsBuildTools: false, hasPlanMode: false }).kind).toBe("refuse");
+    expect(result).toEqual({ text, interactionMode });
   });
 });
 

@@ -27,7 +27,6 @@ import * as DesktopAppActivation from "./DesktopAppActivation.ts";
 import * as DesktopAppIdentity from "./DesktopAppIdentity.ts";
 import * as DesktopSingleInstance from "./DesktopSingleInstance.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
-import * as DesktopLegacyLocalStorage from "./DesktopLegacyLocalStorage.ts";
 import * as DesktopLifecycle from "./DesktopLifecycle.ts";
 import * as DesktopLinuxUrlHandler from "./DesktopLinuxUrlHandler.ts";
 import * as DesktopPreReadyPlatform from "./DesktopPreReadyPlatform.ts";
@@ -158,9 +157,6 @@ it.effect.each([false, true])(
           Effect.provideService(ElectronProtocol.ElectronProtocol, {
             registerDesktopProtocol: () => Effect.void,
           } as unknown as ElectronProtocol.ElectronProtocol["Service"]),
-          Effect.provideService(DesktopLegacyLocalStorage.DesktopLegacyLocalStorage, {
-            load: () => Effect.void,
-          } as unknown as DesktopLegacyLocalStorage.DesktopLegacyLocalStorage["Service"]),
           Effect.provideService(DesktopSnapShot.DesktopSnapShot, {
             initialize: Effect.void,
           } as DesktopSnapShot.DesktopSnapShot["Service"]),

@@ -245,16 +245,13 @@ interface ComposerSendInput {
   readonly sideChatDisabledReason: string | null;
   /**
    * Set in an app's lead thread while the app has Plan first on: how a message goes out so the
-   * lead plans before it changes anything, or why this provider cannot.
+   * lead plans before it changes anything.
    */
   readonly planFirst?:
-    | ((text: string) =>
-        | {
-            readonly kind: "start";
-            readonly text: string;
-            readonly interactionMode: ProviderInteractionMode;
-          }
-        | { readonly kind: "refuse"; readonly message: string })
+    | ((text: string) => {
+        readonly text: string;
+        readonly interactionMode: ProviderInteractionMode;
+      })
     | undefined;
   readonly handleNewThreadInActiveProject: () => void;
   readonly persistThreadSettingsForNextTurn: (input: {
@@ -818,10 +815,6 @@ export function useComposerSend(input: ComposerSendInput) {
       planFirst === undefined || messageTextForSend === "" || messageTextForSend.startsWith("/")
         ? null
         : planFirst(messageTextForSend);
-    if (planned?.kind === "refuse") {
-      setThreadError(threadIdForSend, planned.message);
-      return;
-    }
     const interactionMode = planned?.interactionMode === "plan" ? "plan" : draftInteractionMode;
     // Records bind attachments by the id each side knows: the local id for the optimistic
     // row, the upload id (or local id on the data-URL path) on the wire; the server

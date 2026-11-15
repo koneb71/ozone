@@ -65,7 +65,7 @@ function AppRow(props: {
   const phase = useEnvironmentQuery(
     ozoneEnvironment.runtimeStatus({ environmentId, input: { projectId: app.projectId } }),
   ).data?.phase;
-  const label = runtimePhaseLabel(phase).label;
+  const label = runtimePhaseLabel(phase);
 
   return (
     <SettingsRow

@@ -32,7 +32,7 @@ export function useAppRuntime(app: OzoneApp, environmentId: EnvironmentId) {
   return {
     status,
     phase,
-    label: runtimePhaseLabel(phase).label,
+    label: runtimePhaseLabel(phase),
     dot: phaseTone(phase),
     working,
     act,

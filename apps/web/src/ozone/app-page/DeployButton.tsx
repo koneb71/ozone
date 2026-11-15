@@ -7,13 +7,13 @@ import { Spinner } from "~/components/ui/spinner";
 import { useAppDeploy, type AppDeploy } from "./useAppDeploy";
 
 /** The app's one deploy button: Deploy, Push update, Deploy again, as production stands. */
-export function DeployButton(props: { readonly deploy: AppDeploy; readonly size?: "xs" | "sm" }) {
+export function DeployButton(props: { readonly deploy: AppDeploy }) {
   const { action, busy, working } = props.deploy;
   if (action === null) return null;
   return (
     <Button
       disabled={busy}
-      size={props.size ?? "xs"}
+      size="xs"
       variant={action.primary ? "default" : "outline"}
       onClick={() => void props.deploy.act()}
     >
