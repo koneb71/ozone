@@ -153,6 +153,8 @@ export const OzoneBuild = Schema.Struct({
   approval: Schema.Literals(["not_needed", "pending", "approved"]).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed("not_needed" as const)),
   ),
+  /** The person approved a plan the lead showed in plan mode; the next plan filed here may run. */
+  planGranted: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
   /** Set while the final check runs, so a restart knows to run it again. */
   finalStartedAt: Schema.NullOr(IsoDateTime).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
@@ -205,7 +207,11 @@ export const OzoneBuildCheckResult = Schema.Struct({
 export type OzoneBuildCheckResult = typeof OzoneBuildCheckResult.Type;
 
 export const OzoneBuildSubscribeInput = Schema.Struct({ threadId: ThreadId });
-export const OzoneBuildApproveInput = Schema.Struct({ threadId: ThreadId });
+export const OzoneBuildApproveInput = Schema.Struct({
+  threadId: ThreadId,
+  /** True when the plan was shown in the thread, in plan mode, and has not been filed yet. */
+  shownInThread: Schema.optionalKey(Schema.Boolean),
+});
 export type OzoneBuildApproveInput = typeof OzoneBuildApproveInput.Type;
 export const OzoneBuildSnapshot = Schema.Struct({
   build: Schema.NullOr(OzoneBuild),

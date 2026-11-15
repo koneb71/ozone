@@ -28,12 +28,18 @@ Threads** and set **Apps are saved in**. Apps you already have stay where they a
 Ozone creates the project in a git repository of its own, starts its containers and opens a
 thread where the build runs. The preview opens beside the thread when the app is up.
 
-To see the plan before any work starts, turn on **Plan first**. The build then waits until you
-start it, and you can ask for changes to the plan first. Only **Start** on the plan begins the
-build: the agent cannot start it for you, so telling it to go ahead in the chat is not enough.
+To see the plan before any work starts, turn on **Plan first**. The agent then cannot change
+anything while it plans: it reads the app, asks you its questions, and shows its plan above the
+message box with **Approve**, **Revise** and **Decline**. Approve starts the build. Revise keeps
+it planning while you say what to change. Decline drops the plan.
+
 Plan first applies to every request while it is on, including a small change to an app that is
-already built. Turn it off when you want quick edits made straight away. The same switch sits above the message
-box in an app's thread, and as **Show me the plan first** on the app's Build page.
+already built. Turn it off when you want quick edits made straight away. The same switch sits
+above the message box in an app's thread, and as **Show me the plan first** on the app's Build
+page.
+
+A few providers have no plan mode of their own. With those the agent files its plan as a task
+list instead, and **Start building** on that card begins the work.
 
 ## What a build does
 

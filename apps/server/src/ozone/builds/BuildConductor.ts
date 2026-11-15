@@ -37,6 +37,8 @@ export interface BuildLead {
   readonly scope: McpInvocationScope;
   readonly threadId: ThreadId;
   readonly app: ResolvedApp;
+  /** The lead's turn runs in plan mode: the person reviews its plan in the thread, not here. */
+  readonly planning: boolean;
   /** How long one `advance` may keep the lead's tool call open. */
   readonly patience: Duration.Duration;
 }
@@ -425,6 +427,7 @@ const make = Effect.gen(function* () {
         lead.threadId,
         Effect.gen(function* () {
           const { reviewPlans } = lead.app.app.settings;
+          if (lead.planning) return report(lead, yield* load(lead), NEXT.planning);
           const build = yield* decide(lead, (current, at) =>
             BuildModel.applyPlan(current, input, at, { reviewPlans }),
           );

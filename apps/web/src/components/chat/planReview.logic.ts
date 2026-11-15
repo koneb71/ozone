@@ -36,3 +36,16 @@ export function writtenPlanAwaitingAnswer(
   }
   return null;
 }
+
+/**
+ * The plan the notice above the message box answers. A plan card always counts. A written plan
+ * counts only where the caller says so: an app's lead in plan mode with no question pending.
+ */
+export function planToAnswer(
+  entries: ReadonlyArray<TimelineEntry>,
+  writtenPlanCounts: boolean,
+): { readonly id: string; readonly planMarkdown: string } | null {
+  return (
+    planAwaitingAnswer(entries) ?? (writtenPlanCounts ? writtenPlanAwaitingAnswer(entries) : null)
+  );
+}

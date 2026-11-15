@@ -44,12 +44,12 @@ const callingApp = Effect.gen(function* () {
     .pipe(Effect.mapError(() => invalid("The calling thread could not be read.")));
   if (shell === null) return yield* invalid("The calling thread no longer exists.");
   const app = yield* registry.resolve(shell.projectId).pipe(Effect.mapError(fromApp));
-  return { scope: caller, app };
+  return { scope: caller, app, planning: shell.interactionMode === "plan" };
 });
 
 /** The lead of a build: a thread of an Ozone app that is not itself one of the build's workers. */
 const lead = Effect.gen(function* () {
-  const { scope, app } = yield* callingApp;
+  const { scope, app, planning } = yield* callingApp;
   if (scope.thread.subagent === true) {
     return yield* invalid(
       "A worker does not run the build. Finish your own task; the lead thread does the rest.",
@@ -63,6 +63,7 @@ const lead = Effect.gen(function* () {
     scope,
     threadId: scope.thread.threadId,
     app,
+    planning,
     patience: driver !== undefined && PATIENT_DRIVERS.has(driver) ? LONG_PATIENCE : SHORT_PATIENCE,
   } satisfies BuildConductor.BuildLead;
 });

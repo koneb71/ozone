@@ -36,6 +36,7 @@ export const emptyBuild = (threadId: ThreadId, projectId: ProjectId, now: string
   completedAt: null,
   updatedAt: now,
   approval: "not_needed",
+  planGranted: false,
   finalStartedAt: null,
   verification: NO_OZONE_VERIFICATION,
 });
@@ -180,10 +181,14 @@ export const applyPlan = (
     const existing = current.get(plan.id);
     return existing === undefined || existing.brief !== plan.brief || existing.title !== plan.title;
   });
+  // A plan the person approved in plan mode carries that approval here, for this one filing.
+  const usesGrant = options?.reviewPlans === true && addsWork && build.planGranted;
   const approval =
     options?.reviewPlans === true
       ? addsWork
-        ? "pending"
+        ? usesGrant
+          ? "approved"
+          : "pending"
         : build.approval
       : build.approval === "pending"
         ? "not_needed"
@@ -195,6 +200,7 @@ export const applyPlan = (
     tasks,
     ...unfinished(build),
     approval,
+    planGranted: usesGrant ? false : build.planGranted,
     updatedAt: now,
   });
 };
@@ -211,6 +217,13 @@ const unfinished = (build: OzoneBuild) => ({
 /** The person has seen the plan and wants it built. */
 export const approved = (build: OzoneBuild, now: string): OzoneBuild =>
   build.approval === "pending" ? { ...build, approval: "approved", updatedAt: now } : build;
+
+/**
+ * The person approved a plan the lead showed them in plan mode, before any of it was filed here.
+ * The next plan filed with new work may run without waiting again.
+ */
+export const granted = (build: OzoneBuild, now: string): OzoneBuild =>
+  build.planGranted ? build : { ...build, planGranted: true, updatedAt: now };
 
 /**
  * The tasks to hand out now. Any number of read-only tasks may run together, or exactly one that

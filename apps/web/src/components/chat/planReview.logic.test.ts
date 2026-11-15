@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import type { TimelineEntry } from "../../session-logic";
-import { planAwaitingAnswer, writtenPlanAwaitingAnswer } from "./planReview.logic";
+import { planAwaitingAnswer, planToAnswer, writtenPlanAwaitingAnswer } from "./planReview.logic";
 
 const message = (id: string, role: "user" | "assistant") =>
   ({
@@ -56,5 +56,17 @@ describe("writtenPlanAwaitingAnswer", () => {
     ["an empty thread", [], null],
   ])("%s", (_name, entries, expected) => {
     expect(writtenPlanAwaitingAnswer(entries)?.id ?? null).toBe(expected);
+  });
+});
+
+describe("planToAnswer", () => {
+  const thread = [message("u1", "user"), plan("p1"), message("a1", "assistant")];
+  const written = [message("u1", "user"), message("a1", "assistant")];
+  it.each([
+    ["a card wins over a later message", thread, true, "p1"],
+    ["a written plan where it counts", written, true, "a1"],
+    ["a written plan elsewhere, or while a question waits", written, false, null],
+  ])("%s", (_name, entries, writtenPlanCounts, expected) => {
+    expect(planToAnswer(entries, writtenPlanCounts)?.id ?? null).toBe(expected);
   });
 });

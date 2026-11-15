@@ -37,20 +37,21 @@ describe("planFirstMessage", () => {
 
   it.each([
     ["plan first off", kickoff(false), "a habit tracker", "default"],
+    ["plan first, with a plan mode", kickoff(true), "a habit tracker", "plan"],
     [
-      "plan first, with build tools",
-      kickoff(true),
-      `a habit tracker\n\n${PLAN_FIRST_REQUEST}`,
-      "default",
-    ],
-    [
-      "plan first, no build tools",
+      "plan first, a plan mode and no build tools",
       kickoff(true, { supportsBuildTools: false }),
       "a habit tracker",
       "plan",
     ],
     [
-      "no build tools and plan first off",
+      "plan first, build tools and no plan mode",
+      kickoff(true, { hasPlanMode: false }),
+      `a habit tracker\n\n${PLAN_FIRST_REQUEST}`,
+      "default",
+    ],
+    [
+      "neither, and plan first off",
       kickoff(false, { supportsBuildTools: false, hasPlanMode: false }),
       "a habit tracker",
       "default",

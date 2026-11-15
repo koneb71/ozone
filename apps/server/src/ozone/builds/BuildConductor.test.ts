@@ -26,6 +26,7 @@ import * as TestClock from "effect/testing/TestClock";
 
 import type { McpInvocationScope } from "../../mcp/McpInvocationContext.ts";
 import * as SqlitePersistence from "../../persistence/Sqlite.ts";
+import * as ThreadManagementService from "../../orchestration-v2/ThreadManagementService.ts";
 import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as AppData from "../data/AppData.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
@@ -270,12 +271,15 @@ const makeHarness = (settings: Partial<OzoneAppSettings> = {}) =>
       manifest,
     };
     const registry = Layer.mock(AppRegistry.AppRegistry)({ resolve: () => Effect.succeed(app) });
+    const threads = Layer.mock(ThreadManagementService.ThreadManagementService)({
+      getThreadShell: () => Effect.succeed({ projectId } as never),
+    });
 
     // Built into the test's own scope: the in-memory database must outlive this setup.
     const context = yield* Layer.build(
       BuildConductor.layer.pipe(
         Layer.provideMerge(Layer.mergeAll(BuildChecks.layer, BuildReview.layer)),
-        Layer.provideMerge(Layer.mergeAll(BuildStore.layer, wake, registry)),
+        Layer.provideMerge(Layer.mergeAll(BuildStore.layer, wake, registry, threads)),
         Layer.provideMerge(
           Layer.mergeAll(workers, gates, repo, data, runtime, SqlitePersistence.layerMemory),
         ),
@@ -290,7 +294,13 @@ const makeHarness = (settings: Partial<OzoneAppSettings> = {}) =>
     const restart = Layer.build(
       BuildChecks.layer.pipe(Layer.provide(Layer.succeedContext(context))),
     );
-    const lead: BuildConductor.BuildLead = { scope, threadId, patience: Duration.minutes(10), app };
+    const lead: BuildConductor.BuildLead = {
+      scope,
+      threadId,
+      patience: Duration.minutes(10),
+      app,
+      planning: false,
+    };
     const set = (change: Partial<Script>) =>
       Ref.update(script, (current) => ({ ...current, ...change }));
     const steps = Ref.get(journal);
@@ -861,6 +871,25 @@ describe("BuildConductor", () => {
       yield* review.approve(threadId);
       assert.strictEqual(yield* Queue.take(wakes), "Plan approved");
       assert.strictEqual((yield* conductor.advance(lead)).status, "complete");
+
+      // A plan the person approved in the thread, in plan mode, is not asked about again here.
+      const shown = yield* makeHarness({ reviewPlans: true });
+      const refused = yield* shown.conductor.plan(
+        { ...shown.lead, planning: true },
+        plan(task("page")),
+      );
+      assert.strictEqual(refused.next, NEXT.planning);
+      assert.deepStrictEqual(refused.tasks, []);
+      yield* shown.review.grant(threadId);
+      assert.strictEqual(
+        (yield* shown.conductor.plan(shown.lead, plan(task("page")))).status,
+        "building",
+      );
+      // One approval covers one plan: what the lead adds next waits.
+      assert.strictEqual(
+        (yield* shown.conductor.plan(shown.lead, plan(task("page"), task("extra")))).status,
+        "review",
+      );
 
       // A later request adds a task to the finished build. It waits like the first plan did.
       const before = yield* steps;

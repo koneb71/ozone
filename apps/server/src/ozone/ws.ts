@@ -91,7 +91,12 @@ const make = Effect.gen(function* () {
     [OZONE_WS_METHODS.buildSubscribe]: (input: { readonly threadId: ThreadId }) =>
       Stream.map(builds.changes(input.threadId), buildSnapshot),
     [OZONE_WS_METHODS.buildApprove]: (input: OzoneBuildApproveInput) =>
-      Effect.map(review.approve(input.threadId), buildSnapshot),
+      Effect.map(
+        input.shownInThread === true
+          ? review.grant(input.threadId)
+          : review.approve(input.threadId),
+        buildSnapshot,
+      ),
     [OZONE_WS_METHODS.historyList]: (input: { readonly projectId: ProjectId }) =>
       history.list(input.projectId),
     [OZONE_WS_METHODS.historyRestore]: (input: OzoneHistoryRestoreInput) => history.restore(input),

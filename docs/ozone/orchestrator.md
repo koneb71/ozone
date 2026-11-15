@@ -75,13 +75,16 @@ says why. A tester that could try nothing, for want of a browser, does not hold 
 report says so. Its brief and the parser of its verdicts are in
 [`verification.ts`](../../apps/server/src/ozone/builds/verification.ts).
 
-**A plan can wait for the person.** With the app's "Show me the plan" setting, a first plan runs
-nothing until the person starts it from the build card, which wakes the lead. The lead has no way
-to start it: an agent told to build something reads that as permission, so a go-ahead it could
-pass along would be worth nothing. A revision that adds or rewrites a task waits again, however far the build has come, so a later
-request is planned and started like the first; saving the same plan changes nothing. The setting
-means the person sees every task before it runs, and a lead that could add work to an approved
-plan would make it mean only the first.
+**A plan can wait for the person.** With the app's "Show me the plan" setting, every message the
+person sends the lead runs in the provider's plan mode, where the lead cannot write. Asking the
+lead to plan was not enough: one that describes a plan and then edits files passes any check on
+Ozone's own tools. The person answers the plan in the thread; approving it there records a grant
+on the build, which the plan the lead files next uses up, so the build card does not ask again.
+A lead in plan mode cannot file a plan at all, which keeps one place of review.
+
+Without a grant, new work waits on the build card for the person to start it, and the lead has no
+way to start it: an agent told to build something reads that as permission. That path serves
+providers with no plan mode, and anything a lead adds on its own after the approved plan.
 
 **Workers can run on another model.** The lead keeps the model of its thread. Each app can name a
 model for its workers and tester, which is passed to `delegate_task` as its target.

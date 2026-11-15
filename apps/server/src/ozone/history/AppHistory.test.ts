@@ -193,6 +193,7 @@ const makeHarness = Effect.gen(function* () {
     completedAt: AT,
     updatedAt: AT,
     approval: "not_needed",
+    planGranted: false,
     finalStartedAt: null,
     verification: NO_OZONE_VERIFICATION,
   };

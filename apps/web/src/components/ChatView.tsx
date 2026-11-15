@@ -374,9 +374,10 @@ import {
   useSystemComposerBanners,
 } from "./chat/useSystemComposerBanners";
 import { planFirstMessage } from "../ozone/home.logic";
+import { ozoneEnvironment } from "../ozone/state";
 import { useAppPlansFirst, useOzoneComposer } from "../ozone/useOzoneComposer";
 import { planReviewBannerItem } from "./chat/ComposerPlanReview";
-import { planAwaitingAnswer, writtenPlanAwaitingAnswer } from "./chat/planReview.logic";
+import { planToAnswer } from "./chat/planReview.logic";
 import { useDraftHeroLayoutTransition } from "./chat/useDraftHeroLayoutTransition";
 import { useLocalDispatchState } from "./chat/useLocalDispatchState";
 import { draftFanoutSelectionsAtom, draftSendState } from "./chat/chatViewSend";
@@ -1319,6 +1320,7 @@ export default function ChatView(props: ChatViewProps) {
   // An app's thread plans through its build, with its own "Plan first" switch.
   const isOzoneAppThread = ozoneComposerBannerItems.some((item) => item.id === "ozone-app");
   const appPlansFirst = useAppPlansFirst(activeThreadRef, activeProject?.id ?? null);
+  const grantBuildPlan = useAtomCommand(ozoneEnvironment.approveBuild, { reportFailure: false });
   const setComposerInteractionMode = useComposerDraftStore((store) => store.setInteractionMode);
   // The plan the person already answered here, so its notice does not come back.
   const [answeredPlanId, setAnsweredPlanId] = useState<string | null>(null);
@@ -2582,18 +2584,18 @@ export default function ChatView(props: ChatViewProps) {
           },
         })
       : null;
-  // An app's lead plans through Ozone's build card, except one started in plan mode because its
-  // provider has no build tools: that plan is a message, answered here.
+  // An app's lead with Plan first on plans in plan mode. Most providers file a plan card; one
+  // that only writes its plan leaves it as a message, unless it is waiting on a question.
   const appLeadPlansHere = isOzoneAppThread && activeThread?.interactionMode === "plan";
-  const awaitedPlan = appLeadPlansHere
-    ? writtenPlanAwaitingAnswer(timelineEntries)
-    : planAwaitingAnswer(timelineEntries);
+  const awaitedPlan = planToAnswer(
+    timelineEntries,
+    appLeadPlansHere && activePendingUserInput === null,
+  );
   const showPlanReview =
     awaitedPlan !== null &&
     awaitedPlan.id !== answeredPlanId &&
     isServerThread &&
     canOperateThread &&
-    (!isOzoneAppThread || appLeadPlansHere) &&
     !isWorking;
   const leavePlanMode = async () => {
     setComposerInteractionMode(composerDraftTarget, null);
@@ -2609,6 +2611,14 @@ export default function ChatView(props: ChatViewProps) {
   const approvePlan = async () => {
     if (awaitedPlan === null || planAnswerPending) return;
     setPlanAnswerPending(true);
+    // The approval covers the plan the lead files with Ozone next, so the build card does not
+    // ask a second time.
+    if (isOzoneAppThread && activeThread) {
+      await grantBuildPlan({
+        environmentId: activeThread.environmentId,
+        input: { threadId: activeThread.id, shownInThread: true },
+      });
+    }
     await leavePlanMode();
     const sent = await settlePromise(() => sendAppMessage("Approved. Implement the plan."));
     setPlanAnswerPending(false);

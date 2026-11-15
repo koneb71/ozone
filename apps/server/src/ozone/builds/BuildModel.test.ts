@@ -318,6 +318,21 @@ describe("BuildModel", () => {
     assert.strictEqual(revise(true, task("schema"), task("page")), "pending");
     // With the setting off, a revision runs without asking, as it always did.
     assert.strictEqual(revise(false, task("schema"), task("page")), "approved");
+
+    // An approval given in the thread, in plan mode, lets the next filed plan run, once.
+    const granted = BuildModel.granted(running, LATER);
+    const filed = BuildModel.applyPlan(granted, plan(task("schema"), task("page")), LATER, {
+      reviewPlans: true,
+    });
+    if (!filed.ok) return assert.fail(filed.problems.join(" "));
+    assert.deepStrictEqual([filed.build.approval, filed.build.planGranted], ["approved", false]);
+    const later = BuildModel.applyPlan(
+      filed.build,
+      plan(task("schema"), task("page"), task("more")),
+      LATER,
+      { reviewPlans: true },
+    );
+    assert.isTrue(later.ok && later.build.approval === "pending");
   });
 
   it("has a tester try the app after the final check, and the lead rule on what it finds", () => {

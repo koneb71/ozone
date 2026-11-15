@@ -48,6 +48,7 @@ const build = (thread: string, completedAt: string | null): OzoneBuild => ({
   completedAt,
   updatedAt: "2026-01-01T00:00:00.000Z",
   approval: "not_needed",
+  planGranted: false,
   finalStartedAt: null,
   verification: NO_OZONE_VERIFICATION,
 });
