@@ -243,6 +243,19 @@ interface ComposerSendInput {
   readonly onSideChat?: ((prompt: string) => Promise<boolean>) | undefined;
   /** Refuses `/side` with this reason and keeps the draft. */
   readonly sideChatDisabledReason: string | null;
+  /**
+   * Set in an app's lead thread while the app has Plan first on: how a message goes out so the
+   * lead plans before it changes anything, or why this provider cannot.
+   */
+  readonly planFirst?:
+    | ((text: string) =>
+        | {
+            readonly kind: "start";
+            readonly text: string;
+            readonly interactionMode: ProviderInteractionMode;
+          }
+        | { readonly kind: "refuse"; readonly message: string })
+    | undefined;
   readonly handleNewThreadInActiveProject: () => void;
   readonly persistThreadSettingsForNextTurn: (input: {
     threadId: ThreadId;
@@ -330,6 +343,7 @@ export function useComposerSend(input: ComposerSendInput) {
     acknowledgeActiveThreadWoke,
     onSideChat,
     sideChatDisabledReason,
+    planFirst,
     handleNewThreadInActiveProject,
     persistThreadSettingsForNextTurn,
     linkCheckoutPullRequest,
@@ -750,7 +764,7 @@ export function useComposerSend(input: ComposerSendInput) {
     }
     const threadIdForSend = activeThread.id;
     // Read before the draft's content is cleared; the Plan switch in the composer sets it.
-    const interactionMode =
+    const draftInteractionMode =
       useComposerDraftStore.getState().getComposerDraft(composerDraftTarget)?.interactionMode ??
       DEFAULT_INTERACTION_MODE;
     const sendSnapshot = snapshotComposerSend({
@@ -799,6 +813,16 @@ export function useComposerSend(input: ComposerSendInput) {
       setThreadError(threadIdForSend, "Select a base branch before sending in New worktree mode.");
       return;
     }
+    // A command is for Ozone or the provider, not a request for work.
+    const planned =
+      planFirst === undefined || messageTextForSend === "" || messageTextForSend.startsWith("/")
+        ? null
+        : planFirst(messageTextForSend);
+    if (planned?.kind === "refuse") {
+      setThreadError(threadIdForSend, planned.message);
+      return;
+    }
+    const interactionMode = planned?.interactionMode === "plan" ? "plan" : draftInteractionMode;
     // Records bind attachments by the id each side knows: the local id for the optimistic
     // row, the upload id (or local id on the data-URL path) on the wire; the server
     // rebinds them to the persisted id.
@@ -825,7 +849,7 @@ export function useComposerSend(input: ComposerSendInput) {
       model: ctxSelectedModel,
       models: ctxSelectedProviderModels,
       effort: ctxSelectedPromptEffort,
-      text: messageTextForSend || ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
+      text: (planned?.text ?? messageTextForSend) || ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
     });
     if (composerRef.current?.validateProviderInput(outgoingMessageText) === false) {
       return;

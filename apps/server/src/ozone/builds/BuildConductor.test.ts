@@ -861,6 +861,16 @@ describe("BuildConductor", () => {
       yield* review.approve(threadId);
       assert.strictEqual(yield* Queue.take(wakes), "Plan approved");
       assert.strictEqual((yield* conductor.advance(lead)).status, "complete");
+
+      // A later request adds a task to the finished build. It waits like the first plan did.
+      const before = yield* steps;
+      const revised = yield* conductor.plan(lead, plan(task("page"), task("footer")));
+      assert.strictEqual(revised.status, "review");
+      assert.strictEqual((yield* conductor.advance(lead)).status, "review");
+      assert.deepStrictEqual(yield* steps, before);
+      yield* review.approve(threadId);
+      assert.strictEqual(yield* Queue.take(wakes), "Plan approved");
+      assert.strictEqual((yield* conductor.advance(lead)).status, "complete");
     }).pipe(Effect.provide(layerTest)),
   );
 });

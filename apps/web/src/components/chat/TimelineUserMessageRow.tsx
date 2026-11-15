@@ -33,6 +33,7 @@ import {
   CalendarClockIcon,
   ChevronDownIcon,
   DownloadIcon,
+  ListChecksIcon,
   EyeIcon,
   type LucideIcon,
   MessagesSquareIcon,
@@ -40,6 +41,7 @@ import {
   PencilIcon,
   LinkIcon,
 } from "lucide-react";
+import { splitPlanFirstRequest } from "../../ozone/home.logic";
 import { Button, InlineButton } from "../ui/button";
 import { FreshSessionRow, ModelSwitchRow } from "./V2LifecycleRow";
 import { useAssetUrlRefresh, useAssetUrls, useAssetUrlState } from "../../assets/assetUrls";
@@ -474,7 +476,9 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
   const canOpenSender =
     senderRef !== null &&
     (row.message.linkedSender === undefined || linkedSenderEnvironment !== null);
-  const resolvedContext = resolveUserMessageContext({ ...row.message, text: userMessage.text });
+  // Ozone adds the request to every message while an app has Plan first on; a tag says it once.
+  const sent = splitPlanFirstRequest(userMessage.text);
+  const resolvedContext = resolveUserMessageContext({ ...row.message, text: sent.text });
   const previewImages = userImages.filter((image) => image.name.startsWith("preview-annotation-"));
   const revertTurnCount = row.revertTurnCount;
   const attachmentReferences = collectComposerContextReferences(resolvedContext.text).flatMap(
@@ -1031,6 +1035,12 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
                   markdownCwd={ctx.markdownCwd}
                   collapsible={!folded}
                 />
+                {sent.planFirst ? (
+                  <span className="mt-1 flex items-center gap-1 text-muted-foreground text-xs">
+                    <ListChecksIcon className="size-3" />
+                    Plan first
+                  </span>
+                ) : null}
               </div>
             )}
           </div>

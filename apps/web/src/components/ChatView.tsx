@@ -373,7 +373,8 @@ import {
   type EnvironmentUnavailableState,
   useSystemComposerBanners,
 } from "./chat/useSystemComposerBanners";
-import { useOzoneComposer } from "../ozone/useOzoneComposer";
+import { planFirstMessage } from "../ozone/home.logic";
+import { useAppPlansFirst, useOzoneComposer } from "../ozone/useOzoneComposer";
 import { planReviewBannerItem } from "./chat/ComposerPlanReview";
 import { planAwaitingAnswer, writtenPlanAwaitingAnswer } from "./chat/planReview.logic";
 import { useDraftHeroLayoutTransition } from "./chat/useDraftHeroLayoutTransition";
@@ -1317,6 +1318,7 @@ export default function ChatView(props: ChatViewProps) {
   const ozoneComposerBannerItems = useOzoneComposer(activeThreadRef, activeProject?.id ?? null);
   // An app's thread plans through its build, with its own "Plan first" switch.
   const isOzoneAppThread = ozoneComposerBannerItems.some((item) => item.id === "ozone-app");
+  const appPlansFirst = useAppPlansFirst(activeThreadRef, activeProject?.id ?? null);
   const setComposerInteractionMode = useComposerDraftStore((store) => store.setInteractionMode);
   // The plan the person already answered here, so its notice does not come back.
   const [answeredPlanId, setAnsweredPlanId] = useState<string | null>(null);
@@ -2971,6 +2973,18 @@ export default function ChatView(props: ChatViewProps) {
     scrollToEnd,
     setThreadError,
   });
+  const planFirstForSend = appPlansFirst
+    ? (text: string) =>
+        planFirstMessage({
+          prompt: text,
+          reviewPlans: true,
+          provider: {
+            displayName: activeProviderStatus?.displayName ?? "This model",
+            supportsBuildTools: activeProviderStatus?.supportsBuildTools !== false,
+            hasPlanMode: activeProviderStatus?.showInteractionModeToggle !== false,
+          },
+        })
+    : undefined;
   const { onSend } = useComposerSend({
     environmentId,
     routeThreadKey,
@@ -3042,6 +3056,7 @@ export default function ChatView(props: ChatViewProps) {
     acknowledgeActiveThreadWoke,
     onSideChat: sideChat.available ? sendSideChatStable : undefined,
     sideChatDisabledReason,
+    planFirst: planFirstForSend,
     handleNewThreadInActiveProject,
     persistThreadSettingsForNextTurn,
     linkCheckoutPullRequest,

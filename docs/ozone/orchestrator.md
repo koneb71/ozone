@@ -78,8 +78,10 @@ report says so. Its brief and the parser of its verdicts are in
 **A plan can wait for the person.** With the app's "Show me the plan" setting, a first plan runs
 nothing until the person starts it from the build card, which wakes the lead. The lead has no way
 to start it: an agent told to build something reads that as permission, so a go-ahead it could
-pass along would be worth nothing. A revision of a plan that has started is not reviewed again:
-it adds to what the person already approved.
+pass along would be worth nothing. A revision that adds or rewrites a task waits again, however far the build has come, so a later
+request is planned and started like the first; saving the same plan changes nothing. The setting
+means the person sees every task before it runs, and a lead that could add work to an approved
+plan would make it mean only the first.
 
 **Workers can run on another model.** The lead keeps the model of its thread. Each app can name a
 model for its workers and tester, which is passed to `delegate_task` as its target.

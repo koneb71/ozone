@@ -21,12 +21,15 @@ export function appNameFromPrompt(prompt: string): string {
 export const PLAN_FIRST_REQUEST =
   "Show me the plan first. Call ozone_build_plan and wait for me to start it; do not write code yet.";
 
+const PLAN_FIRST_SUFFIX = `\n\n${PLAN_FIRST_REQUEST}`;
+
 /**
- * How a build's first message goes out when the user asked to see the plan first. A lead with
+ * How a message to an app's lead goes out when the user asked to see the plan first: a build's
+ * first message, and every request after it. A lead with
  * Ozone's build tools files a plan that waits for the user. One without them cannot, so it starts
  * in the provider's own plan mode, and a provider with neither cannot honour the request.
  */
-export function buildKickoff(input: {
+export function planFirstMessage(input: {
   readonly prompt: string;
   readonly reviewPlans: boolean;
   readonly provider: {
@@ -42,7 +45,8 @@ export function buildKickoff(input: {
   if (provider.supportsBuildTools) {
     return {
       kind: "start",
-      text: `${prompt}\n\n${PLAN_FIRST_REQUEST}`,
+      // A draft Home prepared already carries it.
+      text: prompt.endsWith(PLAN_FIRST_SUFFIX) ? prompt : `${prompt}${PLAN_FIRST_SUFFIX}`,
       interactionMode: "default",
     };
   }
@@ -51,4 +55,14 @@ export function buildKickoff(input: {
     kind: "refuse",
     message: `${provider.displayName} cannot show a plan before it builds. Turn Plan first off, or pick another model.`,
   };
+}
+
+/** A sent message without the Plan first request Ozone added, which the thread shows as a tag. */
+export function splitPlanFirstRequest(text: string): {
+  readonly text: string;
+  readonly planFirst: boolean;
+} {
+  return text.endsWith(PLAN_FIRST_SUFFIX)
+    ? { text: text.slice(0, -PLAN_FIRST_SUFFIX.length), planFirst: true }
+    : { text, planFirst: false };
 }

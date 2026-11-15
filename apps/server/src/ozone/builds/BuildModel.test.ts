@@ -294,7 +294,7 @@ describe("BuildModel", () => {
     );
   });
 
-  it("holds a reviewed plan until the person approves it, and only the first plan", () => {
+  it("holds a reviewed plan until the person approves it, and again when work is added", () => {
     const empty = BuildModel.emptyBuild(ThreadId.make("lead"), ProjectId.make("project"), NOW);
     const decision = BuildModel.applyPlan(empty, plan(task("schema")), NOW, { reviewPlans: true });
     if (!decision.ok) return assert.fail(decision.problems.join(" "));
@@ -307,14 +307,17 @@ describe("BuildModel", () => {
       BuildModel.nextTasks(approved).map((ready) => ready.id),
       ["schema"],
     );
-    // Revising a plan that has started adds to what the person already approved.
-    const revised = BuildModel.applyPlan(
-      BuildModel.started(approved, "schema", worker("schema"), LATER),
-      plan(task("schema"), task("page")),
-      LATER,
-      { reviewPlans: true },
-    );
-    assert.isTrue(revised.ok && revised.build.approval === "approved");
+    const running = BuildModel.started(approved, "schema", worker("schema"), LATER);
+    const revise = (reviewPlans: boolean, ...tasks: ReadonlyArray<ReturnType<typeof task>>) => {
+      const revised = BuildModel.applyPlan(running, plan(...tasks), LATER, { reviewPlans });
+      return revised.ok ? revised.build.approval : revised.problems.join(" ");
+    };
+    // Saving the same plan again changes nothing the person approved.
+    assert.strictEqual(revise(true, task("schema")), "approved");
+    // New work was never seen, so it waits, however far the build has come.
+    assert.strictEqual(revise(true, task("schema"), task("page")), "pending");
+    // With the setting off, a revision runs without asking, as it always did.
+    assert.strictEqual(revise(false, task("schema"), task("page")), "approved");
   });
 
   it("has a tester try the app after the final check, and the lead rule on what it finds", () => {

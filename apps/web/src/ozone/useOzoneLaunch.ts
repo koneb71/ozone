@@ -30,7 +30,7 @@ import { useOrchestrationCommand } from "~/state/use-orchestration-command";
 import { buildThreadRouteParams } from "~/threadRoutes";
 import { DEFAULT_INTERACTION_MODE } from "~/types";
 
-import { appNameFromPrompt, buildKickoff } from "./home.logic";
+import { appNameFromPrompt, planFirstMessage } from "./home.logic";
 import { queueHomeFiles } from "./homeFiles";
 import { ozoneEnvironment } from "./state";
 
@@ -152,7 +152,7 @@ export function useOzoneLaunch() {
     // Settled before the app exists, so a model that cannot do what was asked makes nothing.
     const defaults = newThreadDefaults(environmentId, null, model);
     if (defaults === null) return NO_MODEL_READY;
-    const kickoff = buildKickoff({
+    const kickoff = planFirstMessage({
       prompt,
       reviewPlans,
       provider: {

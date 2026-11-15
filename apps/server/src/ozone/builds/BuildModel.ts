@@ -174,20 +174,27 @@ export const applyPlan = (
         }
       : { ...fresh, dispatches: existing.dispatches };
   });
-  // A plan is reviewed before any of it runs. Once work has started, a revision adds to a plan
-  // the person already saw.
-  const workStarted = build.tasks.some((task) => task.dispatches > 0);
+  // With plans reviewed, the person sees every task before it runs: a revision that adds or
+  // rewrites one waits again, however far the build has come. Saving the same plan changes nothing.
+  const addsWork = input.tasks.some((plan) => {
+    const existing = current.get(plan.id);
+    return existing === undefined || existing.brief !== plan.brief || existing.title !== plan.title;
+  });
+  const approval =
+    options?.reviewPlans === true
+      ? addsWork
+        ? "pending"
+        : build.approval
+      : build.approval === "pending"
+        ? "not_needed"
+        : build.approval;
   return accepted({
     ...build,
     spec: input.spec,
     acceptance: input.acceptance,
     tasks,
     ...unfinished(build),
-    approval: workStarted
-      ? build.approval
-      : options?.reviewPlans === true
-        ? "pending"
-        : "not_needed",
+    approval,
     updatedAt: now,
   });
 };
