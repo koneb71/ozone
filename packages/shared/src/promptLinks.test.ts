@@ -142,4 +142,16 @@ describe("link round trips", () => {
     expect(promptLinkAppPath(`${APP}/new?prompt=hi`)).toBeNull();
     expect(promptLinkAppPath("t3code://app/index.html")).toBeNull();
   });
+
+  it("maps links in browsers without URL.canParse, such as Safari before 17", () => {
+    const canParse = URL.canParse;
+    Reflect.deleteProperty(URL, "canParse");
+    try {
+      expect(promptLinkAppPath(`${APP}/new?prompt=hi`, APP)).toBe("/new?prompt=hi");
+      expect(promptLinkAppPath(`${APP}/`, APP)).toBeNull();
+      expect(promptLinkAppPath("not a url", APP)).toBeNull();
+    } finally {
+      URL.canParse = canParse;
+    }
+  });
 });

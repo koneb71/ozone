@@ -15,8 +15,11 @@ function appThreadPrefix(appOrigin: string | undefined): string | null {
 
 const patterns = new Map<string | null, RegExp>();
 
-// Code comes first in the alternation so a link written inside a code span or fence is skipped.
-// A labeled link's destination may be angle-bracketed, as CommonMark allows: [label](<href>).
+const THREAD_HREF = String.raw`t3-thread:\/\/v[12]\/`;
+// A label stops at any bracket, so a run of unclosed brackets is scanned once, not once per bracket.
+const LABEL = String.raw`[^[\]\n]*`;
+// Earlier alternatives claim text so later ones cannot match inside it: an escaped character opens
+// nothing, code is literal, and a link to anywhere else keeps a thread URL in its label or href.
 function threadLinkOutsideCode(appPrefix: string | null): RegExp {
   let pattern = patterns.get(appPrefix);
   if (pattern === undefined) {
@@ -25,9 +28,20 @@ function threadLinkOutsideCode(appPrefix: string | null): RegExp {
         ? null
         : `${appPrefix.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}${APP_SEGMENT}/${APP_SEGMENT}`;
     const or = appLink === null ? "" : `|${appLink}`;
-    const bare = appLink === null ? "" : String.raw`|(?<bare>${appLink})(?![\w%/?#-])`;
     pattern = new RegExp(
-      String.raw`(?<fence>(\`{3,}|~{3,})[\s\S]*?(?:\2|$))|(?<span>(\`+)[^\n]*?\4)|\[(?<label>[^\]\n]*)\]\((?:<(?<angleHref>t3-thread:\/\/v[12]\/[^\s<>]+${or})>|(?<href>t3-thread:\/\/v[12]\/[^\s>)]+${or}))\)|<(?<autolink>t3-thread:\/\/v[12]\/[^\s<>]+${or})>${bare}`,
+      [
+        String.raw`\\[!-/:-@[-\`{-~]`,
+        String.raw`(?<fence>(\`{3,}|~{3,})[\s\S]*?(?:\2|$))`,
+        String.raw`(?<span>(\`+)[^\n]*?\4)`,
+        // A labeled link's destination may be angle-bracketed, as CommonMark allows: [label](<href>).
+        String.raw`\[(?<label>${LABEL})\]\((?:<(?<angleHref>${THREAD_HREF}[^\s<>]+${or})>|(?<href>${THREAD_HREF}[^\s>)]+${or}))\)`,
+        String.raw`\[${LABEL}\]\((?:<[^<>\n]*>|[^\s()]*(?:\([^\s()]*\)[^\s()]*)*)(?:[ \t]+(?:"[^"\n]*"|'[^'\n]*'))?\)`,
+        String.raw`<(?<autolink>${THREAD_HREF}[^\s<>]+${or})>`,
+        // After a URL character the app link is part of a longer URL, such as a redirect target.
+        ...(appLink === null
+          ? []
+          : [String.raw`(?<![A-Za-z0-9%/?#=&@+-])(?<bare>${appLink})(?![\w%/?#-])`]),
+      ].join("|"),
       "g",
     );
     patterns.set(appPrefix, pattern);

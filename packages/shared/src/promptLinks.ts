@@ -1,3 +1,5 @@
+import { parseUrl } from "./url.ts";
+
 export const PROMPT_LINK_MAX_PROMPT_LENGTH = 8_000;
 
 export interface PromptLinkRepository {
@@ -184,8 +186,8 @@ const THREAD_PATH = /^\/([^/]+)\/([^/]+)\/?$/;
 
 /** The app route a link opens. An http(s) link counts only on `appOrigin`, the app's own origin. */
 export function promptLinkAppPath(value: string, appOrigin?: string): string | null {
-  if (!URL.canParse(value)) return null;
-  const url = new URL(value);
+  const url = parseUrl(value);
+  if (!url) return null;
   if (APP_SCHEME.test(url.protocol)) {
     if (url.host === "new" && (url.pathname === "" || url.pathname === "/")) {
       return `/new${url.search}`;
@@ -193,8 +195,8 @@ export function promptLinkAppPath(value: string, appOrigin?: string): string | n
     const thread = url.host === "threads" ? THREAD_PATH.exec(url.pathname) : null;
     return thread ? `/${thread[1]}/${thread[2]}${url.search}` : null;
   }
-  if (appOrigin === undefined || !URL.canParse(appOrigin)) return null;
-  if (url.origin !== new URL(appOrigin).origin) return null;
+  if (appOrigin === undefined) return null;
+  if (url.origin !== parseUrl(appOrigin)?.origin) return null;
   if (url.pathname === "/new") return `/new${url.search}`;
   // The web app's own thread route is a link only with a prompt, so reloading a tab never asks.
   const thread = url.pathname.startsWith("/threads/")

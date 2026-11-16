@@ -48,7 +48,7 @@ const BuildGetTool = Tool.make("ozone_build_get", {
 })
   .annotate(Tool.Readonly, true)
   .annotate(Tool.Destructive, false)
-  .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromSubagents);
+  .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromSubagentsAndOutsideClients);
 
 const BuildPlanTool = Tool.make("ozone_build_plan", {
   ...shared,
@@ -59,7 +59,7 @@ const BuildPlanTool = Tool.make("ozone_build_plan", {
   dependencies: leadDependencies,
 })
   .annotate(Tool.Destructive, false)
-  .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromSubagents);
+  .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromSubagentsAndOutsideClients);
 
 const BuildAdvanceTool = Tool.make("ozone_build_advance", {
   ...shared,
@@ -70,7 +70,7 @@ const BuildAdvanceTool = Tool.make("ozone_build_advance", {
   dependencies: leadDependencies,
 })
   .annotate(Tool.Destructive, false)
-  .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromSubagents);
+  .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromSubagentsAndOutsideClients);
 
 const BuildResolveTool = Tool.make("ozone_build_resolve", {
   ...shared,
@@ -80,7 +80,7 @@ const BuildResolveTool = Tool.make("ozone_build_resolve", {
   dependencies: leadDependencies,
 })
   .annotate(Tool.Destructive, false)
-  .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromSubagents);
+  .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromSubagentsAndOutsideClients);
 
 const BuildCheckTool = Tool.make("ozone_build_check", {
   ...shared,
@@ -90,7 +90,8 @@ const BuildCheckTool = Tool.make("ozone_build_check", {
   dependencies: leadDependencies,
 })
   .annotate(Tool.Readonly, true)
-  .annotate(Tool.Destructive, false);
+  .annotate(Tool.Destructive, false)
+  .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromOutsideClients);
 
 const AppRuntimeTool = Tool.make("ozone_app_runtime", {
   ...shared,
@@ -115,7 +116,9 @@ const AppRuntimeTool = Tool.make("ozone_app_runtime", {
     AppRuntime.AppRuntime,
     AppEnv.AppEnv,
   ],
-}).annotate(Tool.Destructive, false);
+})
+  .annotate(Tool.Destructive, false)
+  .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromOutsideClients);
 
 const AppCreateTool = Tool.make("ozone_app_create", {
   ...shared,

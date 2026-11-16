@@ -19,6 +19,12 @@ const resolved = await Effect.gen(function* () {
     appDir: path.resolve(scripts, env.T3_SCENARIO_APP_DIR ?? ".."),
     home,
     startApp: path.join(scripts, "scenarios/start-app.ts"),
+    // e2e gives the app only PATH, HOME and the temp directory. A scenario that needs more names
+    // it here: exact names or prefixes ending in `*`, separated by commas.
+    inheritEnv: (env.T3_SCENARIO_INHERIT_ENV ?? "")
+      .split(",")
+      .map((name) => name.trim())
+      .filter((name) => name !== ""),
   };
 }).pipe(Effect.provide(NodeServices.layer), Effect.runPromise);
 
@@ -40,12 +46,15 @@ export default {
       engine: web({ viewport: { width: 1280, height: 800 } }),
       app: {
         url: `http://${LOOPBACK}:0`,
+        // Lets a scenario put an image on the clipboard for a real keyboard paste.
+        permissions: { "clipboard-write": "grant" },
         // Vite answers before the server does; this path is proxied to the server.
         readyUrl: `http://${LOOPBACK}:{port}/.well-known/t3/environment`,
         command: {
           executable: resolved.node,
           args: [startApp, "web", T3_HOME, LOOPBACK, "{port}"],
           cwd: APP_DIR,
+          inheritEnv: resolved.inheritEnv,
           startupTimeout: 300_000,
           log: ".e2e/app.log",
         },

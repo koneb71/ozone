@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
+import packageJson from "../../package.json" with { type: "json" };
 import { resolveHostCliCommand, resolveRootCliCommand } from "./invocation.ts";
 
 it.layer(NodeServices.layer)("root CLI commands", (it) => {
@@ -48,7 +49,7 @@ it.layer(NodeServices.layer)("root CLI commands", (it) => {
           path: yield* pathWithT3,
         }),
       ).toBe('sudo env "PATH=$PATH" ozone browser setup');
-    }).pipe(Effect.scoped),
+    }),
   );
 
   it.effect("keeps the arguments, so root runs setup on the same Ozone home", () =>
@@ -70,7 +71,7 @@ it.layer(NodeServices.layer)("root CLI commands", (it) => {
           args,
         }),
       ).toBe("sudo /opt/t3/ozone browser setup --base-dir '/srv/ozone home'");
-    }).pipe(Effect.scoped),
+    }),
   );
 
   it.effect("names this install's launcher when ozone is not on PATH", () =>
@@ -109,10 +110,41 @@ it.layer(NodeServices.layer)("root CLI commands", (it) => {
         }),
       ).toBe("sudo /opt/t3/ozone browser setup");
 
+      // A standalone executable started directly (systemd, no launcher) is still this install.
+      expect(
+        yield* rootCommand({
+          node: "/opt/t3/ozone",
+          entry: "/opt/t3/ozone",
+          executable: true,
+          path: yield* pathWithT3,
+        }),
+      ).toBe("sudo /opt/t3/ozone browser setup");
+
+      // A global npm launcher runs the downloaded executable; PATH's `ozone` is that launcher.
+      const prefix = path.join(home, "npm");
+      const npmLauncher = path.join(prefix, "lib/node_modules/t3/bin/t3.mjs");
+      yield* fs.makeDirectory(path.dirname(npmLauncher), { recursive: true });
+      yield* fs.makeDirectory(path.join(prefix, "bin"));
+      yield* fs.writeFileString(npmLauncher, "", { mode: 0o755 });
+      yield* fs.writeFileString(
+        path.join(prefix, "lib/node_modules/t3/package.json"),
+        `{"name":"t3","version":"${packageJson.version}"}`,
+      );
+      yield* fs.symlink(npmLauncher, path.join(prefix, "bin/ozone"));
+      expect(
+        yield* rootCommand({
+          node: "/home/theo/.ozone/runtime/versions/1.0.0/ozone",
+          entry: "/home/theo/.ozone/runtime/versions/1.0.0/ozone",
+          executable: true,
+          path: path.join(prefix, "bin"),
+          env: { OZONE_NPM_LAUNCHER_PATH: npmLauncher },
+        }),
+      ).toBe('sudo env "PATH=$PATH" ozone browser setup');
+
       expect(
         yield* rootCommand({ ...desktop, env: { OZONE_CLI_PATH: path.join(home, "gone") } }),
       ).toBe('sudo env "PATH=$PATH" ozone browser setup');
-    }).pipe(Effect.scoped),
+    }),
   );
 });
 
@@ -153,6 +185,6 @@ it.layer(NodeServices.layer)("host CLI commands", (it) => {
       expect((yield* hostCommand("linux", { OZONE_CLI_PATH: shim })).command).toMatch(
         / doctor --base-dir 'C:\\Users\\Jane Doe\\\.ozone'$/,
       );
-    }).pipe(Effect.scoped),
+    }),
   );
 });

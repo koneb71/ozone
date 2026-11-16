@@ -51,7 +51,7 @@ export function useAppRemote(
   const target =
     discovery.data === null
       ? null
-      : (getNewProjectPublishTargets(discovery.data).find(
+      : (getNewProjectPublishTargets(discovery.data, undefined).find(
           (candidate) => candidate.definition.kind === "github",
         ) ?? null);
   const need = remoteNeedOf({

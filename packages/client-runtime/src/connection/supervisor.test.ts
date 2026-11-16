@@ -361,6 +361,66 @@ describe("EnvironmentSupervisor", () => {
     }),
   );
 
+  it.effect("explicit retry connects while the network still reports offline", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness({
+        networkStatus: "offline",
+        prepare: () => Effect.sleep("1 second").pipe(Effect.as(PREPARED_CONNECTION)),
+      });
+      const supervisor = yield* EnvironmentSupervisor.make(REMOTE_ENTRY, {
+        initiallyDesired: true,
+      }).pipe(Effect.provide(harness.dependencies));
+
+      yield* awaitState(supervisor.state, (state) => state.phase === "offline");
+      // The loop wakes on the earlier signal and takes the retry's flag while
+      // RetryRequested is still queued, so that signal must not cancel the attempt.
+      yield* supervisor.connect;
+      yield* supervisor.retryNow;
+      yield* TestClock.adjust("1 second");
+      const settled = yield* awaitState(
+        supervisor.state,
+        (state) => state.phase === "connected" || state.phase === "offline",
+      );
+
+      expect(settled.phase).toBe("connected");
+      expect(yield* Ref.get(harness.prepareCount)).toBe(1);
+      expect(yield* Ref.get(harness.releaseCount)).toBe(0);
+    }),
+  );
+
+  it.effect.each([
+    { label: "cancels connection setup", retry: false, phase: "offline", sessions: 0 },
+    { label: "does not cancel an explicit retry", retry: true, phase: "connected", sessions: 1 },
+  ])("an offline report during setup $label", ({ retry, phase, sessions }) =>
+    Effect.gen(function* () {
+      const firstAttemptStarted = yield* Deferred.make<void>();
+      const harness = yield* makeHarness({
+        prepare: () =>
+          Deferred.succeed(firstAttemptStarted, undefined).pipe(
+            Effect.andThen(Effect.sleep("1 second")),
+            Effect.as(PREPARED_CONNECTION),
+          ),
+      });
+      const supervisor = yield* EnvironmentSupervisor.make(REMOTE_ENTRY, {
+        initiallyDesired: true,
+      }).pipe(Effect.provide(harness.dependencies));
+
+      yield* Deferred.await(firstAttemptStarted);
+      if (retry) {
+        yield* supervisor.retryNow;
+      }
+      yield* harness.setNetworkStatus("offline");
+      yield* TestClock.adjust("1 second");
+      const settled = yield* awaitState(
+        supervisor.state,
+        (state) => state.phase === "connected" || state.phase === "offline",
+      );
+
+      expect(settled.phase).toBe(phase);
+      expect(yield* Ref.get(harness.sessionCount)).toBe(sessions);
+    }),
+  );
+
   it.effect("connects to the primary environment while the device reports offline", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness({ networkStatus: "offline" });
@@ -1628,6 +1688,38 @@ describe("EnvironmentSupervisor routes", () => {
       yield* awaitState(supervisor.state, (state) => state.phase === "connected");
       expect(attempted).toEqual(["bearer:remote", "bearer:lan"]);
     }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect(
+    "retries instead of waiting on a LAN route that stayed silent after remote failed",
+    () =>
+      Effect.gen(function* () {
+        const checkingLan = yield* Deferred.make<void>();
+        const attempted: string[] = [];
+        const harness = yield* makeHarness({
+          checkRoute: (route) =>
+            route.target !== REMOTE_TARGET
+              ? Deferred.succeed(checkingLan, undefined).pipe(
+                  Effect.andThen(Effect.sleep("2500 millis")),
+                  Effect.as("silent" as const),
+                )
+              : Effect.succeed("unchecked"),
+          prepare: (_attempt, target) => {
+            attempted.push(connectionRouteId(target));
+            return target === REMOTE_TARGET
+              ? Effect.fail(transient("Remote socket closed."))
+              : Effect.never;
+          },
+        });
+        const supervisor = yield* EnvironmentSupervisor.make(LAN_THEN_REMOTE_ENTRY, {
+          initiallyDesired: true,
+        }).pipe(Effect.provide(harness.dependencies));
+
+        yield* Deferred.await(checkingLan);
+        yield* TestClock.adjust("2500 millis");
+        yield* awaitState(supervisor.state, (state) => state.phase === "backoff");
+        expect(attempted).toEqual(["bearer:remote"]);
+      }).pipe(Effect.provide(TestClock.layer())),
   );
 
   it.effect("skips a silent LAN route and connects over the remote route", () =>
