@@ -77,13 +77,6 @@ export function mapRemoteEnvironmentError(
         detail: error.message,
         hop: "server",
       });
-    case "EnvironmentConnectApprovalPendingError":
-      return new ConnectionTransientError({
-        reason: "remote-unavailable",
-        detail: "This device is waiting for approval on the host.",
-        traceId: error.traceId,
-        hop: "server",
-      });
     case "EnvironmentInternalError":
       return new ConnectionTransientError({
         reason: "remote-unavailable",

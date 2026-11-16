@@ -140,9 +140,8 @@ Upstream lands a few hundred commits a day, so merge often: the conflicts grow w
 - **Agent instructions.** Re-read `packages/provider-core/src/server/orchestrationInstructions.ts`.
   The build kickoff and worker briefs are written against that text.
 - **Migrations keep upstream's numbers**, including ones for features Ozone removed, so the
-  sequence never forks. Ozone adds no migrations of its own to that sequence.
-- **T3 Connect device approval** is still in the server's auth code, because pairing is built on
-  the same tables. Nothing can issue its credentials, and it has no commands or screens.
+  sequence never forks: 090 and 091 add T3 Connect tables and columns that nothing reads. Ozone
+  adds no migrations of its own to that sequence.
 
 ## Traps
 
