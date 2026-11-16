@@ -56,6 +56,13 @@ requires the desktop app, so a standalone server or an SSH session is not enough
 If the command cannot reach the app, start or update the desktop app and try
 again.
 
+### Drop a folder on the sidebar
+
+Drag one or more folders from Finder, Explorer, or your file manager onto the
+sidebar. Each one opens as a project on this computer, the same as `ozone app`.
+Files dropped on a thread still attach to that thread. Browsers do not share
+folder paths, so in the web app use **Add project** instead.
+
 ## Command line
 
 To run Ozone on a machine without the desktop app, such as a server, run the
@@ -102,9 +109,10 @@ Run `ozone help` or `ozone --help` for the full reference. To start in a new
 working directory, use an explicit path such as `ozone ./my-project`. A bare
 directory name is accepted only if it already exists.
 
-If `ozone` reports an already running server, connect to that server instead.
-Stop it before starting a replacement, or use a different `--base-dir` for an
-independent server.
+If `ozone` reports an already running server, run the `ozone pair` command it
+names and open the pairing URL to connect to that server. Stop it before
+starting a replacement, or use a different `--base-dir` for an independent
+server.
 
 Ozone keeps its data in `~/.ozone`.
 
@@ -153,6 +161,10 @@ Cursor and Antigravity update with Ozone. Homebrew and Chocolatey installs
 compare against the version their package manager offers, which can trail the
 npm release; update Claude installed with Chocolatey through Chocolatey.
 
+The managed runtimes for Antigravity and for Codex connected through ChatGPT
+first install the release Ozone tested. When Ozone finds a newer compatible
+release, their setup in **Settings → Providers** offers an update.
+
 Add another provider instance for a separate account or configuration. Each
 instance can have its own environment variables, such as API keys or a custom
 base URL. Mark secret values as sensitive; after saving, Ozone does not display
@@ -162,6 +174,47 @@ For provider-specific setup and accounts, see [Codex](./providers-codex.md),
 [Claude](./providers-claude.md), [OpenCode](./providers-opencode.md),
 [Antigravity](./providers-antigravity.md), [Kiro](./providers-kiro.md),
 [Pi](./providers-pi.md), [Muse Code](./providers-muse.md), and [fx](./providers-fx.md).
+
+### Provider check timeouts
+
+If a provider works in its CLI but Ozone reports a timeout while checking it,
+allow more time in the Ozone server's environment. For example, give Codex and
+Claude readiness checks 60 seconds:
+
+```bash
+OZONE_CODEX_PROBE_TIMEOUT_MS=60000 OZONE_CLAUDE_PROBE_TIMEOUT_MS=60000 ozone serve
+```
+
+For a remote environment, set these on the machine running the Ozone server.
+Keep them in your launcher or service configuration to retain them across
+updates, then restart the server. For systemd, add
+`Environment=OZONE_CODEX_PROBE_TIMEOUT_MS=60000` under `[Service]` in a service
+override, reload systemd, and restart the service. Provider instances can also
+set their own overrides in Settings → Providers.
+
+Each variable extends that provider's readiness-probe deadlines; a phase whose
+default is already longer keeps its default. Providers with several phases can
+take longer than one deadline in total. Values must be whole milliseconds no
+greater than 2147483647; unset or invalid values keep the defaults.
+
+| Provider            | Environment variable                  |
+| ------------------- | ------------------------------------- |
+| Codex               | `OZONE_CODEX_PROBE_TIMEOUT_MS`        |
+| Claude              | `OZONE_CLAUDE_PROBE_TIMEOUT_MS`       |
+| Cursor              | `OZONE_CURSOR_PROBE_TIMEOUT_MS`       |
+| Antigravity         | `OZONE_ANTIGRAVITY_PROBE_TIMEOUT_MS`  |
+| Grok                | `OZONE_GROK_PROBE_TIMEOUT_MS`         |
+| Kiro                | `OZONE_KIRO_PROBE_TIMEOUT_MS`         |
+| fx                  | `OZONE_FX_PROBE_TIMEOUT_MS`           |
+| Pi                  | `OZONE_PI_PROBE_TIMEOUT_MS`           |
+| Muse Code           | `OZONE_MUSE_PROBE_TIMEOUT_MS`         |
+| OpenCode            | `OZONE_OPENCODE_PROBE_TIMEOUT_MS`     |
+| ACP Registry agents | `OZONE_ACP_REGISTRY_PROBE_TIMEOUT_MS` |
+
+Longer deadlines also take longer to report a stalled check. These overrides
+cover readiness and discovery, including OpenCode server startup. Usage and
+config enrichment retain their own shorter limits. Turn execution, package
+installation, update checks, and shutdown limits keep their existing behavior.
 
 ## Next steps
 

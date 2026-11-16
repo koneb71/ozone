@@ -207,15 +207,15 @@ describe("scoreThreadSearch", () => {
   it("ranks a title holding the words above the app's own branch prefix and project name", () => {
     const busy = { activityAt: NOW, opens: { openedAt: NOW, score: 6, picks: [] } };
     expect(
-      rankTitles("t3 connect", [
-        thread("Diagnose Connect provisioning failures", {
+      rankTitles("t3 tunnel", [
+        thread("Diagnose tunnel provisioning failures", {
           ...busy,
-          branch: "t3/diagnose-connect",
+          branch: "t3/diagnose-tunnel",
           projectTitle: "t3code",
         }),
-        thread("T3 Connect Tunnel Lifecycle Review", { projectTitle: "t3code" }),
+        thread("T3 Tunnel Lifecycle Review", { projectTitle: "t3code" }),
       ])[0],
-    ).toBe("T3 Connect Tunnel Lifecycle Review");
+    ).toBe("T3 Tunnel Lifecycle Review");
     expect(
       rankTitles("t3code", [
         thread("Fix sidebar lag", { ...busy, projectTitle: "t3code", branch: "t3code/sidebar" }),
@@ -333,6 +333,14 @@ describe("scoreThreadSearch beyond Latin text and titles", () => {
       ranges: [{ start: 0, end: 7 }],
     });
     expect(scoreThreadSearch("trim", subject, NOW)?.explain?.()).toBeUndefined();
+    // Nor is it in the flat t3-<hex> form used when a `t3` branch blocks nested refs.
+    const flat = thread("Add search", { branch: "t3-abcd1234" });
+    expect(scoreThreadSearch("t3", flat, NOW)).toBeNull();
+    expect(scoreThreadSearch("t3 tunnel", flat, NOW)).toBeNull();
+    expect(scoreThreadSearch("abcd1234", flat, NOW)).not.toBeNull();
+    for (const query of ["t3-abcd", "t3-abcd1234 connect", "connect t3-abcd1234"]) {
+      expect(scoreThreadSearch(query, { ...flat, projectTitle: "connect" }, NOW)).not.toBeNull();
+    }
   });
 
   it("reads letters and numbers typed together, without forgiving typos in numbers", () => {

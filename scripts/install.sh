@@ -7,7 +7,7 @@
 # Environment:
 #   OZONE_VERSION           exact version to install (default: the latest release)
 #   OZONE_HOME              Ozone home directory (default: ~/.ozone)
-#   OZONE_INSTALL_BIN_DIR   where the `ozone` symlink goes (default: ~/.local/bin)
+#   OZONE_INSTALL_BIN_DIR   where the `ozone` command goes (default: ~/.local/bin)
 #   OZONE_RELEASE_BASE_URL  mirror for releases/download (default: GitHub)
 #
 # The archive is unpacked into $OZONE_HOME/runtime/versions/<version>, the
@@ -213,7 +213,7 @@ else
   fi
   expected="$(grep " \*\{0,1\}${archive}\$" "${staging}/SHA256SUMS" | cut -d' ' -f1)"
   [ -n "$expected" ] || fail "ozone ${version} has no release archive for ${platform}-${arch}"
-  download "${base_url}/v${version}/${archive}" "${staging}/${archive}"
+  download "${base_url}/v${version}/${archive}" "${staging}/${archive}" || fail "could not download ${archive}"
 
   step "Verifying the download..."
   actual="$(checksum "${staging}/${archive}")"
@@ -232,8 +232,31 @@ fi
 
 step "Setting up the ozone command..."
 mkdir -p "$bin_dir"
-# Replace only this home's own ozone links: into its versions, or the desktop app's launcher.
-# Anything that is not a symlink (a script, a copied binary) belongs to someone else.
+# Exec by absolute path: through a symlink, argv0 is the link, and the Cursor SDK looks for its
+# helpers beside it. ozone update and ozone install write the same script.
+nl='
+'
+launcher_head="#!/bin/sh${nl}exec '"
+launcher_tail="' \"\$@\"${nl}"
+# The x keeps a trailing newline in the path through command substitution.
+launcher_script() {
+  quoted="$(printf '%sx' "$1" | sed "s/'/'\\\\''/g")"
+  printf '%s%s%s' "$launcher_head" "${quoted%x}" "$launcher_tail"
+}
+# The executable an unedited launcher script at $1 runs; a user's own wrapper prints nothing.
+script_ozone() {
+  [ -f "$1" ] && [ ! -L "$1" ] && [ "$(wc -c < "$1")" -le 4096 ] || return 0
+  contents="$(cat "$1"; printf x)"
+  contents="${contents%x}"
+  case "$contents" in "$launcher_head"*"$launcher_tail") ;; *) return 0 ;; esac
+  quoted="${contents#"$launcher_head"}"
+  unquoted="$(printf '%sx' "${quoted%"$launcher_tail"}" | sed "s/'\\\\''/'/g")"
+  unquoted="${unquoted%x}"
+  [ -n "$unquoted" ] && [ "$(launcher_script "$unquoted"; printf x)" = "${contents}x" ] && printf '%s' "$unquoted"
+  return 0
+}
+# Replace only this home's own ozone launchers: into its versions, or the desktop app's launcher.
+# Anything else (a user's script, a copied binary) belongs to someone else.
 # Exactly <versions>/<version>/ozone ($1 under $2), never another program inside a version.
 version_ozone() {
   case "$1" in "$2"/*) ;; *) return 1 ;; esac
@@ -243,13 +266,17 @@ slot_empty=true
 if [ -e "${bin_dir}/ozone" ] || [ -L "${bin_dir}/ozone" ]; then
   slot_empty=false
   owned=false
+  real_versions_dir="$(CDPATH='' cd -P -- "$versions_dir" && pwd)"
   if [ -L "${bin_dir}/ozone" ]; then
     existing="$(readlink "${bin_dir}/ozone" 2>/dev/null || true)"
     case "$existing" in /*) ;; *) existing="${bin_dir}/${existing}" ;; esac
-    real_versions_dir="$(CDPATH='' cd -P -- "$versions_dir" && pwd)"
-    # Through a symlinked Ozone home the link text names the alias; resolve its folder to compare.
+  else
+    existing="$(script_ozone "${bin_dir}/ozone")"
+  fi
+  if [ -n "$existing" ]; then
+    # Through a symlinked Ozone home the path names the alias; resolve its folder to compare.
     existing_dir="$(CDPATH='' cd -P -- "$(dirname -- "$existing")" 2>/dev/null && pwd || true)"
-    # The text alone counts only without . or .. segments (a pruned version leaves a dangling link).
+    # The text alone counts only without . or .. segments (a pruned version leaves a dangling path).
     case "$existing" in
       */./* | */../* | */. | */..) ;;
       *)
@@ -263,13 +290,22 @@ if [ -e "${bin_dir}/ozone" ] || [ -L "${bin_dir}/ozone" ]; then
   fi
   "$owned" || fail "another ozone is already at ${bin_dir}/ozone. Remove it and run this again, or run ${target_dir}/ozone directly."
 fi
-# An empty spot is linked without -f, so a file that appears after the check above is kept.
+launcher_tmp="$(mktemp "${bin_dir}/.ozone.XXXXXX")"
+trap 'rm -f "$launcher_tmp"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+launcher_script "${target_dir}/ozone" > "$launcher_tmp"
+chmod 755 "$launcher_tmp"
+# An empty spot is hard-linked without -f, so a file that appears after the check above is kept.
 if "$slot_empty"; then
-  ln -s "${target_dir}/ozone" "${bin_dir}/ozone" || fail "could not link ${bin_dir}/ozone; something else was created there."
+  ln "$launcher_tmp" "${bin_dir}/ozone" || fail "could not write ${bin_dir}/ozone; something else was created there."
 else
   # Known race, accepted: a file written here after the ownership check above is overwritten.
-  ln -sfn "${target_dir}/ozone" "${bin_dir}/ozone"
+  # mv replaces a legacy symlink rather than writing through it.
+  mv -f "$launcher_tmp" "${bin_dir}/ozone"
 fi
+rm -f "$launcher_tmp"
+trap - EXIT
 # Pruning keeps what this launcher points at; a background service cannot see bin_dir otherwise.
 launcher="$(CDPATH='' cd -P -- "$bin_dir" && pwd)/ozone"
 launchers="${ozone_home}/runtime/launchers"

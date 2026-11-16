@@ -78,7 +78,10 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, NetService.layer))
       readonly reportStatus?: boolean;
       /** Runs as if in a terminal, answering each question with this text. */
       readonly answer?: string;
-      readonly prints?: string;
+      /** Lines the run prints, with `<baseDir>` standing for the test's home. */
+      readonly prints?: ReadonlyArray<string>;
+      readonly omits?: string;
+      readonly json?: object;
       readonly env: string;
       readonly args: ReadonlyArray<string>;
       readonly installs: number;
@@ -96,7 +99,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, NetService.layer))
       },
       {
         label: "the local network opens",
-        prints: "Run `ozone pair --base-dir <baseDir>`.",
+        prints: ["Run `ozone pair --base-dir <baseDir>`."],
         installed: true,
         env: "OZONE_LAN=false\n",
         args: ["--lan"],
@@ -115,6 +118,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, NetService.layer))
       },
       {
         label: "a route turns off with no service to run",
+        prints: ["Run `ozone --base-dir <baseDir>` to use Ozone here."],
         installed: false,
         env: "OZONE_LAN=true\n",
         args: ["--no-lan"],
@@ -135,7 +139,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, NetService.layer))
       {
         label: "a failed update keeps service.env matching the old service",
         // The old service still runs, so no foreground server is offered.
-        prints: "Fix that, then run `ozone up --base-dir <baseDir>` again.",
+        prints: ["Fix that, then run `ozone up --base-dir <baseDir>` again."],
         installed: true,
         status: { current: false },
         installFails: true,
@@ -183,11 +187,41 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, NetService.layer))
         installed: true,
         status: { current: false, otherBaseDir: "/srv/ozone home" },
         reportStatus: true,
+        json: {
+          service: { otherBaseDir: "/srv/ozone home" },
+          lan: { enabled: false, inheritedDefault: false },
+        },
         env: "",
         args: ["--json"],
         installs: 0,
         restarts: 0,
         envAfter: "",
+      },
+      {
+        label: "status hints keep the caller's --base-dir",
+        installed: true,
+        reportStatus: true,
+        prints: [
+          "Turn it off: `ozone up --base-dir <baseDir> --no-lan`.",
+          "Change access: `ozone up --base-dir <baseDir>`.",
+        ],
+        env: "",
+        args: [],
+        installs: 0,
+        restarts: 0,
+        envAfter: "",
+      },
+      {
+        label: "a host override gets no --no-lan hint it would ignore",
+        installed: true,
+        reportStatus: true,
+        prints: ["overridden · OZONE_HOST=0.0.0.0"],
+        omits: "--no-lan",
+        env: "OZONE_HOST=0.0.0.0\n",
+        args: [],
+        installs: 0,
+        restarts: 0,
+        envAfter: "OZONE_HOST=0.0.0.0\n",
       },
       {
         label: "no service manager still records the choice",
@@ -282,14 +316,14 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, NetService.layer))
             ),
           ),
         );
-        if (input.prints !== undefined) {
-          expect(lines.join("\n")).toContain(input.prints.replace("<baseDir>", baseDir));
+        for (const line of input.prints ?? []) {
+          expect(lines.join("\n")).toContain(line.replace("<baseDir>", baseDir));
         }
-        if (input.reportStatus) {
-          expect(JSON.parse(lines.join("\n"))).toMatchObject({
-            service: { otherBaseDir: "/srv/ozone home" },
-            lan: { enabled: false, inheritedDefault: false },
-          });
+        if (input.omits !== undefined) {
+          expect(lines.join("\n")).not.toContain(input.omits);
+        }
+        if (input.json !== undefined) {
+          expect(JSON.parse(lines.join("\n"))).toMatchObject(input.json);
         }
         expect(exit._tag).toBe(
           input.restartFails === true || input.fails === true ? "Failure" : "Success",
@@ -310,4 +344,18 @@ it("rewrites only the named service.env keys and keeps the user's lines", () => 
     ["# my settings", "OZONE_PORT=4000", "OZONE_LAN=true", ""].join("\n"),
   );
   expect(upsertServiceEnv("", { OZONE_LAN: "false" })).toBe("OZONE_LAN=false\n");
+  expect(
+    upsertServiceEnv('OZONE_LAN="a\nb"\nCUSTOM="x\nOZONE_LAN=y"\nOZONE_LAN=true\n', {
+      OZONE_LAN: "false",
+    }),
+  ).toBe('OZONE_LAN=false\nCUSTOM="x\nOZONE_LAN=y"\n');
+  expect(
+    upsertServiceEnv('OZONE_LAN=\u00a0"unused\nCUSTOM=keep\nEND="\nOZONE_LAN=true\n', {
+      OZONE_LAN: "false",
+    }),
+  ).toBe('OZONE_LAN=false\nCUSTOM=keep\nEND="\n');
+  const long = `CUSTOM="${"\n".repeat(130_000)}"\n`;
+  expect(upsertServiceEnv(`${long}OZONE_LAN=true\n`, { OZONE_LAN: "false" })).toBe(
+    `${long}OZONE_LAN=false\n`,
+  );
 });

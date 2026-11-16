@@ -228,49 +228,60 @@ export const TimelineQuestionCard = memo(function TimelineQuestionCard({
             (optimisticSingleSelect?.questionId === activeQuestion.id &&
               optimisticSingleSelect.optionValue === optionValue) ||
             draftSelectedOptions?.[index] === true;
+          // The preview sits outside the button: it can hold links, and a click on a single-select option advances.
           return (
-            <button
-              key={`${activeQuestion.id}:${optionValue}`}
-              type="button"
-              aria-pressed={isSelected}
-              disabled={responseDisabled}
-              onClick={() => handleOptionSelection(activeQuestion.id, optionValue)}
-              className={cn(
-                questionTextAlign,
-                "group flex w-full items-start gap-2.5 rounded-lg border border-transparent px-2.5 py-2 outline-none transition-colors duration-150 focus-visible:ring-1 focus-visible:ring-primary/25 focus-visible:ring-inset",
-                isSelected
-                  ? "border-border bg-muted/50 text-foreground"
-                  : "text-foreground/80 hover:bg-muted/30",
-                responseDisabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
-              )}
-            >
-              {/* The h-5 slots match the label's line box, so the mark and shortcut stay on its first line. */}
-              <span className="pointer-events-none flex h-5 shrink-0 items-center">
-                {activeQuestion.multiSelect ? (
-                  <CheckboxMark checked={isSelected} variant="contrast" />
-                ) : (
-                  <OptionRadio checked={isSelected} />
+            <div key={`${activeQuestion.id}:${optionValue}`}>
+              <button
+                type="button"
+                aria-pressed={isSelected}
+                disabled={responseDisabled}
+                onClick={() => handleOptionSelection(activeQuestion.id, optionValue)}
+                className={cn(
+                  questionTextAlign,
+                  "group flex w-full items-start gap-2.5 rounded-lg border border-transparent px-2.5 py-2 outline-none transition-colors duration-150 focus-visible:ring-1 focus-visible:ring-primary/25 focus-visible:ring-inset",
+                  isSelected
+                    ? "border-border bg-muted/50 text-foreground"
+                    : "text-foreground/80 hover:bg-muted/30",
+                  responseDisabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
                 )}
-              </span>
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="font-medium text-sm" dir={textDirection(option.label)}>
-                  {option.label}
+              >
+                {/* The h-5 slots match the label's line box, so the mark and shortcut stay on its first line. */}
+                <span className="pointer-events-none flex h-5 shrink-0 items-center">
+                  {activeQuestion.multiSelect ? (
+                    <CheckboxMark checked={isSelected} variant="contrast" />
+                  ) : (
+                    <OptionRadio checked={isSelected} />
+                  )}
                 </span>
-                {option.description && option.description !== option.label ? (
-                  <span
-                    className="text-secondary-label text-xs"
-                    dir={textDirection(option.description)}
-                  >
-                    {option.description}
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="font-medium text-sm" dir={textDirection(option.label)}>
+                    {option.label}
+                  </span>
+                  {option.description && option.description !== option.label ? (
+                    <span
+                      className="text-secondary-label text-xs"
+                      dir={textDirection(option.description)}
+                    >
+                      {option.description}
+                    </span>
+                  ) : null}
+                </span>
+                {index < 9 ? (
+                  <span className="flex h-5 shrink-0 items-center">
+                    <Kbd>{index + 1}</Kbd>
                   </span>
                 ) : null}
-              </span>
-              {index < 9 ? (
-                <span className="flex h-5 shrink-0 items-center">
-                  <Kbd>{index + 1}</Kbd>
-                </span>
+              </button>
+              {option.preview ? (
+                <ChatMarkdown
+                  text={option.preview}
+                  cwd={cwd}
+                  threadRef={threadRef}
+                  lineBreaks
+                  className="ps-9 pe-2.5 pb-1.5 text-xs text-foreground/70"
+                />
               ) : null}
-            </button>
+            </div>
           );
         })}
       </div>

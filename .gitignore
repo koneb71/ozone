@@ -42,3 +42,4 @@ node_modules/
 
 # Local code graph from graphify
 graphify-out/
+/packages/ssh/.ssh-launcher-test-*/

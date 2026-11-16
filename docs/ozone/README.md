@@ -111,6 +111,38 @@ starts its lead thread.
 | Ambient `ANTHROPIC_API_KEY`        | dropped    | subscription sign-in must not silently bill an API key |
 | Project from the working directory | not made   | Home is the first screen                               |
 
+## Syncing with T3 Code
+
+Ozone shares history with [T3 Code](https://github.com/pingdotgg/t3code) and takes its
+improvements by merging a pinned commit of its `main`:
+
+```sh
+git fetch upstream main
+git merge --no-commit --no-ff <commit>
+```
+
+Upstream lands a few hundred commits a day, so merge often: the conflicts grow with the gap.
+
+- **What stays removed.** The mobile app, marketing site, relay and T3 Connect, Clerk, `cloud`,
+  guest sharing, triage, telemetry and analytics, the nightly and preview channels, the v1 thread
+  import, upstream's GitHub workflows and its npm launcher. When upstream edits a file Ozone
+  removed, keep it removed. Upstream also adds new files inside removed folders, and adds calls
+  to removed features inside files that merge cleanly: neither conflicts, so look for both.
+- **Everything else** starts from upstream's side with Ozone's change put back: its names, its
+  removals, and its own features where they attach to upstream's code.
+- **Names come back without a conflict.** After a merge, `git grep T3CODE_` must find only this line,
+  and text a person reads must not say T3 Code. Tests that assert a message need the same rename
+  as the code that prints it.
+- **Package exports can vanish.** Removing exports next to one upstream adds makes git drop the
+  new one from `packages/shared/package.json`. Compare its export list with upstream's.
+- **MCP tools.** A toolkit upstream adds must be in `McpHttpServer.layerTools`, which is what the
+  server registers.
+- **Agent instructions.** Re-read `packages/provider-core/src/server/orchestrationInstructions.ts`.
+  The build kickoff and worker briefs are written against that text.
+- **Migrations keep upstream's numbers**, including ones for features Ozone removed, so the
+  sequence never forks: 090 and 091 add T3 Connect tables and columns that nothing reads. Ozone
+  adds no migrations of its own to that sequence.
+
 ## Traps
 
 - `.gitignore` ignores directories named `build`, `dist` and the like anywhere in the tree. A
