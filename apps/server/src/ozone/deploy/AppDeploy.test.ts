@@ -1,12 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import {
-  DEFAULT_OZONE_APP_SETTINGS,
-  ProjectId,
-  type OzoneAppManifest,
-  type OzoneSnapshot,
-} from "@t3tools/contracts";
+import { ProjectId, type OzoneSnapshot } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -22,6 +17,7 @@ import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as BuildRepo from "../builds/BuildRepo.ts";
 import * as AppData from "../data/AppData.ts";
 import * as DockerCli from "../runtime/DockerCli.ts";
+import { TEST_DATABASE, TEST_MIGRATIONS, testApp, testManifest } from "../ozone.testkit.ts";
 import * as AppDeploy from "./AppDeploy.ts";
 import * as AppServers from "./AppServers.ts";
 import * as DokployDeploy from "./DokployDeploy.ts";
@@ -30,25 +26,10 @@ import * as Notifier from "./Notifier.ts";
 
 const projectId = ProjectId.make("project-notes");
 const here = { host: null, dokploy: null, hosted: null, publicUrl: null, domain: null };
-const manifest: OzoneAppManifest = {
-  version: 1,
-  runtime: {
-    kind: "compose",
-    file: "compose.yaml",
-    appService: "app",
-    appPort: 3000,
-    healthPath: "/api/health",
-  },
-  gates: [],
-  data: {
-    services: [{ service: "db", kind: "postgres", volume: "pgdata", database: "app", user: "app" }],
-  },
-  migrations: {
-    directory: "drizzle",
-    generate: "npm run db:generate",
-    apply: "npm run db:migrate",
-  },
-};
+const manifest = testManifest({
+  data: { services: [{ ...TEST_DATABASE, database: "app", user: "app" }] },
+  migrations: TEST_MIGRATIONS,
+});
 const HELD_BACK = [
   "Ozone held back a migration that can lose data.",
   '0001_drop.sql:1 drops a table: DROP TABLE "notes"',
@@ -135,15 +116,7 @@ const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: bool
     const notices = yield* Ref.make<ReadonlyArray<Notifier.Notice>>([]);
     // The snapshots taken so far, each reason once: the fake names a snapshot by its reason.
     const taken = yield* Ref.make<ReadonlyArray<OzoneSnapshot>>([]);
-    const app = {
-      projectId,
-      slug: "notes-a1b2c3",
-      name: "Notes",
-      templateId: "web-app",
-      port: 41_005,
-      createdAt: "2026-01-01T00:00:00.000Z",
-      settings: DEFAULT_OZONE_APP_SETTINGS,
-    };
+    const app = testApp({ projectId, port: 41_005 });
     // Built into the test's scope: a deploy runs in the service's own fiber, which lives there.
     const context = yield* Layer.build(
       AppDeploy.layer.pipe(

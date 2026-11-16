@@ -24,8 +24,6 @@ export interface UpdatesHarnessOptions {
     void,
     ElectronUpdater.ElectronUpdaterCheckForUpdatesError
   >;
-  readonly beforeSetUpdateChannel?: Effect.Effect<void>;
-  readonly setUpdateChannelError?: DesktopAppSettings.DesktopSettingsWriteError;
   readonly setDisableDifferentialDownload?: Effect.Effect<void>;
   readonly downloadUpdate?: Effect.Effect<void, ElectronUpdater.ElectronUpdaterDownloadUpdateError>;
   readonly quitAndInstall?: Effect.Effect<void, ElectronUpdater.ElectronUpdaterQuitAndInstallError>;
@@ -39,10 +37,6 @@ export interface UpdatesHarnessOptions {
   readonly installRecord?: string | undefined;
   readonly policy?: DesktopUpdatePolicy.UpdatePolicy;
   readonly appVersion?: string;
-  /** Starts from in-memory settings with this track saved, as after a restart. */
-  readonly savedChannel?: DesktopAppSettings.DesktopSettings["updateChannel"];
-  /** Adds a WSL backend beside the primary, as on a Windows host with WSL enabled. */
-  readonly wslBackend?: boolean;
 }
 
 export function makeHarness(options: UpdatesHarnessOptions = {}) {
@@ -159,17 +153,7 @@ export function makeHarness(options: UpdatesHarnessOptions = {}) {
     waitForReady: () => Effect.succeed(true),
   };
   const layerBackend = DesktopBackendPool.layerTest(
-    options.backendInstances ??
-      (options.wslBackend
-        ? [
-            stubBackendInstance,
-            {
-              ...stubBackendInstance,
-              id: DesktopBackendPool.BackendInstanceId("wsl:Ubuntu"),
-              label: Effect.succeed("Ubuntu"),
-            },
-          ]
-        : [stubBackendInstance]),
+    options.backendInstances ?? [stubBackendInstance],
   );
 
   const layerEnvironment = DesktopEnvironment.layer({
@@ -196,45 +180,7 @@ export function makeHarness(options: UpdatesHarnessOptions = {}) {
     ),
   );
 
-  let testSettings: DesktopAppSettings.DesktopSettings = {
-    ...DesktopAppSettings.DEFAULT_DESKTOP_SETTINGS,
-    ...(options.savedChannel === undefined
-      ? {}
-      : { updateChannel: options.savedChannel, updateChannelConfiguredByUser: true }),
-  };
-  const setUpdateChannelError = options.setUpdateChannelError;
-  const layerSettings =
-    setUpdateChannelError || options.beforeSetUpdateChannel || options.savedChannel
-      ? Layer.succeed(DesktopAppSettings.DesktopAppSettings, {
-          get: Effect.sync(() => testSettings),
-          load: Effect.sync(() => testSettings),
-          setMainWindowBounds: () => Effect.die("unexpected main window bounds update"),
-          setServerExposureMode: () => Effect.die("unexpected server exposure update"),
-          setTailscaleServe: () => Effect.die("unexpected Tailscale Serve update"),
-          setUpdateChannel: (channel) =>
-            setUpdateChannelError
-              ? Effect.fail(setUpdateChannelError)
-              : (options.beforeSetUpdateChannel ?? Effect.void).pipe(
-                  Effect.andThen(
-                    Effect.sync(() => {
-                      const changed = testSettings.updateChannel !== channel;
-                      testSettings = {
-                        ...testSettings,
-                        updateChannel: channel,
-                        updateChannelConfiguredByUser: true,
-                      };
-                      return { settings: testSettings, changed };
-                    }),
-                  ),
-                ),
-          setWslBackendEnabled: () => Effect.die("unexpected WSL backend toggle"),
-          setWslDistro: () => Effect.die("unexpected WSL distro change"),
-          setLocalEnvironmentEnabled: () => Effect.die("unexpected local environment toggle"),
-          setWslOnly: () => Effect.die("unexpected WSL-only toggle"),
-          applyWslWindowsFallback: Effect.die("unexpected WSL Windows fallback"),
-          applyWslWindowsFallbackInMemory: Effect.die("unexpected WSL Windows fallback"),
-        } satisfies DesktopAppSettings.DesktopAppSettings["Service"])
-      : DesktopAppSettings.layer;
+  const layerSettings = DesktopAppSettings.layer;
 
   const updateRestartMarkers = new Set<string>();
   const installRecords = new Map<string, string>();

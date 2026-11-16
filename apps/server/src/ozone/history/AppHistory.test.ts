@@ -1,16 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import {
-  DEFAULT_OZONE_APP_SETTINGS,
-  NO_OZONE_VERIFICATION,
-  ProjectId,
-  ThreadId,
-  type OzoneAppManifest,
-  type OzoneBuild,
-  type OzoneBuildTask,
-  type OzoneSnapshot,
-} from "@t3tools/contracts";
+import { ProjectId, ThreadId, type OzoneSnapshot } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -29,24 +20,14 @@ import * as BuildRepo from "../builds/BuildRepo.ts";
 import * as BuildStore from "../builds/BuildStore.ts";
 import * as AppData from "../data/AppData.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
+import { testApp, testBuild, testManifest, testTask } from "../ozone.testkit.ts";
 import * as AppHistory from "./AppHistory.ts";
 
 const projectId = ProjectId.make("project-notes");
 const threadId = ThreadId.make("lead");
 
 const AT = "2026-01-01T00:00:00.000Z";
-const manifest: OzoneAppManifest = {
-  version: 1,
-  runtime: {
-    kind: "compose",
-    file: "compose.yaml",
-    appService: "app",
-    appPort: 3000,
-    healthPath: "/api/health",
-  },
-  gates: [],
-  data: { services: [] },
-};
+const manifest = testManifest();
 
 const snapshotAt = (id: string, commitSha: string): OzoneSnapshot => ({
   id,
@@ -58,25 +39,8 @@ const snapshotAt = (id: string, commitSha: string): OzoneSnapshot => ({
   sizeBytes: 1,
 });
 
-const doneTask = (id: string, commitSha: string): OzoneBuildTask => ({
-  id,
-  title: `Task ${id}`,
-  brief: "",
-  dependsOn: [],
-  acceptance: [],
-  access: "write",
-  status: "done",
-  attempts: 1,
-  dispatches: 1,
-  workerTaskId: null,
-  workerThreadId: null,
-  baseSha: null,
-  commitSha,
-  snapshotId: null,
-  evidence: [],
-  summary: null,
-  blockedReason: null,
-});
+const doneTask = (id: string, commitSha: string) =>
+  testTask(id, { status: "done", attempts: 1, dispatches: 1, commitSha });
 
 /** A real repository with three commits, the scaffold and two tasks, and a build that made them. */
 const makeHarness = Effect.gen(function* () {
@@ -137,15 +101,7 @@ const makeHarness = Effect.gen(function* () {
   const registry = Layer.mock(AppRegistry.AppRegistry)({
     resolve: () =>
       Effect.succeed({
-        app: {
-          projectId,
-          slug: "notes-a1b2c3",
-          name: "Notes",
-          templateId: "web-app",
-          port: 41_000,
-          createdAt: AT,
-          settings: DEFAULT_OZONE_APP_SETTINGS,
-        },
+        app: testApp({ projectId }),
         workspaceRoot: root,
         manifest,
       }),
@@ -182,21 +138,11 @@ const makeHarness = Effect.gen(function* () {
   const page = yield* commitFile("page.tsx", "Task page");
   yield* Ref.set(snapshots, [snapshotAt("s1", schema), snapshotAt("s2", page)]);
 
-  const build: OzoneBuild = {
-    threadId,
-    projectId,
+  const build = testBuild(threadId, projectId, {
     spec: "Notes.",
-    acceptance: [],
     tasks: [doneTask("schema", schema), doneTask("page", page)],
-    maxAttempts: 3,
-    finalEvidence: [],
     completedAt: AT,
-    updatedAt: AT,
-    approval: "not_needed",
-    planGranted: false,
-    finalStartedAt: null,
-    verification: NO_OZONE_VERIFICATION,
-  };
+  });
   yield* store.modify(threadId, () => [null, build]);
   const exists = (file: string) => fs.exists(path.join(root, file));
   return {

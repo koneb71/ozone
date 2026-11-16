@@ -120,11 +120,11 @@ export const WINDOWS_POLICY_VALUES = {
   ProviderInstances: { type: "json", path: ["limits", "providers", "instances"] },
   UpdatesMode: { type: "string", path: ["limits", "updates", "mode"] },
   UpdatesFeedUrl: { type: "string", path: ["limits", "updates", "feedUrl"] },
-  AllowNightly: { type: "boolean", path: ["limits", "updates", "allowNightly"] },
 } as const satisfies WindowsPolicyValues;
 
 /** Values no template control writes any more. A machine that still has one set keeps its policy. */
 const WINDOWS_POLICY_RETIRED_VALUES = {
+  AllowNightly: { type: "boolean", path: ["limits", "updates", "allowNightly"] },
   Connect: { type: "boolean", path: ["limits", "connect"] },
   Telemetry: { type: "boolean", path: ["limits", "telemetry"] },
 } as const satisfies WindowsPolicyValues;

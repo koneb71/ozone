@@ -4,8 +4,9 @@ import type { HttpClient } from "effect/http";
 import * as Schema from "effect/Schema";
 
 import { githubRepoOf } from "../gitPublish.ts";
+import { failed } from "../../errors.ts";
 import type { HostDriver, HostIds, HostState } from "./HostDriver.ts";
-import { failed, hostHttp, reading, untilSettled } from "./hostHttp.ts";
+import { hostHttp, reading, untilSettled } from "./hostHttp.ts";
 
 const LABEL = "Render";
 const read = <S extends Schema.Top>(schema: S, what: string) => reading(schema, LABEL, what);

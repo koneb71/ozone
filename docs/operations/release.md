@@ -15,6 +15,10 @@ platform builds on its own runner, so the Windows installer is built on Windows.
 The version comes from the tag. The workflow stamps it into the package files of its own checkout
 with `scripts/update-release-package-versions.ts`. Never commit that change.
 
+The build job sets `OZONE_TELEMETRY_CHANNEL=stable`. A server built without it is a `dev` build,
+which reads a managed policy from a path the user sets, so a job that builds what people install
+must set it too.
+
 ## Try a build without releasing
 
 On GitHub, open **Actions**, choose **Ozone release**, press **Run workflow** and enter a version

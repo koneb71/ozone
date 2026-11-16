@@ -62,8 +62,8 @@ The event log only keeps what live readers need: about a day of history for reco
 command-id retries.
 [ProjectionMaintenance](../../apps/server/src/orchestration-v2/ProjectionMaintenance.ts) deletes
 older events the projections cover, so projections cannot be rebuilt from the log. It keeps each
-stream's newest event (high-water marks, stream versions, snapshot sequences), `thread.created`
-(the legacy importer's marker), every `running` run update (Codex usage history reads the first
+stream's newest event (high-water marks, stream versions, snapshot sequences), `thread.created`,
+every `running` run update (Codex usage history reads the first
 of each attempt), and prompt anchors that retained subagent rows reference. A client whose cursor
 is below both its thread's newest event and the recorded pruned-through sequence missed pruned
 events, so it resumes from a snapshot; an idle thread's cursor resumes without one. Resumes

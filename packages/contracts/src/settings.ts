@@ -1107,6 +1107,7 @@ export const BackgroundActivityOverrides = Schema.Struct({
   hostPowerMonitorIdleInterval: Schema.optionalKey(Schema.DurationFromMillis),
   pauseWhenHostLocked: Schema.optionalKey(Schema.Boolean),
   pauseWhenHostLowPower: Schema.optionalKey(Schema.Boolean),
+  /** Read from older settings files and ignored: no client reports low power. */
   pauseWhenClientLowPower: Schema.optionalKey(Schema.Boolean),
   pauseWhenOnBattery: Schema.optionalKey(Schema.Boolean),
 });

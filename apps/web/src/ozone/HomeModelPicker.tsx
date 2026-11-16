@@ -4,11 +4,7 @@ import type { EnvironmentId, ModelSelection } from "@t3tools/contracts";
 import { ProviderModelPicker } from "~/components/chat/ProviderModelPicker";
 import { useEnvironmentSettings } from "~/hooks/useSettings";
 import { getCustomModelOptionsByInstance } from "~/modelSelection";
-import {
-  providerInstanceEntriesFor,
-  resolveDefaultProviderModelSelection,
-  resolveProjectDefaultProviderModelSelection,
-} from "~/providerInstances";
+import { providerInstanceEntriesFor, resolveNewThreadModelSelection } from "~/providerInstances";
 import { EMPTY_SERVER_PROVIDERS, serverEnvironment } from "~/state/server";
 
 /** The model Home's next build or chat starts on. Null means the default a new thread gets. */
@@ -22,11 +18,7 @@ export function HomeModelPicker(props: {
   const settings = useEnvironmentSettings(environmentId);
   const providers =
     useAtomValue(serverEnvironment.providersValueAtom(environmentId)) ?? EMPTY_SERVER_PROVIDERS;
-  const shown =
-    props.value ??
-    (settings.defaultModelSelection === null
-      ? resolveProjectDefaultProviderModelSelection(providers, settings, null)
-      : resolveDefaultProviderModelSelection(providers, settings.defaultModelSelection));
+  const shown = props.value ?? resolveNewThreadModelSelection(providers, settings, null);
   // With no provider ready there is nothing to choose, and starting says how to set one up.
   if (shown === null) return null;
 

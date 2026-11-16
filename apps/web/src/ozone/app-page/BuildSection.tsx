@@ -13,12 +13,9 @@ import { Switch } from "~/components/ui/switch";
 import { useEnvironmentSettings } from "~/hooks/useSettings";
 import { getCustomModelOptionsByInstance } from "~/modelSelection";
 import { isProviderInstancePickerReady, providerInstanceEntriesFor } from "~/providerInstances";
-import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { EMPTY_SERVER_PROVIDERS, serverEnvironment } from "~/state/server";
-import { useAtomCommand } from "~/state/use-atom-command";
 
-import { ozoneEnvironment } from "../state";
-import { useOzoneCommand } from "../ui/useOzoneCommand";
+import { useConfigureApp } from "../useConfigureApp";
 
 /** How the app's builds run, from now on. */
 export function BuildSection(props: {
@@ -27,21 +24,12 @@ export function BuildSection(props: {
   readonly deployed: boolean;
 }) {
   const { app, environmentId } = props;
-  const configureApp = useAtomCommand(ozoneEnvironment.configureApp, { reportFailure: false });
   const settings = useEnvironmentSettings(environmentId);
   const providers =
     useAtomValue(serverEnvironment.providersValueAtom(environmentId)) ?? EMPTY_SERVER_PROVIDERS;
-  const { working, run } = useOzoneCommand();
-  const saving = working !== null;
-
-  const save = async (change: OzoneAppConfigureInput["settings"]) => {
-    const result = await run("save", "Could not save the setting", () =>
-      configureApp({ environmentId, input: { projectId: app.projectId, settings: change } }),
-    );
-    if (result._tag === "Success") {
-      appAtomRegistry.refresh(ozoneEnvironment.apps({ environmentId, input: {} }));
-    }
-  };
+  const { saving, save: saveFor } = useConfigureApp();
+  const save = (change: OzoneAppConfigureInput["settings"]) =>
+    saveFor({ environmentId, projectId: app.projectId }, change);
 
   const instanceEntries = providerInstanceEntriesFor(providers, settings, app.projectId);
   const chosen = app.settings.workerModel;

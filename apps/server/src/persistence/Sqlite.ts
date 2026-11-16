@@ -7,7 +7,6 @@ import * as SqlClient from "effect/sql/SqlClient";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 
 import { hasPendingMigrations, runMigrations } from "./Migrations.ts";
-import { initializeV2Database } from "./initializeV2Database.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerOwnership from "../serverOwnership.ts";
 
@@ -106,7 +105,6 @@ const makeLayerConfig = <E, R>(
   Layer.unwrap(
     Effect.gen(function* () {
       const { dbPath } = yield* ServerConfig.ServerConfig;
-      yield* initializeV2Database(dbPath);
       return fromPath(dbPath);
     }),
   );

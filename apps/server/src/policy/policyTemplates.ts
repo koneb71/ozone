@@ -128,7 +128,7 @@ const policies = (): ReadonlyArray<Policy> => [
   {
     id: "Updates",
     title: "Updates",
-    help: "Off stops Ozone from checking for updates, for machines that receive Ozone through device management.\n\nA feed URL makes the desktop app update from your own mirror of the release feed instead of GitHub; it must be https. Unchecking nightly makes the nightly channel unavailable.\n\nDisabled or Not Configured: no restriction.",
+    help: "Off stops Ozone from checking for updates, for machines that receive Ozone through device management.\n\nA feed URL makes the desktop app update from your own mirror of the release feed instead of GitHub; it must be https.\n\nDisabled or Not Configured: no restriction.",
     elements: [
       {
         kind: "enum",
@@ -141,12 +141,6 @@ const policies = (): ReadonlyArray<Policy> => [
         defaultItem: 0,
       },
       { kind: "text", name: "UpdatesFeedUrl", label: "Feed URL (optional)" },
-      {
-        kind: "checkbox",
-        name: "AllowNightly",
-        label: "Allow the nightly channel",
-        defaultChecked: true,
-      },
     ],
   },
   {

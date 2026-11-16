@@ -1,11 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import {
-  DEFAULT_OZONE_APP_SETTINGS,
-  OzoneAppError,
-  ProjectId,
-  type OzoneAppManifest,
-} from "@t3tools/contracts";
+import { OzoneAppError } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -15,32 +10,14 @@ import * as Ref from "effect/Ref";
 
 import * as ServerConfig from "../../config.ts";
 import * as ProcessRunner from "../../processRunner.ts";
+import { TEST_DATABASE, testApp, testManifest } from "../ozone.testkit.ts";
 import * as Dokploy from "./Dokploy.ts";
 import * as DokployDeploy from "./DokployDeploy.ts";
 import * as GitHubDeployKeys from "./GitHubDeployKeys.ts";
 import * as SavedServers from "./SavedServers.ts";
 
-const manifest: OzoneAppManifest = {
-  version: 1,
-  runtime: {
-    kind: "compose",
-    file: "compose.yaml",
-    appService: "app",
-    appPort: 3000,
-    healthPath: "/api/health",
-  },
-  gates: [],
-  data: { services: [{ service: "db", kind: "postgres", volume: "pgdata" }] },
-};
-const app = {
-  projectId: ProjectId.make("project-notes"),
-  slug: "notes-a1b2c3",
-  name: "Notes",
-  templateId: "web-app",
-  port: 41_005,
-  createdAt: "2026-01-01T00:00:00.000Z",
-  settings: DEFAULT_OZONE_APP_SETTINGS,
-};
+const manifest = testManifest({ data: { services: [TEST_DATABASE] } });
+const app = testApp({ port: 41_005 });
 const REMOTE = "https://git.example.com/notes.git";
 
 /** A Dokploy that remembers what it was asked, and finishes every deploy at once. */

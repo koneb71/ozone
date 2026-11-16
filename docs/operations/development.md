@@ -169,8 +169,9 @@ of the affected packages and their dependents, and the test files beside the cha
 runs the checks that read other files: the agent context budget when the server is affected, and
 React Compiler coverage for only the changed web files. It maps
 files to packages with [ci-changes.cjs](../../.github/scripts/ci-changes.cjs). It
-compares against the closest merge base with any remote's `main`, or with a ref you pass. CI still runs the full
-test suites and the jobs the summary lists, so a local pass does not promise a green CI run.
+compares against the closest merge base with any remote's `main`, or with a ref you pass. CI runs the
+whole web suite and the app builder's tests, and no other tests: for the rest of the server, the
+desktop app, the packages and the scripts, run the test folders you touched.
 
 The steps run side by side, as many at once as the machine allows: one per two cores and per 6 GiB
 of available memory. On a large machine a run takes about as long as its slowest step, usually
@@ -199,8 +200,7 @@ refactors built in. No workspace installs `typescript`. VS Code's TypeScript 7
 extension starts the same checker through `.vscode/tsdk/tsgo` (`js/ts.tsdk.path`), a POSIX
 script, so on Windows open the workspace through WSL.
 
-CI owns the full suite; see [ozone-ci.yml](../../.github/workflows/ozone-ci.yml) for its current
-jobs.
+See [ozone-ci.yml](../../.github/workflows/ozone-ci.yml) for what CI runs.
 
 ### Unused code
 

@@ -42,7 +42,6 @@ import * as Stream from "effect/Stream";
 import { CodexProviderCapabilitiesV2 } from "../orchestration-v2/Adapters/CodexAdapterV2.ts";
 import * as CommandReceiptStore from "../orchestration-v2/CommandReceiptStore.ts";
 import * as EffectWorker from "../orchestration-v2/EffectWorker.ts";
-import * as LegacyV1ThreadImporter from "../orchestration-v2/legacy/LegacyV1ThreadImporter.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import * as ProviderReplayHarness from "../orchestration-v2/testkit/ProviderReplayHarness.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
@@ -2219,12 +2218,6 @@ describe("OrchestratorMcpService provider resolution", () => {
           });
           const layerThreads = ThreadManagementService.layer.pipe(
             Layer.provideMerge(layerOrchestrator),
-            Layer.provide(
-              LegacyV1ThreadImporter.layer.pipe(
-                Layer.provide(layerOrchestrator),
-                Layer.provide(layerDatabase),
-              ),
-            ),
             Layer.provide(CommandReceiptStore.layer.pipe(Layer.provide(layerDatabase))),
             Layer.provideMerge(layerSettings),
           );
@@ -2377,12 +2370,6 @@ describe("OrchestratorMcpService provider resolution", () => {
         });
         const layerThreads = ThreadManagementService.layer.pipe(
           Layer.provideMerge(layerOrchestrator),
-          Layer.provide(
-            LegacyV1ThreadImporter.layer.pipe(
-              Layer.provide(layerOrchestrator),
-              Layer.provide(layerDatabase),
-            ),
-          ),
           Layer.provide(CommandReceiptStore.layer.pipe(Layer.provide(layerDatabase))),
           Layer.provideMerge(layerSettings),
         );

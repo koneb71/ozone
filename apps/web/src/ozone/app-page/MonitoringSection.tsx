@@ -21,6 +21,7 @@ import { ozoneEnvironment } from "../state";
 import { OutputView } from "../ui/OutputView";
 import { EmptyRow, SectionRows } from "../ui/SectionRows";
 import { ServerSection } from "./ServerRows";
+import type { AppDeploy } from "./useAppDeploy";
 
 const REFRESH_MS = 5_000;
 const bytes = (value: number | null) => (value === null ? "–" : formatBytes(value));
@@ -40,11 +41,15 @@ const healthBadge = (container: OzoneContainerMetrics) =>
 export function MonitoringSection(props: {
   readonly app: OzoneApp;
   readonly environmentId: EnvironmentId;
+  readonly deploy: AppDeploy;
 }) {
-  const target = { environmentId: props.environmentId, input: { projectId: props.app.projectId } };
-  const metrics = useEnvironmentQuery(ozoneEnvironment.deployMetrics(target));
-  const deployedTo =
-    useEnvironmentQuery(ozoneEnvironment.deployStatus(target)).data?.target ?? null;
+  const metrics = useEnvironmentQuery(
+    ozoneEnvironment.deployMetrics({
+      environmentId: props.environmentId,
+      input: { projectId: props.app.projectId },
+    }),
+  );
+  const deployedTo = props.deploy.status?.target ?? null;
   const host = deployedTo?.host ?? null;
   const containers = (metrics.data?.containers ?? []).filter(
     (container) => container.service !== "migrate",

@@ -371,7 +371,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "environment-identification",
     title: "Environment identification",
     to: "/settings/appearance",
-    searchTerms: ["dev nightly latest channel artwork pill label hide none"],
+    searchTerms: ["dev night sky artwork pill label hide none"],
     targetId: "appearance-interface",
   },
   {

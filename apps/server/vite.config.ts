@@ -16,7 +16,7 @@ import {
 export { shouldBundleCliDependency };
 
 // Official release workflows set the telemetry channel; local builds and forks use "dev".
-const TELEMETRY_CHANNELS = ["stable", "nightly", "preview", "dev"];
+const TELEMETRY_CHANNELS = ["stable", "dev"];
 const telemetryChannel = process.env.OZONE_TELEMETRY_CHANNEL?.trim() || "dev";
 if (!TELEMETRY_CHANNELS.includes(telemetryChannel)) {
   throw new Error(

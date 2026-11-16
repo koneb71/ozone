@@ -8,6 +8,9 @@ Signing in to 1Password through its desktop app asks for approval on the server'
 never sees that prompt, so the secret cannot be read. A service account signs in with a token instead, so
 nothing needs approving.
 
+Secret providers are not in the released builds yet. This page applies to a build made from
+source with them turned on; see [Secrets](./secrets.md).
+
 For the basics, see [Secrets](./secrets.md). To use a self-hosted Connect server instead, see
 [1Password Connect](./secrets-1password-connect.md).
 

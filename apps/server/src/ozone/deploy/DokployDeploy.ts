@@ -12,6 +12,7 @@ import * as ServerConfig from "../../config.ts";
 import * as ProcessRunner from "../../processRunner.ts";
 import type { ResolvedApp } from "../apps/AppRegistry.ts";
 import { ENV_FILE_MODE } from "../env/envFile.ts";
+import { failed } from "../errors.ts";
 import * as Dokploy from "./Dokploy.ts";
 import * as GitHubDeployKeys from "./GitHubDeployKeys.ts";
 import { githubRepoOf, publishCommit } from "./gitPublish.ts";
@@ -65,8 +66,6 @@ export class DokployDeploy extends Context.Service<
     ) => Effect.Effect<string, OzoneAppError>;
   }
 >()("t3/ozone/deploy/DokployDeploy") {}
-
-const failed = (message: string) => new OzoneAppError({ reason: "failed", message });
 
 const Link = Schema.Struct({
   serverId: Schema.String,

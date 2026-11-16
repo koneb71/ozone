@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { cliArchiveTarCommand, newestCliReleaseVersion, parseChecksums } from "./cliRelease.ts";
+import {
+  cliArchivePlatformKey,
+  cliArchiveTarCommand,
+  newestCliReleaseVersion,
+  parseChecksums,
+} from "./cliRelease.ts";
 
 describe("cliRelease", () => {
   it("parses sha256sum output including binary-mode markers", () => {
@@ -17,6 +22,18 @@ describe("cliRelease", () => {
     expect(checksums.size).toBe(2);
   });
 
+  // A key with no archive behind it passes the host check and then fails at the download.
+  it.each([
+    ["darwin", "arm64", "darwin-arm64"],
+    ["linux", "x64", "linux-x64"],
+    ["win32", "x64", "win32-x64"],
+    ["linux", "arm64", undefined],
+    ["win32", "arm64", undefined],
+    ["darwin", "x64", undefined],
+  ] as const)("names the archive a release has for %s %s", (platform, arch, key) => {
+    expect(cliArchivePlatformKey(platform, arch)).toBe(key);
+  });
+
   it("extracts with the System32 bsdtar on Windows and plain tar elsewhere", () => {
     expect(cliArchiveTarCommand("linux", {})).toBe("tar");
     expect(cliArchiveTarCommand("win32", { SystemRoot: "D:\\Win" })).toBe(
@@ -25,18 +42,14 @@ describe("cliRelease", () => {
     expect(cliArchiveTarCommand("win32", {})).toBe("C:\\Windows\\System32\\tar.exe");
   });
 
-  it("picks the newest non-draft release on the requested channel", () => {
+  it("picks the newest release that is not a draft", () => {
     const releases = [
-      { tag_name: "v1.2.4-preview.20260912.9", draft: true },
-      { tag_name: "v1.2.4-preview.20260912.8" },
-      { tag_name: "v1.2.4-nightly.20260912.7" },
+      { tag_name: "v1.2.4", draft: true },
       { tag_name: "desktop-preview" },
       { tag_name: "v1.2.3" },
-      { tag_name: "v1.2.3-nightly.20260911.2" },
+      { tag_name: "v1.2.2" },
     ];
-    expect(newestCliReleaseVersion(releases, "preview")).toBe("1.2.4-preview.20260912.8");
-    expect(newestCliReleaseVersion(releases, "nightly")).toBe("1.2.4-nightly.20260912.7");
-    expect(newestCliReleaseVersion(releases, "stable")).toBe("1.2.3");
-    expect(newestCliReleaseVersion([{ tag_name: "v1.2.3" }], "preview")).toBeUndefined();
+    expect(newestCliReleaseVersion(releases)).toBe("1.2.3");
+    expect(newestCliReleaseVersion([{ tag_name: "v1.2.4", draft: true }])).toBeUndefined();
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  appActionsFor,
   APP_SECTION_GROUPS,
   APP_SECTIONS,
   appSectionOf,
@@ -30,5 +31,25 @@ describe("app page sections", () => {
 
   it("joins only the parts of a line that are known", () => {
     expect(metaLine(["2m ago", null, "", false, "abc1234"])).toBe("2m ago · abc1234");
+  });
+});
+
+describe("appActionsFor", () => {
+  const all = { restart: true, rebuild: true, stop: true, delete: true };
+  const none = { restart: false, rebuild: false, stop: false };
+
+  it.each([
+    ["running", false, all],
+    ["unhealthy", false, all],
+    // Containers of a failed app can still be up, so it can be stopped.
+    ["failed", false, { ...all, restart: false }],
+    ["stopped", false, { ...all, restart: false, stop: false }],
+    ["starting", false, { ...none, delete: true }],
+    ["running", true, { ...none, delete: true }],
+    // Without Docker nothing can run, and a delete could not save the data first.
+    ["unavailable", false, { ...none, delete: false }],
+    [undefined, false, { ...all, restart: false, stop: false }],
+  ] as const)("%s, acting %s", (phase, acting, offered) => {
+    expect(appActionsFor({ phase, acting })).toEqual(offered);
   });
 });

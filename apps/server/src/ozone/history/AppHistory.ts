@@ -21,6 +21,7 @@ import * as BuildRepo from "../builds/BuildRepo.ts";
 import * as BuildStore from "../builds/BuildStore.ts";
 import * as AppData from "../data/AppData.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
+import { failed } from "../errors.ts";
 
 /**
  * An app's past, one commit per passed task, and the way back to any point of it: the code and
@@ -37,7 +38,6 @@ export class AppHistory extends Context.Service<
 >()("t3/ozone/history/AppHistory") {}
 
 const HISTORY_LENGTH = 50;
-const failed = (message: string) => new OzoneAppError({ reason: "failed", message });
 
 /** Work that a restore would pull the files out from under. */
 const isBusy = (build: OzoneBuild) =>

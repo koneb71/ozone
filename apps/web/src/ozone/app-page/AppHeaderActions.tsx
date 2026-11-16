@@ -7,17 +7,15 @@ import {
   PlayIcon,
   RotateCwIcon,
   SquareIcon,
-  Trash2Icon,
 } from "lucide-react";
-import { useState } from "react";
 
 import { Button } from "~/components/ui/button";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
 import { Spinner } from "~/components/ui/spinner";
 
-import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { appActionsFor } from "../appPage.logic";
+import { useDeleteAppItem } from "../DeleteApp";
 import { StatusDot } from "../ui/StatusDot";
-import { DELETE_APP_DESCRIPTION, useDeleteApp } from "../useDeleteApp";
 import { useOpenAppThread } from "../useOpenAppThread";
 import { DeployButton } from "./DeployButton";
 import type { AppDeploy } from "./useAppDeploy";
@@ -35,9 +33,9 @@ export function AppHeaderActions(props: {
   const production = props.deploy.status;
   const runtime = useAppRuntime(app, environmentId);
   const thread = useOpenAppThread(environmentId);
-  const removal = useDeleteApp(environmentId);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const phase = runtime.phase;
+  const offered = appActionsFor({ phase, acting: runtime.working !== null });
+  const deletion = useDeleteAppItem({ app, environmentId, disabled: !offered.delete });
   const stopped = phase === "stopped" || phase === "failed";
   const busy = runtime.working !== null || phase === "starting";
 
@@ -78,44 +76,23 @@ export function AppHeaderActions(props: {
           <EllipsisIcon />
         </MenuTrigger>
         <MenuPopup align="end">
-          <MenuItem
-            disabled={busy || (phase !== "running" && phase !== "unhealthy")}
-            onClick={() => void runtime.act("restart")}
-          >
+          <MenuItem disabled={!offered.restart} onClick={() => void runtime.act("restart")}>
             <RotateCwIcon />
             Restart
           </MenuItem>
-          <MenuItem disabled={busy} onClick={() => void runtime.act("rebuild")}>
+          <MenuItem disabled={!offered.rebuild} onClick={() => void runtime.act("rebuild")}>
             <HammerIcon />
             Rebuild
           </MenuItem>
-          <MenuItem
-            disabled={busy || stopped || phase === "unavailable" || phase === undefined}
-            onClick={() => void runtime.act("stop")}
-          >
+          <MenuItem disabled={!offered.stop} onClick={() => void runtime.act("stop")}>
             <SquareIcon />
             Stop
           </MenuItem>
           <MenuSeparator />
-          <MenuItem
-            variant="destructive"
-            disabled={phase === "unavailable" || removal.deleting}
-            onClick={() => setConfirmDelete(true)}
-          >
-            <Trash2Icon />
-            Delete app
-          </MenuItem>
+          {deletion.item}
         </MenuPopup>
       </Menu>
-      <ConfirmDialog
-        open={confirmDelete}
-        onOpenChange={setConfirmDelete}
-        title={`Delete ${app.name}?`}
-        description={DELETE_APP_DESCRIPTION}
-        confirmLabel="Delete app"
-        destructive
-        onConfirm={() => void removal.remove(app)}
-      />
+      {deletion.dialog}
     </>
   );
 }

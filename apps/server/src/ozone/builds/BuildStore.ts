@@ -9,6 +9,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as SqlSchema from "effect/sql/SqlSchema";
 import * as Stream from "effect/Stream";
+import { storageFailed } from "../errors.ts";
 
 /** One build per lead thread, stored whole: it is small, and always read and written as one. */
 export class BuildStore extends Context.Service<
@@ -43,8 +44,6 @@ const CREATE_BUILDS_TABLE = `CREATE TABLE IF NOT EXISTS ozone_builds (
 
 const BuildJson = Schema.fromJsonString(OzoneBuild);
 const encodeBuild = Schema.encodeEffect(BuildJson);
-const storageFailed = (action: string) => () =>
-  new OzoneAppError({ reason: "failed", message: `Ozone could not ${action}.` });
 
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;

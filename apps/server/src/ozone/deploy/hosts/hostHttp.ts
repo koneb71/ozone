@@ -4,8 +4,8 @@ import * as Effect from "effect/Effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import { failed } from "../../errors.ts";
 
-export const failed = (message: string) => new OzoneAppError({ reason: "failed", message });
 const decodeJson = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown));
 
 /** How long a host gets to build and start a commit. */

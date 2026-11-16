@@ -123,7 +123,7 @@ export const layer: Layer.Layer<ProjectionMaintenanceV2, never, SqlClient.SqlCli
             event.sequence,
             CASE
               WHEN event.application_event_version = 1 THEN 0
-              -- The legacy importer treats a thread without thread.created as not yet imported.
+              -- Every thread's first event; pruning it has not been shown safe.
               WHEN event.event_type = 'thread.created' THEN 0
               -- Codex usage history reads the selection a run attempt started with.
               WHEN event.event_type = 'run.updated'

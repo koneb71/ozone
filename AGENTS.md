@@ -54,7 +54,7 @@ More terms: [glossary](docs/internals/glossary.md).
 
 ## Names
 
-Everything a person reads says Ozone, and the command is `ozone`. Internal identifiers keep their names, because existing installs have saved them: the `@t3tools/*` packages, storage keys, the `t3code://` scheme, `t3.json`, the `t3_*` MCP tool names, the `t3-code` MCP server key, the `t3code/` lint rules, and a worktree's `.t3` directory. Do not rename them. Environment variables are the exception: they are `OZONE_*`.
+Everything a person reads says Ozone, and the command is `ozone`. Internal identifiers keep their names, because existing installs have saved them: the `@t3tools/*` packages, storage keys, the `t3code://` scheme, `t3.json`, the `t3_*` MCP tool names, the `t3-code` MCP server key, the `t3code/` lint rules, and a worktree's `.t3` directory. Do not rename them. Environment variables a person sets are the exception: they are `OZONE_*`. The `T3_*` variables Ozone sets for its own child processes, such as `T3_MCP_URL` and `T3_SERVICE_LAUNCHER_CONTEXT`, are internal and keep their names.
 
 ## The three ways to hurt yourself
 
@@ -92,13 +92,12 @@ An empty database is a bad test. Seed your worktree's `.t3` with a copy of real 
 
 - The first `vp run dev` in a worktree does this for you when its database is missing and the source is at most 500 MiB. Larger sources warn and dev starts with an empty database. `--no-seed` or `OZONE_DEV_SEED=0` skips seeding. Manual migration still accepts larger sources and may use substantial disk space before pruning.
 - Run `vp run migrate-dev-db` with your dev server stopped to refresh. It rebuilds `<worktree>/.t3/userdata/statev2.sqlite` from a read-only snapshot of `~/.ozone/userdata/statev2.sqlite`, the developer's real data. It keeps recent projects and their stopped threads, and drops scheduled tasks, pending work, auth sessions, and links to other environments, so your dev server never runs the developer's agents or reaches their other machines. Raise `--projects` and `--threads-per-project` for more data.
-- Refresh `statev2.sqlite`, not `state.sqlite`. The server copies the V1 `state.sqlite` only when `statev2.sqlite` is missing.
 - Bring `secrets` and `settings.json` only if the flow under test needs them.
 - Copy in, never symlink. Data flows one way: into your sandbox, never back out.
 
 ## Verifying
 
-- Before you push, run `vp run check:changed`. It runs CI's fast checks for changed files: format, lint, knip, typecheck of affected packages and dependents, tests beside changes, and the cross-file checks those miss. CI still runs the full test suites.
+- Before you push, run `vp run check:changed`. It runs CI's fast checks for changed files: format, lint, knip, typecheck of affected packages and dependents, tests beside changes, and the cross-file checks those miss. CI runs the whole web suite and the app builder's tests (`apps/server/src/ozone`, `apps/web/src/ozone`). It runs no other tests: for the rest of the server, the desktop app, the packages and the scripts, run the test folders you touched.
 - While you iterate, run `vp test run <files>`. For big files, add `-t "<name>"`.
 - Use `vp run typecheck`; it caches per package. Each package runs `effect-tsgo tsrs --noEmit`, the Rust TypeScript 7 checker with Effect's diagnostics built in. There is no `typescript` package to run.
 - Run `node -e` snippets from `apps/server` or the owning package. `effect` does not resolve from the repo root.
@@ -107,7 +106,7 @@ An empty database is a bad test. Seed your worktree's `.t3` with a copy of real 
 - Test at one layer: the lowest one that fails on `main`. Do not repeat the case in a wrapper test, at each call site, or in two clients' copies of the same logic.
 - Write a browser test only for behavior that needs a real browser: layout and scrolling, focus and pointer input, real workers, or a component wired to its hooks. Logic a component calls gets a unit test beside it (`*.logic.test.ts`). A browser test file spends seconds in CI loading its module graph before its first test runs; a unit test takes milliseconds.
 - [Testing](docs/internals/testing.md) carries these same test rules, plus review guidance. Change both together.
-- **Do not run repo-wide checks.** No `vp check`, no `vp run -r test`, no `vp run -r typecheck` unless I ask. CI owns the full suite.
+- **Do not run repo-wide checks.** No `vp check`, no `vp run -r test`, no `vp run -r typecheck` unless I ask. CI does not run them either, so the folders you touched are yours to run.
 - Backend behavior changes ship with focused tests for that behavior.
 - Proof for a bug fix depends on the bug. Logic, data, state, and protocol bugs get a failing test first (the fewest that fail on `main` for that reason, in an existing case of the module's test file where one fits), then the fix. Purely visual bugs (spacing, colour, alignment, a layout shift) get before/after captures as their proof and no test: do not add UI tests for nitpicks, and do not ask for one in review when a capture already shows it. A server-only fix with no visible surface ships the test plus a short runtime transcript. For a bug a user can reproduce in the web client, `vp run scenarios:prove` shows it failing on base and passing on the fix in the real app; see [Scenarios](docs/operations/scenarios.md).
 - The server is event-sourced, and side effects run after the command commits. In tests, drain the effect worker (`OrchestrationEffectWorkerV2.drain`) or await the specific persisted event or `Deferred` that marks the milestone. Never wait on sleeps or polling. A test that needs a timeout to pass is wrong. Concretely:

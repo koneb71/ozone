@@ -26,6 +26,7 @@ import * as GitVcsDriver from "../../vcs/GitVcsDriver.ts";
 import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as AppCompose from "../runtime/AppCompose.ts";
 import * as DockerCli from "../runtime/DockerCli.ts";
+import { failed } from "../errors.ts";
 
 export interface SnapshotInput {
   readonly projectId: ProjectId;
@@ -150,7 +151,6 @@ const StoredSnapshotJson = Schema.fromJsonString(StoredSnapshot);
 const decodeStored = Schema.decodeUnknownEffect(StoredSnapshotJson);
 const encodeStored = Schema.encodeEffect(StoredSnapshotJson);
 
-const failed = (message: string) => new OzoneAppError({ reason: "failed", message });
 /** What a failed command said, kept short. */
 const tail = (output: { readonly stdout: string; readonly stderr: string }) =>
   (output.stderr.trim() || output.stdout.trim()).slice(-600);

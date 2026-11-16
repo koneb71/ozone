@@ -186,8 +186,6 @@ describe("DesktopSettings", () => {
           serverExposureMode: "network-accessible",
           tailscaleServeEnabled: true,
           tailscaleServePort: 8443,
-          updateChannel: "latest",
-          updateChannelConfiguredByUser: false,
           wslBackendEnabled: false,
           wslOnly: false,
           wslDistro: null,
@@ -300,60 +298,21 @@ describe("DesktopSettings", () => {
     ),
   );
 
-  it.effect("migrates legacy implicit update channels to the runtime default", () =>
+  it.effect("loads a settings file that still names an update channel", () =>
     withSettings(
       Effect.gen(function* () {
         const settings = yield* DesktopAppSettings.DesktopAppSettings;
         yield* writeSettingsPatch({
-          serverExposureMode: "local-only",
-          updateChannel: "latest",
-        });
-
-        assert.deepEqual(yield* settings.load, {
-          linuxPasswordStore: "auto",
-          localEnvironmentEnabled: true,
-          mainWindowBounds: null,
-          mainWindowMaximized: false,
-          serverExposureMode: "local-only",
-          tailscaleServeEnabled: false,
-          tailscaleServePort: 443,
+          serverExposureMode: "network-accessible",
           updateChannel: "nightly",
-          updateChannelConfiguredByUser: false,
-          wslBackendEnabled: false,
-          wslOnly: false,
-          wslDistro: null,
-        } satisfies DesktopAppSettings.DesktopSettings);
-      }),
-      { appVersion: "0.0.17-nightly.20260415.1" },
-    ),
-  );
-
-  it.effect("preserves explicit stable update channel on nightly builds", () =>
-    withSettings(
-      Effect.gen(function* () {
-        const settings = yield* DesktopAppSettings.DesktopAppSettings;
-        yield* writeSettingsPatch({
-          serverExposureMode: "local-only",
-          updateChannel: "latest",
           updateChannelConfiguredByUser: true,
         });
 
         assert.deepEqual(yield* settings.load, {
-          linuxPasswordStore: "auto",
-          localEnvironmentEnabled: true,
-          mainWindowBounds: null,
-          mainWindowMaximized: false,
-          serverExposureMode: "local-only",
-          tailscaleServeEnabled: false,
-          tailscaleServePort: 443,
-          updateChannel: "latest",
-          updateChannelConfiguredByUser: true,
-          wslBackendEnabled: false,
-          wslOnly: false,
-          wslDistro: null,
-        } satisfies DesktopAppSettings.DesktopSettings);
+          ...DesktopAppSettings.DEFAULT_DESKTOP_SETTINGS,
+          serverExposureMode: "network-accessible",
+        });
       }),
-      { appVersion: "0.0.17-nightly.20260415.1" },
     ),
   );
 

@@ -16,7 +16,6 @@ export interface ResolvedBackgroundActivitySettings {
   readonly hostPowerMonitorIdleInterval: Duration.Duration;
   readonly pauseWhenHostLocked: boolean;
   readonly pauseWhenHostLowPower: boolean;
-  readonly pauseWhenClientLowPower: boolean;
   readonly pauseWhenOnBattery: boolean;
 }
 
@@ -29,7 +28,6 @@ const PRESET_SETTINGS: Record<BackgroundActivityProfile, ResolvedBackgroundActiv
     hostPowerMonitorIdleInterval: Duration.minutes(2),
     pauseWhenHostLocked: true,
     pauseWhenHostLowPower: false,
-    pauseWhenClientLowPower: false,
     pauseWhenOnBattery: false,
   },
   balanced: {
@@ -40,7 +38,6 @@ const PRESET_SETTINGS: Record<BackgroundActivityProfile, ResolvedBackgroundActiv
     hostPowerMonitorIdleInterval: Duration.minutes(5),
     pauseWhenHostLocked: true,
     pauseWhenHostLowPower: true,
-    pauseWhenClientLowPower: true,
     pauseWhenOnBattery: false,
   },
   "battery-saver": {
@@ -51,7 +48,6 @@ const PRESET_SETTINGS: Record<BackgroundActivityProfile, ResolvedBackgroundActiv
     hostPowerMonitorIdleInterval: Duration.minutes(10),
     pauseWhenHostLocked: true,
     pauseWhenHostLowPower: true,
-    pauseWhenClientLowPower: true,
     pauseWhenOnBattery: true,
   },
 };
@@ -89,7 +85,6 @@ export function resolveBackgroundActivitySettings(
       overrides.hostPowerMonitorIdleInterval ?? preset.hostPowerMonitorIdleInterval,
     pauseWhenHostLocked: overrides.pauseWhenHostLocked ?? preset.pauseWhenHostLocked,
     pauseWhenHostLowPower: overrides.pauseWhenHostLowPower ?? preset.pauseWhenHostLowPower,
-    pauseWhenClientLowPower: overrides.pauseWhenClientLowPower ?? preset.pauseWhenClientLowPower,
     pauseWhenOnBattery: overrides.pauseWhenOnBattery ?? preset.pauseWhenOnBattery,
   };
 }
@@ -109,7 +104,6 @@ function resolvedSettingsEqual(
     durationsEqual(a.hostPowerMonitorIdleInterval, b.hostPowerMonitorIdleInterval) &&
     a.pauseWhenHostLocked === b.pauseWhenHostLocked &&
     a.pauseWhenHostLowPower === b.pauseWhenHostLowPower &&
-    a.pauseWhenClientLowPower === b.pauseWhenClientLowPower &&
     a.pauseWhenOnBattery === b.pauseWhenOnBattery
   );
 }
@@ -168,9 +162,6 @@ export function normalizeBackgroundActivitySettings(
       : {}),
     ...(resolved.pauseWhenHostLowPower !== preset.pauseWhenHostLowPower
       ? { pauseWhenHostLowPower: resolved.pauseWhenHostLowPower }
-      : {}),
-    ...(resolved.pauseWhenClientLowPower !== preset.pauseWhenClientLowPower
-      ? { pauseWhenClientLowPower: resolved.pauseWhenClientLowPower }
       : {}),
     ...(resolved.pauseWhenOnBattery !== preset.pauseWhenOnBattery
       ? { pauseWhenOnBattery: resolved.pauseWhenOnBattery }
@@ -253,7 +244,6 @@ export function normalizeServerBackgroundActivitySettings(
       hostPowerMonitorIdleInterval: resolved.hostPowerMonitorIdleInterval,
       pauseWhenHostLocked: resolved.pauseWhenHostLocked,
       pauseWhenHostLowPower: resolved.pauseWhenHostLowPower,
-      pauseWhenClientLowPower: resolved.pauseWhenClientLowPower,
       pauseWhenOnBattery: resolved.pauseWhenOnBattery,
     },
   });

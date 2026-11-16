@@ -19,7 +19,7 @@ Go to **Settings → Providers → Text generators** and choose **Add generator*
   server makes the requests, so on a remote environment `localhost` means that machine, not yours.
 
 Give it a name if you add more than one from the same service. Your key is stored on the
-environment, like other [secrets](./secrets.md), and can come from a secret provider instead of
+environment. In a build with [secret providers](./secrets.md) it can come from one instead of
 being typed in.
 
 Ozone lists the service's models to check the connection, then shows the model picker for each

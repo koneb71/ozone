@@ -21,6 +21,7 @@ import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as AppData from "../data/AppData.ts";
 import { parseHeldBack } from "../data/migrationGuard.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
+import { failed as refuse } from "../errors.ts";
 import { WAKE } from "./briefs.ts";
 import * as BuildGates from "./BuildGates.ts";
 import * as BuildModel from "./BuildModel.ts";
@@ -69,7 +70,6 @@ interface Job {
 
 const failures = (gates: ReadonlyArray<OzoneGateResult>) => gates.filter((gate) => !gate.ok);
 const isAppError = Schema.is(OzoneAppError);
-const refuse = (message: string) => new OzoneAppError({ reason: "failed", message });
 const keyOf = (threadId: ThreadId, check: Check) =>
   check === "final" ? `${threadId}:final` : `${threadId}:task:${check.task}`;
 

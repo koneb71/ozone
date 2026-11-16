@@ -1,5 +1,4 @@
 import { OzoneAppError, type OzoneVersionCheck } from "@t3tools/contracts";
-import { cliReleaseChannelOf } from "@t3tools/shared/cliRelease";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { compareSemverVersions } from "@t3tools/shared/semver";
 import * as Context from "effect/Context";
@@ -24,7 +23,7 @@ const make = Effect.gen(function* () {
   const environment = yield* HostProcess.Environment;
   const check = Effect.fn("OzoneRelease.check")(function* () {
     const current = packageJson.version;
-    const latest = yield* resolveNewestVersion(cliReleaseChannelOf(current)).pipe(
+    const latest = yield* resolveNewestVersion().pipe(
       Effect.provideService(HttpClient.HttpClient, http),
       Effect.provideService(HostProcess.Environment, environment),
       Effect.mapError((error) => new OzoneAppError({ reason: "failed", message: error.message })),

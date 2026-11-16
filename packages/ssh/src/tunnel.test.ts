@@ -190,6 +190,8 @@ describe("ssh tunnel scripts", () => {
   it.each([
     { host: "Darwin x86_64", system: "Darwin", machine: "x86_64", downloads: false },
     { host: "Darwin arm64", system: "Darwin", machine: "arm64", downloads: true },
+    { host: "Linux x86_64", system: "Linux", machine: "x86_64", downloads: true },
+    { host: "Linux aarch64", system: "Linux", machine: "aarch64", downloads: false },
   ])(
     "only downloads a release archive the host can run: $host",
     ({ system, machine, downloads }) => {

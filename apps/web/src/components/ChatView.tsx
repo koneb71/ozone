@@ -376,7 +376,7 @@ import {
 } from "./chat/useSystemComposerBanners";
 import { planFirstMessage } from "../ozone/home.logic";
 import { ozoneEnvironment } from "../ozone/state";
-import { useAppPlansFirst, useOzoneComposer } from "../ozone/useOzoneComposer";
+import { useOzoneComposer } from "../ozone/useOzoneComposer";
 import { planReviewBannerItem } from "./chat/ComposerPlanReview";
 import { type PlanAnswer, planToAnswer } from "./chat/planReview.logic";
 import { useDraftHeroLayoutTransition } from "./chat/useDraftHeroLayoutTransition";
@@ -1317,10 +1317,13 @@ export default function ChatView(props: ChatViewProps) {
     autoUpdateEnvironments,
   });
   // An app's notices join the composer's, and files picked on Home reach it.
-  const ozoneComposerBannerItems = useOzoneComposer(activeThreadRef, activeProject?.id ?? null);
+  const { banners: ozoneComposerBannerItems, app: ozoneApp } = useOzoneComposer(
+    activeThreadRef,
+    activeProject?.id ?? null,
+  );
   // An app's thread plans through its build, with its own "Plan first" switch.
-  const isOzoneAppThread = ozoneComposerBannerItems.some((item) => item.id === "ozone-app");
-  const appPlansFirst = useAppPlansFirst(activeThreadRef, activeProject?.id ?? null);
+  const isOzoneAppThread = ozoneApp !== null;
+  const appPlansFirst = ozoneApp?.settings.reviewPlans === true;
   const grantBuildPlan = useAtomCommand(ozoneEnvironment.approveBuild, { reportFailure: false });
   const setComposerInteractionMode = useComposerDraftStore((store) => store.setInteractionMode);
   // The plan the person already answered here, so its notice does not come back.

@@ -16,10 +16,7 @@ import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
 import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
 import { useScratchProject } from "~/hooks/useScratchProject";
 import { newMessageId, newThreadId } from "~/lib/utils";
-import {
-  resolveDefaultProviderModelSelection,
-  resolveProjectDefaultProviderModelSelection,
-} from "~/providerInstances";
+import { resolveNewThreadModelSelection } from "~/providerInstances";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { waitForProject, waitForThreadShell } from "~/state/entities";
 import { environmentPresentations } from "~/state/presentation";
@@ -32,7 +29,7 @@ import { DEFAULT_INTERACTION_MODE } from "~/types";
 
 import { appNameFromPrompt, planFirstMessage } from "./home.logic";
 import { queueHomeFiles } from "./homeFiles";
-import { ozoneEnvironment } from "./state";
+import { ozoneEnvironment, refreshApps } from "./state";
 
 /** Null when the launch worked and the thread is open; otherwise what to tell the user. */
 type LaunchOutcome = string | null;
@@ -56,12 +53,7 @@ function newThreadDefaults(
   const providers =
     appAtomRegistry.get(environmentPresentations.providersByEnvironmentAtom).get(environmentId) ??
     [];
-  const modelSelection: ModelSelection | null =
-    chosen !== null
-      ? chosen
-      : settings.defaultModelSelection === null
-        ? resolveProjectDefaultProviderModelSelection(providers, settings, projectId)
-        : resolveDefaultProviderModelSelection(providers, settings.defaultModelSelection);
+  const modelSelection = chosen ?? resolveNewThreadModelSelection(providers, settings, projectId);
   if (modelSelection === null) return null;
   return {
     modelSelection,
@@ -163,7 +155,7 @@ export function useOzoneLaunch() {
     });
     if (created._tag === "Failure") return failureMessage(created, "Could not create the app.");
     // The thread it opens next looks the new app up in this list.
-    appAtomRegistry.refresh(ozoneEnvironment.apps({ environmentId, input: {} }));
+    refreshApps(environmentId);
     const { projectId } = created.value.app;
     const arrived = await waitForProject(scopeProjectRef(environmentId, projectId)).then(
       () => true,

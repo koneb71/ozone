@@ -620,14 +620,12 @@ const prepareFirstStart = Effect.fn("dev-runner.prepareFirstStart")(function* (i
 
   if (input.worktreeHome !== undefined && input.mode !== "dev:web") {
     const stateDir = path.join(input.worktreeHome, "userdata");
-    for (const name of ["statev2.sqlite", "state.sqlite"]) {
-      const file = path.join(stateDir, name);
-      const info = yield* fs.stat(file).pipe(Effect.option);
-      if (Option.isSome(info) && Number(info.value.size) > LARGE_DEV_DATABASE_BYTES) {
-        yield* Effect.logWarning(
-          `[dev-runner] ${file} is ${Math.round(Number(info.value.size) / 1024 / 1024)} MB. With the dev server stopped, \`vp run migrate-dev-db\` rebuilds statev2.sqlite as a small copy of recent data.`,
-        );
-      }
+    const file = path.join(stateDir, "statev2.sqlite");
+    const size = yield* fs.stat(file).pipe(Effect.option);
+    if (Option.isSome(size) && Number(size.value.size) > LARGE_DEV_DATABASE_BYTES) {
+      yield* Effect.logWarning(
+        `[dev-runner] ${file} is ${Math.round(Number(size.value.size) / 1024 / 1024)} MB. With the dev server stopped, \`vp run migrate-dev-db\` rebuilds statev2.sqlite as a small copy of recent data.`,
+      );
     }
     const source = path.join(
       yield* HostProcess.HomeDirectory,
@@ -635,13 +633,7 @@ const prepareFirstStart = Effect.fn("dev-runner.prepareFirstStart")(function* (i
       "userdata",
       "statev2.sqlite",
     );
-    // A V1 state.sqlite counts as data too: the server imports it only while
-    // statev2.sqlite is missing, so seeding would hide it.
-    if (
-      input.seed &&
-      !(yield* exists(path.join(stateDir, "statev2.sqlite"))) &&
-      !(yield* exists(path.join(stateDir, "state.sqlite")))
-    ) {
+    if (input.seed && !(yield* exists(file))) {
       const info = yield* fs.stat(source).pipe(Effect.option);
       if (Option.isSome(info)) {
         if (Number(info.value.size) > LARGE_DEV_DATABASE_BYTES) {

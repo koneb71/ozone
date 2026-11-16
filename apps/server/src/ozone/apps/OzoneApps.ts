@@ -40,6 +40,7 @@ import * as GitVcsDriver from "../../vcs/GitVcsDriver.ts";
 import * as AppData from "../data/AppData.ts";
 import * as AppDeploy from "../deploy/AppDeploy.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
+import { failed } from "../errors.ts";
 import * as AppRegistry from "./AppRegistry.ts";
 import { appSlug, safeAppName, scaffold } from "./AppScaffolder.ts";
 import { DEFAULT_TEMPLATE_ID, TEMPLATES, findTemplate, templateFiles } from "./templates.ts";
@@ -90,8 +91,6 @@ const decodeSnapshotOwner = Schema.decodeUnknownEffect(
   Schema.fromJsonString(Schema.Struct({ snapshot: Schema.Struct({ projectId: ProjectId }) })),
 );
 const decodeManifest = Schema.decodeUnknownEffect(Schema.fromJsonString(OzoneAppManifest));
-
-const failed = (message: string) => new OzoneAppError({ reason: "failed", message });
 
 export const make = Effect.gen(function* () {
   const registry = yield* AppRegistry.AppRegistry;

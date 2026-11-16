@@ -140,7 +140,6 @@ import * as ThreadManagement from "./orchestration-v2/ThreadManagementService.ts
 import * as ProjectStore from "./orchestration-v2/ProjectStore.ts";
 import * as ProjectionStore from "./orchestration-v2/ProjectionStore.ts";
 import * as EventSink from "./orchestration-v2/EventSink.ts";
-import * as LegacyV1ThreadImporter from "./orchestration-v2/legacy/LegacyV1ThreadImporter.ts";
 import * as ThreadCommandExecutor from "./orchestration-v2/ThreadCommandExecutor.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as OrchestrationEventStore from "./persistence/OrchestrationEventStore.ts";
@@ -341,7 +340,6 @@ it.live.each(["thread", "shell"] as const)(
       });
       const items = yield* subscription.pipe(
         Effect.provideService(ThreadManagement.ThreadManagementService, {
-          ensureLegacyTranscript: () => Effect.void,
           getShellSnapshot: () => Effect.die("shell resume must not load a full snapshot"),
           listActiveSubagentThreadIds: () => Effect.succeed([]),
           streamStoredEventsFrom: (
@@ -421,7 +419,6 @@ it.effect("coalesces streaming replay before synchronization and the live tail",
     }).pipe(
       Effect.flatMap(Stream.runCollect),
       Effect.provideService(ThreadManagement.ThreadManagementService, {
-        ensureLegacyTranscript: () => Effect.void,
         streamStoredEventsFrom: () =>
           Stream.unwrap(
             insert(4, "Next", false).pipe(
@@ -646,7 +643,6 @@ it.effect("shares each live event item across subscribers and dedupes bodies per
         Effect.flatMap(Stream.runCollect),
         Effect.map((items) => Array.from(items)),
         Effect.provideService(ThreadManagement.ThreadManagementService, {
-          ensureLegacyTranscript: () => Effect.void,
           streamStoredEventsFrom: () => Stream.fromIterable(live),
         } as unknown as ThreadManagement.ThreadManagementService["Service"]),
       );
@@ -1454,7 +1450,6 @@ it.effect("a missing thread worktree gets its project's skills in the cwd snapsh
             Layer.mock(WorkspacePaths.WorkspacePaths)({}),
             Layer.mock(EventSink.EventSinkV2)({}),
             IdAllocator.layer,
-            Layer.mock(LegacyV1ThreadImporter.LegacyV1ThreadImporter)({}),
             Layer.mock(ThreadCommandExecutor.ThreadCommandExecutor)({}),
           ),
         ),
@@ -1735,7 +1730,6 @@ it.effect.each([
       });
       const exit = yield* subscription.pipe(
         Effect.provideService(ThreadManagement.ThreadManagementService, {
-          ensureLegacyTranscript: () => Effect.void,
           getThreadSnapshot: () => Effect.die("snapshot"),
           listActiveShellIndex: () => Effect.die("snapshot"),
           readShellSnapshot: () => Effect.die("snapshot"),
@@ -1806,7 +1800,6 @@ it.effect.each(["thread", "shell"] as const)(
       }).pipe(
         Effect.provideService(Statement.CurrentTransformer, gateReplayRead),
         Effect.provideService(ThreadManagement.ThreadManagementService, {
-          ensureLegacyTranscript: () => Effect.void,
           getThreadSnapshot: () => Effect.die("snapshot"),
           listActiveShellIndex: () => Effect.die("snapshot"),
           readShellSnapshot: () => Effect.die("snapshot"),
@@ -1866,7 +1859,6 @@ it.effect("thread resume at its own high-water below the pruned boundary skips t
       afterSequence: last!.sequence,
     }).pipe(
       Effect.provideService(ThreadManagement.ThreadManagementService, {
-        ensureLegacyTranscript: () => Effect.void,
         getThreadSnapshot: () => Effect.die("snapshot"),
         streamStoredEventsFrom: () => Stream.empty,
       } as unknown as ThreadManagement.ThreadManagementService["Service"]),

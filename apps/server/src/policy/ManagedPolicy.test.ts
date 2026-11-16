@@ -449,8 +449,8 @@ it.layer(NodeServices.layer)("ManagedPolicy.load", (it) => {
           allowNightly: false,
         };
         const policy = yield* loadFrom(JSON.stringify({ ...base, limits: { updates } }));
-        const { feedUrl: _feedUrl, ...clientUpdates } = updates;
-        assert.deepEqual(policy.summary?.limits, { updates: clientUpdates });
+        // The mirror stays on the server, and the nightly key is accepted and ignored.
+        assert.deepEqual(policy.summary?.limits, { updates: { mode: "auto" } });
         for (const invalid of [
           { mode: "auto", feedUrl: "http://updates.example/t3" },
           { mode: "manual" },

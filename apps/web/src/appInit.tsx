@@ -18,7 +18,6 @@ import { startBackgroundThreadAnnouncements } from "./components/BackgroundThrea
 import { startSshPasswordPromptQueue } from "./components/desktop/SshPasswordPromptDialog";
 import { startHostFreezeToasts } from "./components/HostFreezeToastCoordinator";
 import { startKeybindingsUpdateToasts } from "./components/KeybindingsUpdateToast";
-import { startLegacyThreadMigrationToast } from "./components/LegacyThreadMigrationToast";
 import { startPermissionUpdateNotices } from "./components/PermissionUpdateNotice";
 import { startAgentOpenedPreviews } from "./components/preview/agentOpenedPreviews";
 import { startMainAppLocationTracking } from "./components/sidebar/mainAppLocation";
@@ -26,8 +25,8 @@ import { startDesktopUpdateLaunchNotice } from "./components/sidebar/updateEvery
 import { startSlowRpcRequestToasts } from "./components/SlowRpcRequestToastCoordinator";
 import { startThreadNotifications } from "./components/ThreadNotificationCoordinator";
 import { startGuideRunNotifications } from "./components/pullRequest/guide/PullRequestGuideRunCoordinator";
-import { APP_BASE_NAME, APP_DISPLAY_NAME, APP_STAGE_LABEL } from "./branding";
-import { resolveServerBackedAppDisplayName, resolveWindowTitle } from "./branding.logic";
+import { APP_DISPLAY_NAME } from "./branding";
+import { resolveWindowTitle } from "./branding.logic";
 import { isElectron } from "./env";
 import {
   subscribeComposerDraftModelReconciliation,
@@ -150,13 +149,7 @@ function startDocumentTitle(router: AppRouter): void {
             ),
           );
     const title = resolveWindowTitle({
-      appDisplayName: resolveServerBackedAppDisplayName({
-        baseName: APP_BASE_NAME,
-        fallbackDisplayName: APP_DISPLAY_NAME,
-        fallbackStageLabel: APP_STAGE_LABEL,
-        primaryServerVersion:
-          appAtomRegistry.get(primaryServerConfigAtom)?.environment.serverVersion ?? null,
-      }),
+      appDisplayName: APP_DISPLAY_NAME,
       projectTitle: project?.title ?? null,
       threadTitle: thread?.title ?? null,
       desktop: isElectron,
@@ -278,7 +271,6 @@ export function startAppServices(): AppRouter {
   startKeybindingsUpdateToasts();
   startSlowRpcRequestToasts();
   startHostFreezeToasts();
-  startLegacyThreadMigrationToast();
   startPermissionUpdateNotices(router);
   startThreadNotifications(appAtomRegistry, router);
   startGuideRunNotifications(appAtomRegistry, router);

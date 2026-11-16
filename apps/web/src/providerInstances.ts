@@ -246,6 +246,17 @@ export function resolveDefaultProviderModelSelection(
   return model ? { instanceId, model } : null;
 }
 
+/** The model a new thread starts on: the saved default, else the project's first ready provider. */
+export function resolveNewThreadModelSelection(
+  providers: ReadonlyArray<ServerProvider>,
+  settings: ServerSettings,
+  projectId: ProjectId | null,
+): ModelSelection | null {
+  return settings.defaultModelSelection === null
+    ? resolveProjectDefaultProviderModelSelection(providers, settings, projectId)
+    : resolveDefaultProviderModelSelection(providers, settings.defaultModelSelection);
+}
+
 export function resolveProjectDefaultProviderModelSelection(
   providers: ReadonlyArray<ServerProvider>,
   settings: ServerSettings,

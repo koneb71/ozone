@@ -33,6 +33,15 @@ export function previewPdfAssetUrl(rawUrl: string, httpBaseUrl: string | null): 
   }
 }
 
+/** The origin of a URL, or null for text that is not one. */
+export function originOf(url: string): string | null {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
 export function newPreviewTabId(): string {
   nextPreviewTabSequence += 1;
   return `${TAB_ID_PREFIX}${nextPreviewTabSequence.toString(36)}`;

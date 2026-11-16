@@ -737,14 +737,12 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           const [seedArgs] = yield* spawnedArgs(undefined);
           assert.includeMembers([...(seedArgs ?? [])], ["--base-dir", path.join(root, ".t3")]);
 
-          // Either database means the worktree already has data.
-          for (const name of ["state.sqlite", "statev2.sqlite"]) {
-            const file = path.join(root, ".t3", "userdata", name);
-            NodeFS.mkdirSync(path.dirname(file), { recursive: true });
-            NodeFS.writeFileSync(file, "");
-            assert.deepStrictEqual(yield* spawnedArgs(undefined), []);
-            NodeFS.rmSync(file);
-          }
+          // A database means the worktree already has data.
+          const file = path.join(root, ".t3", "userdata", "statev2.sqlite");
+          NodeFS.mkdirSync(path.dirname(file), { recursive: true });
+          NodeFS.writeFileSync(file, "");
+          assert.deepStrictEqual(yield* spawnedArgs(undefined), []);
+          NodeFS.rmSync(file);
         }).pipe(Effect.scoped),
       );
 

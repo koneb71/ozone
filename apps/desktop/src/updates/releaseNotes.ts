@@ -1,6 +1,4 @@
-import type { DesktopUpdateChannel, DesktopUpdateReleaseNote } from "@t3tools/contracts";
-
-import { desktopUpdateChannelOf } from "@t3tools/shared/cliRelease";
+import type { DesktopUpdateReleaseNote } from "@t3tools/contracts";
 
 interface ElectronReleaseNoteInfo {
   readonly version: string;
@@ -187,20 +185,17 @@ export function releaseNotesOfOfferedVersion(info: {
   return namesVersion.test(info.releaseName) ? info.releaseNotes : undefined;
 }
 
-/** fullChangelog includes all greater semvers, so preview cuts sort above nightlies of the same base version. */
 export function normalizeDesktopUpdateReleaseNotes(
   releaseNotes: unknown,
   fallbackVersion: string,
-  channel: DesktopUpdateChannel,
   releaseDate?: string,
 ): NormalizedDesktopUpdateReleaseNotes {
-  const rawNotes = (
+  const rawNotes =
     typeof releaseNotes === "string"
       ? [{ version: fallbackVersion, note: releaseNotes }]
       : Array.isArray(releaseNotes)
         ? releaseNotes.filter(isElectronReleaseNoteInfo)
-        : []
-  ).filter((entry) => desktopUpdateChannelOf(entry.version) === channel);
+        : [];
 
   const normalizedNotes = rawNotes.flatMap((entry) => {
     const note = extractReleaseNoteItems(entry.note);

@@ -7,8 +7,9 @@ import type { HttpClient } from "effect/http";
 import type * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
+import { failed } from "../../errors.ts";
 import type { HostDriver, HostIds, HostState } from "./HostDriver.ts";
-import { failed, hostHttp, reading, untilSettled } from "./hostHttp.ts";
+import { hostHttp, reading, untilSettled } from "./hostHttp.ts";
 
 const LABEL = "Vercel";
 const TOKEN_HELP = "Make a token under Account Settings → Tokens.";

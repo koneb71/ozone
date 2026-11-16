@@ -1,13 +1,15 @@
 # Secrets
 
-Ozone can read credentials from a secret provider, so the credential stays in your password
-manager and Ozone saves only a reference to it. Agents can also ask you for a secret in a
-private card instead of in the chat.
+Agents ask you for a secret in a private card instead of in the chat. That works in every build.
 
-The Secrets settings page is in preview and is not in every build yet. Secret requests from agents
-work everywhere.
+Ozone can also read credentials from a secret provider, so the credential stays in your password
+manager and Ozone saves only a reference to it. Secret providers are not in the released builds
+yet: **Settings → Secrets** and the source picker described below appear only in a build made
+from source with `OZONE_FEATURE_SECRETS=1`.
 
 ## Secret providers
+
+This section and the three after it describe a build that has secret providers.
 
 1Password is the supported provider. Ozone reads secrets with the
 [1Password CLI](https://developer.1password.com/docs/cli/) (`op`), so `op` must be installed and
@@ -52,8 +54,8 @@ An agent that needs a token or password shows a secret request card in the threa
 you to paste it into the chat. Type or paste the value and select **Save securely**, or select
 **Decline**. You can answer from any connected app.
 
-If the environment has a secret provider, the card also lets you pick it and enter a reference
-instead of the value. Ozone reads the secret once, when you answer. If 1Password is locked, the
+In a build with secret providers, the card also lets you pick one and enter a reference instead
+of the value. Ozone reads the secret once, when you answer. If 1Password is locked, the
 card says so and the request stays open: unlock it and try again, or enter the value.
 
 The value never appears in the conversation. Most requests keep it from the agent too: Ozone

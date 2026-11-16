@@ -16,6 +16,9 @@ const VERB: Record<OzoneRuntimeAction, string> = {
   migrate: "run the migration of",
 };
 
+export const runtimeFailureTitle = (action: OzoneRuntimeAction, appName: string) =>
+  `Could not ${VERB[action]} ${appName}`;
+
 /** An app's containers as they are now, and what a person can do to them. */
 export function useAppRuntime(app: OzoneApp, environmentId: EnvironmentId) {
   const status =
@@ -25,7 +28,7 @@ export function useAppRuntime(app: OzoneApp, environmentId: EnvironmentId) {
   const runAction = useAtomCommand(ozoneEnvironment.runtimeAct, { reportFailure: false });
   const { working, run } = useOzoneCommand();
   const act = (action: OzoneRuntimeAction) =>
-    run(action, `Could not ${VERB[action]} ${app.name}`, () =>
+    run(action, runtimeFailureTitle(action, app.name), () =>
       runAction({ environmentId, input: { projectId: app.projectId, action } }),
     );
   const phase = status?.phase;

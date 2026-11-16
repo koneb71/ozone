@@ -31,7 +31,6 @@ import {
   WorkspaceBreadcrumbSeparator,
 } from "~/components/WorkspaceBreadcrumb";
 import { cn } from "~/lib/utils";
-import { useEnvironmentQuery } from "~/state/query";
 
 import {
   APP_SECTION_GROUPS,
@@ -40,7 +39,7 @@ import {
   needsDeploy,
   type AppSection,
 } from "../appPage.logic";
-import { ozoneEnvironment } from "../state";
+import { useApp } from "../state";
 import { LoadingRow } from "../ui/SectionRows";
 import { AppHeaderActions } from "./AppHeaderActions";
 import { BuildSection } from "./BuildSection";
@@ -88,10 +87,7 @@ function AppPage(props: {
   readonly projectId: ProjectId;
   readonly section: AppSection;
 }) {
-  const apps = useEnvironmentQuery(
-    ozoneEnvironment.apps({ environmentId: props.environmentId, input: {} }),
-  );
-  const app = apps.data?.apps.find((entry) => entry.projectId === props.projectId) ?? null;
+  const { app, loaded } = useApp(props.environmentId, props.projectId);
   const deploy = useAppDeploy(app, props.environmentId);
   const deployed = deploy.status?.target != null;
 
@@ -124,7 +120,7 @@ function AppPage(props: {
           </header>
           <div key={props.section} className="flex min-h-0 flex-1 flex-col">
             {app === null ? (
-              apps.data === null ? (
+              !loaded ? (
                 <SettingsPageContainer>
                   <LoadingRow label="Loading the app" />
                 </SettingsPageContainer>
@@ -179,7 +175,7 @@ function Section(props: {
     case "deployments":
       return <DeploymentsSection {...shared} />;
     case "monitoring":
-      return <MonitoringSection {...shared} />;
+      return <MonitoringSection {...shared} deploy={props.deploy} />;
     case "servers":
       return <ServersSection environmentId={props.environmentId} />;
     case "notifications":

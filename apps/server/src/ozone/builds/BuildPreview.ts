@@ -4,6 +4,7 @@ import {
   type PreviewSessionSnapshot,
   type ThreadId,
 } from "@t3tools/contracts";
+import { originOf } from "@t3tools/shared/preview";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
@@ -12,14 +13,6 @@ import * as PreviewManager from "../../preview/Manager.ts";
 import * as AppRegistry from "../apps/AppRegistry.ts";
 import { statusOf } from "./BuildModel.ts";
 import * as BuildStore from "./BuildStore.ts";
-
-const originOf = (url: string): string | null => {
-  try {
-    return new URL(url).origin;
-  } catch {
-    return null;
-  }
-};
 
 /** Tabs the server runs that show the app. A tab on another site is the person's own browsing. */
 const serverTabsShowing = (sessions: ReadonlyArray<PreviewSessionSnapshot>, appUrl: string) =>

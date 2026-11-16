@@ -32,7 +32,7 @@ import { AppsFolderDialog } from "./AppsFolderDialog";
 import { DeletedApps, HomeApps } from "./HomeApps";
 import { HomeModelPicker } from "./HomeModelPicker";
 import { OzoneMark } from "./OzoneMark";
-import { ozoneEnvironment } from "./state";
+import { appsQuery } from "./state";
 import { useOzoneLaunch } from "./useOzoneLaunch";
 
 type HomeMode = "build" | "chat";
@@ -81,9 +81,7 @@ export function OzoneHome() {
   // Null until a model is picked: the build or chat then starts on the default.
   const [model, setModel] = useState<ModelSelection | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const apps = useEnvironmentQuery(
-    environmentId === null ? null : ozoneEnvironment.apps({ environmentId, input: {} }),
-  );
+  const apps = useEnvironmentQuery(environmentId === null ? null : appsQuery(environmentId));
   const copy = MODE_COPY[mode];
   const folderIsOnThisMachine =
     isElectron &&

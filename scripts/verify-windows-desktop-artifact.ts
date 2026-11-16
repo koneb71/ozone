@@ -20,17 +20,14 @@ const verifyWindowsDesktopArtifactCli = Command.make("verify-windows-desktop-art
     Flag.withDescription("The electron-builder `win-<arch>-unpacked` directory."),
   ),
   arch: Flag.Literals("arch", ["arm64", "x64"] as const),
-  buildVersion: Flag.String("build-version").pipe(
-    Flag.withDescription("The artifact's build version."),
-  ),
   verbose: Flag.Boolean("verbose").pipe(Flag.withDefault(false)),
 }).pipe(
   Command.withDescription("Verify a Windows desktop artifact's packaged natives load."),
-  Command.withHandler(({ appDir, arch, buildVersion, verbose }) =>
+  Command.withHandler(({ appDir, arch, verbose }) =>
     Effect.gen(function* () {
       yield* verifyWindowsPackagedRuntime({
         packagedAppDir: appDir,
-        appExecutableName: `${resolveDesktopProductName(buildVersion)}.exe`,
+        appExecutableName: `${resolveDesktopProductName()}.exe`,
         targetArch: arch,
         verbose,
       });

@@ -4,9 +4,7 @@
 #   irm https://raw.githubusercontent.com/koneb71/ozone/main/scripts/install.ps1 | iex
 #
 # Environment:
-#   OZONE_CHANNEL           release train to follow: stable, nightly, or preview
-#                            (default: stable; preview is a maintainers' test train)
-#   OZONE_VERSION           exact version to install (overrides OZONE_CHANNEL)
+#   OZONE_VERSION           exact version to install (default: the latest release)
 #   OZONE_HOME              Ozone home directory (default: ~\.ozone)
 #   OZONE_INSTALL_BIN_DIR   where ozone.exe is linked (default: ~\.local\bin)
 #   OZONE_RELEASE_BASE_URL  mirror for releases/download (default: GitHub)
@@ -130,36 +128,14 @@ $arch = switch ($rawArch) {
   default { Fail "unsupported architecture $rawArch" }
 }
 
-$channel = if ($env:OZONE_CHANNEL) { $env:OZONE_CHANNEL } else { "stable" }
 $version = $env:OZONE_VERSION
 if (-not $version) {
-  $tagPattern = switch ($channel) {
-    "stable" { '^v\d+\.\d+\.\d+$' }
-    "nightly" { '^v\d+\.\d+\.\d+-nightly\.\d+\.\d+$' }
-    "preview" { '^v\d+\.\d+\.\d+-preview\.\d+\.\d+$' }
-    default { Fail "OZONE_CHANNEL must be stable, nightly, or preview" }
-  }
-  if ($channel -eq "stable") {
-    # GitHub marks only a published, plain stable release latest. This is a github.com
-    # page, so it is not cut off by a page of newer nightlies or the API quota.
-    $release = Invoke-Retrying { Invoke-RestMethod -Uri "https://github.com/$repo/releases/latest" -Headers @{ "User-Agent" = "ozone-install"; "Accept" = "application/json" } }
-    $tag = ($release | Where-Object { $_.tag_name -match $tagPattern }).tag_name
-  } else {
-    $tag = $null
-    for ($page = 1; -not $tag -and $page -le 10; $page++) {
-      $releases = Invoke-Retrying { Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases?per_page=100&page=$page" -Headers @{ "User-Agent" = "ozone-install" } }
-      $tag = ($releases | Where-Object { -not $_.draft -and $_.tag_name -match $tagPattern } | Select-Object -First 1).tag_name
-      if (-not $releases) { break }
-    }
-  }
-  if (-not $tag) { Fail "could not find a $channel release; set OZONE_VERSION" }
+  # GitHub marks only a published release latest. This is a github.com page, so the API quota
+  # does not cut it off.
+  $release = Invoke-Retrying { Invoke-RestMethod -Uri "https://github.com/$repo/releases/latest" -Headers @{ "User-Agent" = "ozone-install"; "Accept" = "application/json" } }
+  $tag = ($release | Where-Object { $_.tag_name -match '^v\d+\.\d+\.\d+$' }).tag_name
+  if (-not $tag) { Fail "could not find a release; set OZONE_VERSION" }
   $version = $tag.Substring(1)
-}
-if ($version -match '-preview\.') {
-  Write-Warning "ozone $version is a preview build. Preview builds are cut by maintainers from unreleased branches to exercise the release pipeline. They can be broken, receive no fixes, and are never offered as updates. Set OZONE_CHANNEL=stable (the default) for a supported build."
-  if ($channel -ne "preview" -and -not $env:OZONE_VERSION) {
-    Fail "refusing a preview build that was not explicitly requested"
-  }
 }
 
 $stem = "ozone-$version-win32-$arch"

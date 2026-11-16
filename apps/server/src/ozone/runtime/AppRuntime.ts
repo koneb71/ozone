@@ -33,6 +33,7 @@ import {
   decodeMigrationReport,
   MIGRATION_REPORT_FILE,
 } from "../data/migrationGuard.ts";
+import { failed } from "../errors.ts";
 import * as AppCompose from "./AppCompose.ts";
 import * as DockerCli from "./DockerCli.ts";
 
@@ -41,8 +42,6 @@ export interface AppExecInput {
   readonly command: string;
   readonly timeout?: Duration.Input;
 }
-
-const failed = (message: string) => new OzoneAppError({ reason: "failed", message });
 
 export interface AppExecResult {
   readonly code: number | null;

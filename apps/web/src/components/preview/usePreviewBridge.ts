@@ -4,6 +4,7 @@ import type {
   ScopedThreadRef,
   ThreadId,
 } from "@t3tools/contracts";
+import { originOf } from "@t3tools/shared/preview";
 import { useEffect, useEffectEvent, useRef } from "react";
 
 import { recordFaviconForThread } from "~/browserFaviconStore";
@@ -14,14 +15,6 @@ import { previewEnvironment } from "~/state/preview";
 import { useAtomCommand } from "~/state/use-atom-command";
 
 import { previewBridge } from "./previewBridge";
-
-function originOf(url: string): string | null {
-  try {
-    return new URL(url).origin;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Keeps a hidden guest painting behind the app while the desktop host captures it; Electron

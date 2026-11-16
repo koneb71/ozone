@@ -5,9 +5,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/koneb71/ozone/main/scripts/install.sh | sh
 #
 # Environment:
-#   OZONE_CHANNEL           release train to follow: stable, nightly, or preview
-#                            (default: stable; preview is a maintainers' test train)
-#   OZONE_VERSION           exact version to install (overrides OZONE_CHANNEL)
+#   OZONE_VERSION           exact version to install (default: the latest release)
 #   OZONE_HOME              Ozone home directory (default: ~/.ozone)
 #   OZONE_INSTALL_BIN_DIR   where the `ozone` symlink goes (default: ~/.local/bin)
 #   OZONE_RELEASE_BASE_URL  mirror for releases/download (default: GitHub)
@@ -176,44 +174,17 @@ else
   fail "sha256sum or shasum is required"
 fi
 
-channel="${OZONE_CHANNEL:-stable}"
 version="${OZONE_VERSION:-}"
 if [ -z "$version" ]; then
-  case "$channel" in
-    stable) tag_pattern='v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)' ;;
-    nightly | preview) tag_pattern="v\([0-9][^\"]*-${channel}\.[0-9]*\.[0-9]*\)" ;;
-    *) fail "OZONE_CHANNEL must be stable, nightly, or preview" ;;
-  esac
+  tag_pattern='v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)'
   tmp_index="$(mktemp)"
-  if [ "$channel" = stable ]; then
-    # GitHub marks only a published, plain stable release latest. This is a github.com
-    # page, so it is not cut off by a page of newer nightlies or the API quota.
-    fetch "https://github.com/${repo}/releases/latest" "$tmp_index" application/json
-    version="$(sed -n "s/.*\"tag_name\": *\"${tag_pattern}\".*/\1/p" "$tmp_index" | head -n 1)"
-  else
-    page=1
-    while [ -z "$version" ] && [ "$page" -le 10 ]; do
-      fetch "https://api.github.com/repos/${repo}/releases?per_page=100&page=${page}" "$tmp_index"
-      version="$(sed -n "s/.*\"tag_name\": *\"${tag_pattern}\".*/\1/p" "$tmp_index" | head -n 1)"
-      grep -q '"tag_name"' "$tmp_index" || break
-      page=$((page + 1))
-    done
-  fi
+  # GitHub marks only a published release latest. This is a github.com page, so the API quota
+  # does not cut it off.
+  fetch "https://github.com/${repo}/releases/latest" "$tmp_index" application/json
+  version="$(sed -n "s/.*\"tag_name\": *\"${tag_pattern}\".*/\1/p" "$tmp_index" | head -n 1)"
   rm -f "$tmp_index"
-  [ -n "$version" ] || fail "could not find a ${channel} release; set OZONE_VERSION"
+  [ -n "$version" ] || fail "could not find a release; set OZONE_VERSION"
 fi
-case "$version" in
-  *-preview.*)
-    printf '%s\n' \
-      "ozone ${version} is a preview build." \
-      "  Preview builds are cut by maintainers from unreleased branches to exercise the release" \
-      "  pipeline. They can be broken, receive no fixes, and are never offered as updates." \
-      "  Set OZONE_CHANNEL=stable (the default) for a supported build." >&2
-    if [ "$channel" != "preview" ] && [ -z "${OZONE_VERSION:-}" ]; then
-      fail "refusing a preview build that was not explicitly requested"
-    fi
-    ;;
-esac
 
 stem="ozone-${version}-${platform}-${arch}"
 archive="${stem}.tar.gz"

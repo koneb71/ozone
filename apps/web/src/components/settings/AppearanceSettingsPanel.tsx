@@ -1,4 +1,6 @@
 import type { CSSProperties } from "react";
+
+import { APP_STAGE_LABEL } from "../../branding";
 import { useState } from "react";
 import {
   DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE,
@@ -16,7 +18,6 @@ import {
 import {
   resolveSidebarStageBackdropVariant,
   type SidebarStageBackdropVariant,
-  useEnvironmentStageLabel,
 } from "../SidebarStageBackdrop";
 import { useCustomThemes } from "../../hooks/useCustomThemes";
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
@@ -39,36 +40,28 @@ import { ThreadDetailsItemsRow } from "./ThreadDetailsItemsRow";
 
 const ENVIRONMENT_IDENTIFICATION_LABELS: Record<EnvironmentIdentificationMode, string> = {
   artwork: "Artwork",
-  "nightly-artwork": "Nightly artwork",
+  "nightly-artwork": "Night sky artwork",
   "dev-artwork": "Dev artwork",
   pill: "Version pill",
   none: "None",
 };
 
-// The default "artwork" follows the running channel, so it is labeled as that channel's art,
-// or as "None" on Latest. The other channel's art is offered as a fixed choice.
+// The default "artwork" is the Dev art in a dev build and nothing in a release. Either art can
+// also be chosen as a fixed look.
 function environmentIdentificationOptions(
   stageVariant: SidebarStageBackdropVariant | null,
 ): ReadonlyArray<readonly [EnvironmentIdentificationMode, string]> {
   if (stageVariant === "dev") {
     return [
       ["artwork", "Dev artwork"],
-      ["nightly-artwork", "Nightly artwork"],
-      ["pill", "Version pill"],
-      ["none", "None"],
-    ];
-  }
-  if (stageVariant === "nightly") {
-    return [
-      ["artwork", "Nightly artwork"],
-      ["dev-artwork", "Dev artwork"],
+      ["nightly-artwork", "Night sky artwork"],
       ["pill", "Version pill"],
       ["none", "None"],
     ];
   }
   return [
     ["artwork", "None"],
-    ["nightly-artwork", "Nightly artwork"],
+    ["nightly-artwork", "Night sky artwork"],
     ["dev-artwork", "Dev artwork"],
   ];
 }
@@ -99,7 +92,7 @@ export function AppearanceSettingsPanel() {
   const [isImportThemeOpen, setIsImportThemeOpen] = useState(false);
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
-  const environmentStageLabel = useEnvironmentStageLabel();
+  const environmentStageLabel = APP_STAGE_LABEL;
   const environmentStageVariant = resolveSidebarStageBackdropVariant(environmentStageLabel);
   const environmentIdentificationOptionList =
     environmentIdentificationOptions(environmentStageVariant);
@@ -119,8 +112,8 @@ export function AppearanceSettingsPanel() {
       ? "Only built-in themes show artwork, so this theme shows the version pill."
       : "Only built-in themes show artwork."
     : environmentStageVariant
-      ? "Choose how Dev and Nightly environments are identified."
-      : "Show Dev or Nightly artwork in the sidebar header.";
+      ? "Choose how a Dev environment is identified."
+      : "Show artwork in the sidebar header.";
   const glassOpacityRatio =
     (settings.glassOpacity - MIN_GLASS_OPACITY) / (MAX_GLASS_OPACITY - MIN_GLASS_OPACITY);
   const glassOpacitySliderStyle = {

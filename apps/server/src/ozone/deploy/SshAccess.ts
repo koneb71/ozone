@@ -9,6 +9,7 @@ import * as Path from "effect/Path";
 
 import * as ServerConfig from "../../config.ts";
 import * as ProcessRunner from "../../processRunner.ts";
+import { failed } from "../errors.ts";
 
 /**
  * How Ozone signs in to servers. It runs ssh with a settings file of its own that adds Ozone's
@@ -48,7 +49,6 @@ export interface SshOutput {
   readonly stderr: string;
 }
 
-const failed = (message: string) => new OzoneAppError({ reason: "failed", message });
 const quoted = (value: string) => `"${value.replaceAll('"', "")}"`;
 const shellQuoted = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 

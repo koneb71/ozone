@@ -275,7 +275,7 @@ starts the binary you set.
   `latest-linux.yml`)
   and the desktop installers they list go at the URL's root. The release's `ozone-*` archives and
   `SHA256SUMS` go under `v<version>/`.
-- `allowNightly: false`: only stable releases can be installed.
+- `allowNightly`: accepted and ignored. Ozone has one release line.
 
 ## What a policy does not cover
 

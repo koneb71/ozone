@@ -1,10 +1,8 @@
-import { OzoneAppError } from "@t3tools/contracts";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 
 import type * as ProcessRunner from "../../processRunner.ts";
-
-const failed = (message: string) => new OzoneAppError({ reason: "failed", message });
+import { failed } from "../errors.ts";
 
 /** A remote another machine can clone: a path on this machine is not one. */
 export const cloneableUrl = (url: string): boolean =>

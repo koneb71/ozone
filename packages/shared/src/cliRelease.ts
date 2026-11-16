@@ -2,16 +2,10 @@ const CLI_RELEASE_REPOSITORY = "koneb71/ozone";
 export const CLI_RELEASE_CHECKSUMS_FILE = "SHA256SUMS";
 export const CLI_RELEASE_BASE_URL_ENV = "OZONE_RELEASE_BASE_URL";
 
-// Keep archive keys aligned with the Linux matrix, Windows ARM64 build, and build matrix in ozone-release.yml,
-// and with the SSH runner's host check in packages/ssh/src/tunnel.ts.
+// Keep archive keys aligned with the build matrix in ozone-release.yml, and with the SSH runner's
+// host check in packages/ssh/src/tunnel.ts: a key with no archive fails at the download instead.
 // Node single-executables do not support darwin-x64 and segfault at startup.
-const CLI_ARCHIVE_PLATFORM_KEYS = [
-  "darwin-arm64",
-  "linux-arm64",
-  "linux-x64",
-  "win32-arm64",
-  "win32-x64",
-] as const;
+const CLI_ARCHIVE_PLATFORM_KEYS = ["darwin-arm64", "linux-x64", "win32-x64"] as const;
 export type CliArchivePlatformKey = (typeof CLI_ARCHIVE_PLATFORM_KEYS)[number];
 
 export function cliArchivePlatformKey(
@@ -72,47 +66,16 @@ export function parseChecksums(text: string): ReadonlyMap<string, string> {
   return checksums;
 }
 
-export type CliReleaseChannel = "stable" | "nightly" | "preview";
-export const CLI_RELEASE_CHANNELS: ReadonlyArray<CliReleaseChannel> = [
-  "stable",
-  "nightly",
-  "preview",
-];
-
-export function cliReleaseChannelOf(version: string): CliReleaseChannel {
-  const channel = /^[^-+]+-(nightly|preview)\.\d{8}\.\d+$/.exec(version)?.[1];
-  return channel === "nightly" || channel === "preview" ? channel : "stable";
-}
-
-/** Whether updating between these versions crosses Stable and Nightly. Preview builds cross nothing.
- * Hosts refuse a crossing outside a track switch, which checks the database first. */
-export function crossesReleaseTrack(fromVersion: string, toVersion: string): boolean {
-  const from = cliReleaseChannelOf(fromVersion);
-  const to = cliReleaseChannelOf(toVersion);
-  return from !== to && from !== "preview" && to !== "preview";
-}
-
-/** The desktop update track a build belongs to. Preview builds have no feed and read as Stable. */
-export function desktopUpdateChannelOf(version: string): "latest" | "nightly" {
-  return cliReleaseChannelOf(version) === "nightly" ? "nightly" : "latest";
-}
-
 /**
  * The update feed file a desktop app on this platform reads, which an update mirror publishes at
  * its root beside the release's CLI archives.
  */
-export function updateFeedFileName(
-  channel: "latest" | "nightly",
-  platform: NodeJS.Platform,
-  arch: string,
-): string {
-  if (platform === "darwin") return `${channel}-mac.yml`;
-  if (platform === "linux")
-    return arch === "arm64" ? `${channel}-linux-arm64.yml` : `${channel}-linux.yml`;
-  return `${channel}.yml`;
+export function updateFeedFileName(platform: NodeJS.Platform, arch: string): string {
+  if (platform === "darwin") return "latest-mac.yml";
+  if (platform === "linux") return arch === "arm64" ? "latest-linux-arm64.yml" : "latest-linux.yml";
+  return "latest.yml";
 }
 
-/** Page until the channel matches; nightlies can push preview/stable releases past the first page. */
 export function cliReleaseIndexPageUrl(page: number): string {
   return `https://api.github.com/repos/${CLI_RELEASE_REPOSITORY}/releases?per_page=100&page=${page}`;
 }
@@ -123,13 +86,11 @@ export function newestCliReleaseVersion(
     readonly tag_name: string;
     readonly draft?: boolean | undefined;
   }>,
-  channel: CliReleaseChannel,
 ): string | undefined {
   for (const release of releases) {
     if (release.draft) continue;
     const version = /^v(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/.exec(release.tag_name)?.[1];
-    if (version === undefined) continue;
-    if (cliReleaseChannelOf(version) === channel) return version;
+    if (version !== undefined) return version;
   }
   return undefined;
 }

@@ -22,8 +22,8 @@ substitutes another environment.
 
 For cloud dictation, choose **OpenAI** or **Grok Voice Transcribe** via the environment
 you want to use. If it needs a key, enter one and choose **Save and enable**.
-You can also choose a [secret provider](secrets.md) instead of **Value** and enter a
-reference. Unlock the vault on that environment before dictating. Anyone with
+In a build with [secret providers](secrets.md), you can also choose one instead of **Value** and
+enter a reference; unlock the vault on that environment before dictating. Anyone with
 dictation access to the environment can use the key, but only this device opts in.
 If a key is already saved, just confirm the provider. After
 you stop, the environment forwards your recording and any vocabulary hints to

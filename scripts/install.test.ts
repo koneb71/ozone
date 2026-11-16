@@ -8,10 +8,6 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
-const nightlies = Array.from({ length: 100 }, (_, index) => ({
-  tag_name: `v1.2.4-nightly.20261020.${200 - index}`,
-}));
-
 describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("installer home", () => {
   it("installs a relative home from a directory ending in a newline", async () => {
     const temporaryRoot = await NodeFSP.realpath(
@@ -61,12 +57,11 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("installer home
 });
 
 // regression: #22490
-describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("installer channel lookup", () => {
-  it.each([
-    // regression: #32897
-    ["stable", "1.2.3", 1],
-    ["preview", "1.2.4-preview.20261019.50", 0],
-  ])("finds %s %s behind nightlies and %i HTTP 504s", async (channel, version, failures) => {
+describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("installer release lookup", () => {
+  // regression: #32897
+  it("finds the latest release behind an HTTP 504", async () => {
+    const version = "1.2.3";
+    let failures = 1;
     const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-install-index-"));
     const target = NodePath.join(root, "home/runtime/versions", version);
     const server = NodeHttp.createServer((request, response) => {
@@ -76,11 +71,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("installer chan
         url.pathname === "/koneb71/ozone/releases/latest" &&
         request.headers.accept === "application/json"
           ? { tag_name: "v1.2.3" }
-          : url.pathname === "/repos/koneb71/ozone/releases"
-            ? { "1": nightlies, "2": [{ tag_name: `v${version}` }, { tag_name: "v1.2.3" }] }[
-                url.searchParams.get("page") ?? ""
-              ]
-            : undefined;
+          : undefined;
       if (body === undefined) response.statusCode = 404;
       // The API pretty-prints and the installer reads it line by line.
       response.end(JSON.stringify(body ?? [], null, 2));
@@ -105,7 +96,6 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("installer chan
             env: {
               ...process.env,
               OZONE_VERSION: "",
-              OZONE_CHANNEL: channel,
               OZONE_HOME: NodePath.join(root, "home"),
               OZONE_INSTALL_BIN_DIR: NodePath.join(root, "bin"),
               // A wrong version must fail here instead of downloading a real release.
@@ -151,7 +141,6 @@ async function installOver(input: {
     ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
     env: {
       ...process.env,
-      OZONE_CHANNEL: "",
       OZONE_VERSION: "1.2.3",
       OZONE_HOME: input.home,
       OZONE_INSTALL_BIN_DIR: input.binDir,

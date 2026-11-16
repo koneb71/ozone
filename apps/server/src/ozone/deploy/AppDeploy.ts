@@ -44,6 +44,7 @@ import {
 import { composeValue, ENV_FILE_MODE, envFilePath, readEnvFile } from "../env/envFile.ts";
 import * as DockerCli from "../runtime/DockerCli.ts";
 import { hostCaPath } from "../runtime/hostCa.ts";
+import { failed } from "../errors.ts";
 import * as AppServers from "./AppServers.ts";
 import * as DokployDeploy from "./DokployDeploy.ts";
 import * as HostedDeploy from "./HostedDeploy.ts";
@@ -149,7 +150,6 @@ type DeployFile = typeof DeployFile.Type;
 const decodeDeployFile = Schema.decodeUnknownEffect(DeployFile);
 const encodeDeployFile = Schema.encodeEffect(DeployFile);
 
-const failed = (message: string) => new OzoneAppError({ reason: "failed", message });
 const NOT_DEPLOYED: OzoneDeployStatus = {
   state: "none",
   target: null,

@@ -15,6 +15,7 @@ import * as Schema from "effect/Schema";
 import * as ServerConfig from "../../config.ts";
 import * as ProcessRunner from "../../processRunner.ts";
 import * as DockerCli from "../runtime/DockerCli.ts";
+import { failed } from "../errors.ts";
 import { parseDiskFree } from "./metrics.ts";
 import * as SshAccess from "./SshAccess.ts";
 import {
@@ -126,7 +127,6 @@ export class AppServers extends Context.Service<
   }
 >()("t3/ozone/deploy/AppServers") {}
 
-const failed = (message: string) => new OzoneAppError({ reason: "failed", message });
 const placeOf = (host: string | null) =>
   host === null ? "this machine" : host.replace(/^[^@]*@/, "").replace(/:\d+$/, "");
 const tail = (output: { readonly stdout: string; readonly stderr: string }) =>

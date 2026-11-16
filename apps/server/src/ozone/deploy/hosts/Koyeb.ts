@@ -4,8 +4,9 @@ import type { HttpClient } from "effect/http";
 import * as Schema from "effect/Schema";
 
 import { githubRepoOf } from "../gitPublish.ts";
+import { failed } from "../../errors.ts";
 import type { HostApp, HostDriver, HostIds, HostSource, HostState } from "./HostDriver.ts";
-import { failed, hostHttp, reading, untilSettled } from "./hostHttp.ts";
+import { hostHttp, reading, untilSettled } from "./hostHttp.ts";
 
 const LABEL = "Koyeb";
 /** The free instances run in Frankfurt and Washington; the database sits beside the app. */

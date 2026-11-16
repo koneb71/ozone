@@ -138,21 +138,13 @@ function isHostConstrained(
   return settings.pauseWhenOnBattery && hostPower.onBattery === "true";
 }
 
-function isClientConstrained(
-  lease: ClientActivityLease,
-  settings: ResolvedBackgroundActivitySettings,
-): boolean {
-  return settings.pauseWhenClientLowPower && lease.lowPowerMode === "true";
-}
-
 function leaseMayRunScopedWork(
   lease: ClientActivityLease,
   scope: BackgroundScope,
   now: DateTime.Utc,
   settings: ResolvedBackgroundActivitySettings,
 ): boolean {
-  const activeWithScope = isLeaseActive(lease, now) && leaseHasScope(lease, scope);
-  if (!activeWithScope || isClientConstrained(lease, settings)) {
+  if (!isLeaseActive(lease, now) || !leaseHasScope(lease, scope)) {
     return false;
   }
   if (settings.profile === "performance") {
@@ -185,8 +177,7 @@ function computeSnapshot(input: {
     activeForegroundLeaseCount: foregroundLeases.length,
     activeScopeKeys: [...activeScopeKeys].toSorted(),
     shouldRunOpportunisticWork:
-      foregroundLeases.some((lease) => !isClientConstrained(lease, input.settings)) &&
-      !isHostConstrained(input.hostPower, input.settings),
+      foregroundLeases.length > 0 && !isHostConstrained(input.hostPower, input.settings),
     updatedAt: input.updatedAt,
   };
 }

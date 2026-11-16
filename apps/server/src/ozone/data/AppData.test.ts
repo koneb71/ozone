@@ -1,7 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
-import { DEFAULT_OZONE_APP_SETTINGS, ProjectId, type OzoneAppManifest } from "@t3tools/contracts";
+import { ProjectId } from "@t3tools/contracts";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -18,24 +18,14 @@ import * as GitVcsDriver from "../../vcs/GitVcsDriver.ts";
 import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as AppCompose from "../runtime/AppCompose.ts";
 import * as DockerCli from "../runtime/DockerCli.ts";
+import { TEST_DATABASE, testApp, testManifest } from "../ozone.testkit.ts";
 import * as AppData from "./AppData.ts";
 
 const projectId = ProjectId.make("project-habits");
 const COMMIT = "915fe1691871a4c6f56b9556d41a8faa00cdcc48";
-const manifest: OzoneAppManifest = {
-  version: 1,
-  runtime: {
-    kind: "compose",
-    file: "compose.yaml",
-    appService: "app",
-    appPort: 3000,
-    healthPath: "/api/health",
-  },
-  gates: [],
-  data: {
-    services: [{ service: "db", kind: "postgres", volume: "pgdata", database: "app", user: "app" }],
-  },
-};
+const manifest = testManifest({
+  data: { services: [{ ...TEST_DATABASE, database: "app", user: "app" }] },
+});
 const ok = { code: 0, stdout: "", stderr: "", timedOut: false };
 
 /** What a Compose call does, without the paths and flags that the detailed tests check. */
@@ -130,15 +120,7 @@ const makeHarness = (
           Layer.mock(AppRegistry.AppRegistry)({
             resolve: () =>
               Effect.succeed({
-                app: {
-                  projectId,
-                  slug: "habits-a1b2c3",
-                  name: "Habits",
-                  templateId: "web-app",
-                  port: 41_000,
-                  createdAt: "2026-01-01T00:00:00.000Z",
-                  settings: DEFAULT_OZONE_APP_SETTINGS,
-                },
+                app: testApp({ projectId, slug: "habits-a1b2c3", name: "Habits" }),
                 workspaceRoot: path.join(root, "habits"),
                 manifest,
               }),

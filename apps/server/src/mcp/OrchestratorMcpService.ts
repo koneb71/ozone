@@ -1195,7 +1195,7 @@ const make = Effect.gen(function* () {
     if (shell === null || shell.deletedAt !== null) {
       return yield* threadNotFound(threadManagement, threadId, `Thread ${threadId} was not found.`);
     }
-    // Keeps legacy import and project validation; callers read only the thread row.
+    // Keeps project validation; callers read only the thread row.
     return yield* threadManagement
       .getProjectThreadRecords({ projectId: shell.projectId, threadId }, [])
       .pipe(Effect.mapError(threadManagementFailure));

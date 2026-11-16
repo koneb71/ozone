@@ -1,7 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import {
   DEFAULT_OZONE_APP_SETTINGS,
-  NO_OZONE_VERIFICATION,
   ProjectId,
   ThreadId,
   type OzoneBuild,
@@ -13,45 +12,16 @@ import * as Stream from "effect/Stream";
 
 import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as BuildStore from "../builds/BuildStore.ts";
+import { testBuild, testTask } from "../ozone.testkit.ts";
 import * as AppDeploy from "./AppDeploy.ts";
 import * as AutoDeploy from "./AutoDeploy.ts";
 
 const projectId = ProjectId.make("project-notes");
-const build = (thread: string, completedAt: string | null): OzoneBuild => ({
-  threadId: ThreadId.make(thread),
-  projectId,
-  spec: "",
-  acceptance: [],
-  tasks: [
-    {
-      id: "t1",
-      title: "Task",
-      brief: "",
-      dependsOn: [],
-      acceptance: [],
-      access: "write",
-      status: "done",
-      attempts: 0,
-      dispatches: 0,
-      workerTaskId: null,
-      workerThreadId: null,
-      baseSha: null,
-      commitSha: null,
-      snapshotId: null,
-      evidence: [],
-      summary: null,
-      blockedReason: null,
-    },
-  ],
-  maxAttempts: 3,
-  finalEvidence: [],
-  completedAt,
-  updatedAt: "2026-01-01T00:00:00.000Z",
-  approval: "not_needed",
-  planGranted: false,
-  finalStartedAt: null,
-  verification: NO_OZONE_VERIFICATION,
-});
+const build = (thread: string, completedAt: string | null) =>
+  testBuild(ThreadId.make(thread), projectId, {
+    tasks: [testTask("t1", { status: "done" })],
+    completedAt,
+  });
 
 const run = (deployOnBuild: boolean) =>
   Effect.gen(function* () {

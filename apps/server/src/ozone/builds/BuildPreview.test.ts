@@ -1,6 +1,5 @@
 import { assert, it } from "@effect/vitest";
 import {
-  NO_OZONE_VERIFICATION,
   PreviewTabId,
   ProjectId,
   ThreadId,
@@ -15,6 +14,7 @@ import * as Stream from "effect/Stream";
 
 import * as PreviewManager from "../../preview/Manager.ts";
 import * as AppRegistry from "../apps/AppRegistry.ts";
+import { testBuild, testTask } from "../ozone.testkit.ts";
 import * as BuildPreview from "./BuildPreview.ts";
 import * as BuildStore from "./BuildStore.ts";
 
@@ -36,41 +36,10 @@ const tab = (
     updatedAt: "2026-01-01T00:00:00.000Z",
   }) as PreviewSessionSnapshot;
 
-const task = (id: string, status: OzoneBuildTask["status"]): OzoneBuildTask => ({
-  id,
-  title: `Task ${id}`,
-  brief: "",
-  dependsOn: [],
-  acceptance: [],
-  access: "write",
-  status,
-  attempts: 0,
-  dispatches: 0,
-  workerTaskId: null,
-  workerThreadId: null,
-  baseSha: null,
-  commitSha: null,
-  snapshotId: null,
-  evidence: [],
-  summary: null,
-  blockedReason: null,
-});
-
-const build = (...statuses: ReadonlyArray<OzoneBuildTask["status"]>): OzoneBuild => ({
-  threadId,
-  projectId,
-  spec: "",
-  acceptance: [],
-  tasks: statuses.map((status, index) => task(`t${index}`, status)),
-  maxAttempts: 3,
-  finalEvidence: [],
-  completedAt: null,
-  updatedAt: "2026-01-01T00:00:00.000Z",
-  approval: "not_needed",
-  planGranted: false,
-  finalStartedAt: null,
-  verification: NO_OZONE_VERIFICATION,
-});
+const build = (...statuses: ReadonlyArray<OzoneBuildTask["status"]>) =>
+  testBuild(threadId, projectId, {
+    tasks: statuses.map((status, index) => testTask(`t${index}`, { status })),
+  });
 
 // A page that failed while a worker was mid-edit stays on screen after the fix unless it is reloaded.
 it.effect("reloads the server's tabs that show the app when a task passes", () =>

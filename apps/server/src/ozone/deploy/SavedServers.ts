@@ -20,6 +20,7 @@ import * as Semaphore from "effect/Semaphore";
 
 import * as ServerConfig from "../../config.ts";
 import { ENV_FILE_MODE } from "../env/envFile.ts";
+import { failed } from "../errors.ts";
 import * as AppServers from "./AppServers.ts";
 import * as Dokploy from "./Dokploy.ts";
 import { HostDrivers } from "./hosts/HostDriver.ts";
@@ -55,7 +56,6 @@ export type HostServer = Extract<StoredServer, { readonly kind: "host" }>;
 const ServersFile = Schema.fromJsonString(Schema.Struct({ servers: Schema.Array(StoredServer) }));
 const decodeServers = Schema.decodeUnknownEffect(ServersFile);
 const encodeServers = Schema.encodeEffect(ServersFile);
-const failed = (message: string) => new OzoneAppError({ reason: "failed", message });
 
 /**
  * The servers a person added once and deploys to by name: SSH hosts, which Ozone runs apps on

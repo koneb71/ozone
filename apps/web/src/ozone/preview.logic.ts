@@ -1,12 +1,5 @@
 import type { PreviewSessionSnapshot } from "@t3tools/contracts";
-
-const originOf = (url: string): string | null => {
-  try {
-    return new URL(url).origin;
-  } catch {
-    return null;
-  }
-};
+import { originOf } from "@t3tools/shared/preview";
 
 /**
  * Whether the preview on screen is this client's own tab showing the app, which only this client

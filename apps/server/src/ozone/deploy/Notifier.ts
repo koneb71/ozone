@@ -17,6 +17,7 @@ import * as Semaphore from "effect/Semaphore";
 
 import * as ServerConfig from "../../config.ts";
 import { ENV_FILE_MODE } from "../env/envFile.ts";
+import { failed } from "../errors.ts";
 
 export interface Notice {
   readonly event: OzoneNotifyEvent;
@@ -52,7 +53,6 @@ const ChannelsFile = Schema.fromJsonString(
 );
 const decodeChannels = Schema.decodeUnknownEffect(ChannelsFile);
 const encodeChannels = Schema.encodeEffect(ChannelsFile);
-const failed = (message: string) => new OzoneAppError({ reason: "failed", message });
 
 const lastChars = (secret: string) => `…${secret.slice(-4)}`;
 const hostOf = (url: string) => {

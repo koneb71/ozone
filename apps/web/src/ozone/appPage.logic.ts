@@ -48,6 +48,23 @@ export function needsDeploy(section: AppSection): boolean {
   return section === "deployments" || section === "monitoring";
 }
 
+/** Which of an app's actions can be offered now. Every menu asks here, so they agree. */
+export function appActionsFor(input: {
+  readonly phase: OzoneRuntimePhase | undefined;
+  /** An action this window started has not finished. */
+  readonly acting: boolean;
+}) {
+  const { phase } = input;
+  const idle = !input.acting && phase !== "starting";
+  const docker = phase !== "unavailable";
+  return {
+    restart: idle && (phase === "running" || phase === "unhealthy"),
+    rebuild: idle && docker,
+    stop: idle && docker && phase !== undefined && phase !== "stopped",
+    delete: docker,
+  };
+}
+
 export type DotTone = "success" | "warning" | "error" | "idle";
 
 /** How a status dot reads an app's containers. */

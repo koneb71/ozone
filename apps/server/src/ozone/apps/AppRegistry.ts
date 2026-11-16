@@ -17,6 +17,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 import * as SqlSchema from "effect/sql/SqlSchema";
 
 import * as ProjectService from "../../project/ProjectService.ts";
+import { storageFailed } from "../errors.ts";
 
 export interface ResolvedApp {
   readonly app: OzoneApp;
@@ -66,8 +67,6 @@ const AppRow = Schema.Struct({ ...OzoneApp.fields, settings: SettingsJson });
 
 const decodeManifest = Schema.decodeUnknownEffect(Schema.fromJsonString(OzoneAppManifest));
 
-const storageFailed = (action: string) => () =>
-  new OzoneAppError({ reason: "failed", message: `Ozone could not ${action}.` });
 const notAnApp = new OzoneAppError({
   reason: "not_an_app",
   message: "This project is not an Ozone app.",

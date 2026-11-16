@@ -1,6 +1,6 @@
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentId, OzoneApp, OzoneDeletedApp } from "@t3tools/contracts";
-import { EllipsisIcon, Trash2Icon } from "lucide-react";
+import { EllipsisIcon } from "lucide-react";
 import { useState } from "react";
 
 import { SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
@@ -9,7 +9,6 @@ import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/compone
 import { Skeleton } from "~/components/ui/skeleton";
 import { Spinner } from "~/components/ui/spinner";
 import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
-import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
@@ -17,13 +16,13 @@ import { formatRelativeTimeLabel } from "~/timestampFormat";
 import { AppDeployButton } from "./app-page/DeployButton";
 import { useOpenAppPage } from "./app-page/navigation";
 import { APP_MENU_PAGES } from "./app-page/menuPages";
-import { metaLine, phaseTone } from "./appPage.logic";
+import { appActionsFor, metaLine, phaseTone } from "./appPage.logic";
+import { useDeleteAppItem } from "./DeleteApp";
 import { runtimePhaseLabel } from "@t3tools/client-runtime/state/ozone";
-import { ozoneEnvironment } from "./state";
+import { ozoneEnvironment, refreshApps } from "./state";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { StatusDot } from "./ui/StatusDot";
 import { useOzoneCommand } from "./ui/useOzoneCommand";
-import { DELETE_APP_DESCRIPTION, useDeleteApp } from "./useDeleteApp";
 import { useOpenAppThread } from "./useOpenAppThread";
 
 /** Home's list of apps: each with its state, a way into its thread, and its page. */
@@ -60,12 +59,15 @@ function AppRow(props: {
 }) {
   const { app, environmentId } = props;
   const openPage = useOpenAppPage();
-  const removal = useDeleteApp(environmentId);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const phase = useEnvironmentQuery(
     ozoneEnvironment.runtimeStatus({ environmentId, input: { projectId: app.projectId } }),
   ).data?.phase;
   const label = runtimePhaseLabel(phase);
+  const deletion = useDeleteAppItem({
+    app,
+    environmentId,
+    disabled: !appActionsFor({ phase, acting: false }).delete,
+  });
 
   return (
     <SettingsRow
@@ -104,25 +106,10 @@ function AppRow(props: {
                 </MenuItem>
               ))}
               <MenuSeparator />
-              <MenuItem
-                variant="destructive"
-                disabled={removal.deleting}
-                onClick={() => setConfirmDelete(true)}
-              >
-                <Trash2Icon />
-                Delete app
-              </MenuItem>
+              {deletion.item}
             </MenuPopup>
           </Menu>
-          <ConfirmDialog
-            open={confirmDelete}
-            onOpenChange={setConfirmDelete}
-            title={`Delete ${app.name}?`}
-            description={DELETE_APP_DESCRIPTION}
-            confirmLabel="Delete app"
-            destructive
-            onConfirm={() => void removal.remove(app)}
-          />
+          {deletion.dialog}
         </div>
       }
     />
@@ -143,9 +130,7 @@ export function DeletedApps(props: {
     const result = await run(app.slug, `Could not bring back ${app.name}`, () =>
       restoreApp({ environmentId: props.environmentId, input: { slug: app.slug } }),
     );
-    appAtomRegistry.refresh(
-      ozoneEnvironment.apps({ environmentId: props.environmentId, input: {} }),
-    );
+    refreshApps(props.environmentId);
     // Its old threads went with the delete, so it opens on a new one.
     if (result._tag === "Success") {
       void handleNewThread(scopeProjectRef(props.environmentId, result.value.app.projectId));

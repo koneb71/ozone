@@ -1050,17 +1050,6 @@ export function createServerEnvironmentAtoms<R, E>(
           }),
         );
 
-        // A track switch's desktop host already on its track's newest build only saved the
-        // track; nothing restarts.
-        if (
-          result.method === "desktop-app" &&
-          result.desktopUpdateToken === undefined &&
-          result.targetVersion === fromVersion
-        ) {
-          atomRegistry.set(stateAtom, IDLE_SERVER_UPDATE_STATE);
-          return result;
-        }
-
         yield* nudgeReconnectDuringUpdateRestart({
           stateChanges: environmentRegistry.stateChanges(target.environmentId),
           retryNow: environmentRegistry.retryNow(target.environmentId),
@@ -1438,18 +1427,6 @@ export function createServerEnvironmentAtoms<R, E>(
     }),
     configProjection,
     welcome,
-    legacyThreadMigration: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
-      label: "environment-data:server:legacy-thread-migration",
-      tag: WS_METHODS.subscribeServerLifecycle,
-      transform: (stream) =>
-        stream.pipe(
-          Stream.filterMap((event) =>
-            event.type === "legacyThreadMigration"
-              ? Result.succeed(event.payload)
-              : Result.failVoid,
-          ),
-        ),
-    }),
     consumeResetCredit: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:consume-reset-credit",
       tag: WS_METHODS.providerConsumeResetCredit,

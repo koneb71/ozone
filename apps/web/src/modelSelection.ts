@@ -33,8 +33,7 @@ import {
   type ProviderInstanceEntry,
   deriveProviderInstanceEntries,
   NO_PROVIDER_MODEL_SELECTION,
-  resolveDefaultProviderModelSelection,
-  resolveProjectDefaultProviderModelSelection,
+  resolveNewThreadModelSelection,
 } from "./providerInstances";
 import { sortModelsForProviderInstance } from "./modelOrdering";
 import { resolveModelShortName } from "@t3tools/client-runtime/provider-clients";
@@ -324,10 +323,7 @@ export function defaultModelSelectionsAreMixed(
 ): boolean {
   const selections = targets.map(({ projectId, settings, providers }) => {
     const stored = settings.defaultModelSelection;
-    const selection =
-      stored === null
-        ? resolveProjectDefaultProviderModelSelection(providers, settings, projectId)
-        : resolveDefaultProviderModelSelection(providers, stored);
+    const selection = resolveNewThreadModelSelection(providers, settings, projectId);
     return {
       stored,
       effective: selection

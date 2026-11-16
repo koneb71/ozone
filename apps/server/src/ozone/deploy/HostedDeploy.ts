@@ -10,6 +10,7 @@ import * as ServerConfig from "../../config.ts";
 import * as ProcessRunner from "../../processRunner.ts";
 import type { ResolvedApp } from "../apps/AppRegistry.ts";
 import { ENV_FILE_MODE } from "../env/envFile.ts";
+import { failed } from "../errors.ts";
 import { publishCommit } from "./gitPublish.ts";
 import {
   HostDrivers,
@@ -59,8 +60,6 @@ export class HostedDeploy extends Context.Service<
     readonly label: (serverId: string) => Effect.Effect<string, OzoneAppError>;
   }
 >()("t3/ozone/deploy/HostedDeploy") {}
-
-const failed = (message: string) => new OzoneAppError({ reason: "failed", message });
 
 const Link = Schema.Struct({
   serverId: Schema.String,

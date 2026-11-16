@@ -1,6 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import { DEFAULT_OZONE_APP_SETTINGS, ProjectId, type OzoneAppManifest } from "@t3tools/contracts";
+import { ProjectId } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -12,6 +12,7 @@ import * as Stream from "effect/Stream";
 import type { ResolvedApp } from "../apps/AppRegistry.ts";
 import { acceptToken, parseHeldBack } from "../data/migrationGuard.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
+import { TEST_MIGRATIONS, testApp, testManifest } from "../ozone.testkit.ts";
 import * as BuildGates from "./BuildGates.ts";
 import * as BuildRepo from "./BuildRepo.ts";
 
@@ -34,23 +35,10 @@ it("keeps both ends of a long check output", () => {
 });
 
 const projectId = ProjectId.make("project-notes");
-const manifest: OzoneAppManifest = {
-  version: 1,
-  runtime: {
-    kind: "compose",
-    file: "compose.yaml",
-    appService: "app",
-    appPort: 3000,
-    healthPath: "/api/health",
-  },
+const manifest = testManifest({
   gates: [{ id: "typecheck", command: "npm run typecheck", when: "task" }],
-  data: { services: [] },
-  migrations: {
-    directory: "drizzle",
-    generate: "npm run db:generate",
-    apply: "npm run db:migrate",
-  },
-};
+  migrations: TEST_MIGRATIONS,
+});
 const DROP = 'DROP TABLE "notes";';
 
 /** The gates over a real workspace whose task added `added`, and a migrate command that prints `migrate`. */
@@ -95,15 +83,7 @@ const makeGates = (options: { readonly added: ReadonlyArray<string>; readonly mi
       ),
     );
     const app: ResolvedApp = {
-      app: {
-        projectId,
-        slug: "notes-a1b2c3",
-        name: "Notes",
-        templateId: "web-app",
-        port: 41_000,
-        createdAt: "2026-01-01T00:00:00.000Z",
-        settings: DEFAULT_OZONE_APP_SETTINGS,
-      },
+      app: testApp({ projectId }),
       workspaceRoot,
       manifest,
     };

@@ -1,11 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import {
-  DEFAULT_OZONE_APP_SETTINGS,
-  ProjectId,
-  type OzoneApp,
-  type OzoneAppManifest,
-} from "@t3tools/contracts";
+import { ProjectId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -14,38 +9,18 @@ import * as Path from "effect/Path";
 
 import * as SqlitePersistence from "../../persistence/Sqlite.ts";
 import * as ProjectService from "../../project/ProjectService.ts";
+import { TEST_DATABASE, TEST_MIGRATIONS, testApp, testManifest } from "../ozone.testkit.ts";
 import * as AppRegistry from "./AppRegistry.ts";
 
-const app = (id: string, port: number, createdAt: string): OzoneApp => ({
-  projectId: ProjectId.make(id),
-  slug: `${id}-slug`,
-  name: id,
-  templateId: "web-app",
-  port,
-  createdAt,
-  settings: DEFAULT_OZONE_APP_SETTINGS,
-});
+const app = (id: string, port: number, createdAt: string) =>
+  testApp({ projectId: ProjectId.make(id), slug: `${id}-slug`, name: id, port, createdAt });
 
-const manifest: OzoneAppManifest = {
-  version: 1,
+const manifest = testManifest({
   template: "web-app",
-  runtime: {
-    kind: "compose",
-    file: "compose.yaml",
-    appService: "app",
-    appPort: 3000,
-    healthPath: "/api/health",
-  },
   gates: [{ id: "typecheck", command: "npm run typecheck", when: "task" }],
-  data: {
-    services: [{ service: "db", kind: "postgres", volume: "pgdata", database: "app", user: "app" }],
-  },
-  migrations: {
-    directory: "drizzle",
-    generate: "npm run db:generate",
-    apply: "npm run db:migrate",
-  },
-};
+  data: { services: [{ ...TEST_DATABASE, database: "app", user: "app" }] },
+  migrations: TEST_MIGRATIONS,
+});
 
 it.effect("AppRegistry records apps and resolves each one's folder and manifest", () =>
   Effect.gen(function* () {

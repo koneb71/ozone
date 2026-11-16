@@ -29,6 +29,7 @@ import * as GitVcsDriver from "../../vcs/GitVcsDriver.ts";
 import * as AppData from "../data/AppData.ts";
 import * as AppDeploy from "../deploy/AppDeploy.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
+import { testApp } from "../ozone.testkit.ts";
 import { OZONE_APP_INSTRUCTIONS } from "./appInstructions.ts";
 import * as AppRegistry from "./AppRegistry.ts";
 import * as OzoneApps from "./OzoneApps.ts";
@@ -61,15 +62,11 @@ const makeHarness = Effect.gen(function* () {
   // Whether the app's production is running where it was deployed.
   const deployedState = yield* Ref.make<"none" | "running">("none");
   /** The app the delete and restore cases work on, as the registry knows it. */
-  const habits: OzoneApp = {
+  const habits = testApp({
     projectId: ProjectId.make("a1b2c3-project-1"),
     slug: "habits-a1b2c3",
     name: "Habits",
-    templateId: "web-app",
-    port: 41_000,
-    createdAt: "2026-01-01T00:00:00.000Z",
-    settings: DEFAULT_OZONE_APP_SETTINGS,
-  };
+  });
   const habitsRoot = path.join(root, "habits");
   // Built once, so the test sees the state folder the service writes to.
   const configContext = yield* Layer.build(

@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import { failed } from "../errors.ts";
 
 /** Where a Dokploy instance answers, and the key it takes. */
 export interface DokployAccess {
@@ -34,7 +35,6 @@ export class Dokploy extends Context.Service<
   }
 >()("t3/ozone/deploy/Dokploy") {}
 
-const failed = (message: string) => new OzoneAppError({ reason: "failed", message });
 const ErrorBody = Schema.Struct({ message: Schema.optionalKey(Schema.String) });
 const decodeErrorBody = Schema.decodeUnknownOption(ErrorBody);
 const decodeJson = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown));

@@ -1,7 +1,7 @@
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { appNotice } from "@t3tools/client-runtime/state/ozone";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import type { OzoneRuntimeAction, ProjectId, ScopedThreadRef } from "@t3tools/contracts";
+import type { OzoneApp, OzoneRuntimeAction, ScopedThreadRef } from "@t3tools/contracts";
 import { BoxIcon, DatabaseIcon, HammerIcon, MonitorIcon, PlayIcon } from "lucide-react";
 import { useEffect, useEffectEvent } from "react";
 
@@ -15,7 +15,6 @@ import { Spinner } from "~/components/ui/spinner";
 import { Switch } from "~/components/ui/switch";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { readThreadPreviewState } from "~/previewStateStore";
-import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { useRightPanelStore } from "~/rightPanelStore";
 import { useQuietThreadShell } from "~/state/entities";
 import { previewEnvironment } from "~/state/preview";
@@ -24,11 +23,14 @@ import { useAtomCommand } from "~/state/use-atom-command";
 
 import { AppDeployButton } from "./app-page/DeployButton";
 import { useOpenAppPage } from "./app-page/navigation";
+import { runtimeFailureTitle } from "./app-page/useAppRuntime";
 import { AppMenu } from "./AppMenu";
 import { buildBannerItem } from "./BuildCard";
 import { useBuildStagedIn } from "./homeFiles";
 import { visiblePreviewShows } from "./preview.logic";
 import { ozoneEnvironment } from "./state";
+import { useOzoneCommand } from "./ui/useOzoneCommand";
+import { useConfigureApp } from "./useConfigureApp";
 
 /** Threads whose preview Ozone has opened by itself, so closing it stays the user's decision. */
 const openedPreviews = new Set<string>();
@@ -53,31 +55,29 @@ const reportFailure = (title: string, error: unknown) => {
 
 /**
  * The status of the Ozone app a thread belongs to, with its controls, as one composer notice.
- * Returns nothing for projects Ozone did not create.
+ * Returns nothing for a thread with no app.
  */
 export function useAppBanners(
   threadRef: ScopedThreadRef | null,
-  projectId: ProjectId | null,
+  app: OzoneApp | null,
 ): ReadonlyArray<ComposerBannerStackItem> {
-  const environmentId = threadRef?.environmentId ?? null;
-  const apps = useEnvironmentQuery(
-    environmentId === null ? null : ozoneEnvironment.apps({ environmentId, input: {} }),
-  );
-  const app =
-    projectId === null ? undefined : apps.data?.apps.find((entry) => entry.projectId === projectId);
   const statusQuery = useEnvironmentQuery(
-    environmentId === null || app === undefined
+    threadRef === null || app === null
       ? null
-      : ozoneEnvironment.runtimeStatus({ environmentId, input: { projectId: app.projectId } }),
+      : ozoneEnvironment.runtimeStatus({
+          environmentId: threadRef.environmentId,
+          input: { projectId: app.projectId },
+        }),
   );
   const runAction = useAtomCommand(ozoneEnvironment.runtimeAct, { reportFailure: false });
+  const { working: acting, run } = useOzoneCommand();
   const openPage = useOpenAppPage();
   const approveBuild = useAtomCommand(ozoneEnvironment.approveBuild, { reportFailure: false });
-  const configureApp = useAtomCommand(ozoneEnvironment.configureApp, { reportFailure: false });
+  const settings = useConfigureApp();
   const sentThread = useQuietThreadShell(threadRef);
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
   const build = useEnvironmentQuery(
-    threadRef === null || app === undefined
+    threadRef === null || app === null
       ? null
       : ozoneEnvironment.buildStatus({
           environmentId: threadRef.environmentId,
@@ -85,7 +85,7 @@ export function useAppBanners(
         }),
   );
   const previews = useEnvironmentQuery(
-    threadRef === null || app === undefined
+    threadRef === null || app === null
       ? null
       : previewEnvironment.list({
           environmentId: threadRef.environmentId,
@@ -144,19 +144,15 @@ export function useAppBanners(
   // A build request that came from Home with files waits in the composer until it is sent.
   const awaitsSend = useBuildStagedIn(threadRef) && sentThread === null;
 
-  if (threadRef === null || app === undefined) return [];
+  if (threadRef === null || app === null) return [];
 
-  const act = async (action: OzoneRuntimeAction) => {
-    const result = await runAction({
-      environmentId: threadRef.environmentId,
-      input: { projectId: app.projectId, action },
-    });
-    if (result._tag === "Failure") {
-      const verb =
-        action === "up" ? "start" : action === "migrate" ? "run the migration of" : action;
-      reportFailure(`Could not ${verb} ${app.name}`, squashAtomCommandFailure(result));
-    }
-  };
+  const act = (action: OzoneRuntimeAction) =>
+    run(action, runtimeFailureTitle(action, app.name), () =>
+      runAction({
+        environmentId: threadRef.environmentId,
+        input: { projectId: app.projectId, action },
+      }),
+    );
   const preview = async () => {
     if (url === null) return;
     const result = await showPreview(threadRef, url);
@@ -173,20 +169,6 @@ export function useAppBanners(
     if (result._tag === "Failure") {
       reportFailure("Could not start the build", squashAtomCommandFailure(result));
     }
-  };
-
-  const planFirst = async (reviewPlans: boolean) => {
-    const result = await configureApp({
-      environmentId: threadRef.environmentId,
-      input: { projectId: app.projectId, settings: { reviewPlans } },
-    });
-    if (result._tag === "Failure") {
-      reportFailure("Could not save the setting", squashAtomCommandFailure(result));
-      return;
-    }
-    appAtomRegistry.refresh(
-      ozoneEnvironment.apps({ environmentId: threadRef.environmentId, input: {} }),
-    );
   };
 
   const copy = appNotice(app, status);
@@ -242,7 +224,12 @@ export function useAppBanners(
             <Switch
               size="sm"
               checked={app.settings.reviewPlans}
-              onCheckedChange={(checked) => void planFirst(checked)}
+              onCheckedChange={(reviewPlans) =>
+                void settings.save(
+                  { environmentId: threadRef.environmentId, projectId: app.projectId },
+                  { reviewPlans },
+                )
+              }
             />
             Plan first
           </label>
@@ -253,7 +240,12 @@ export function useAppBanners(
             </Button>
           ) : null}
           {phase === "stopped" || phase === "failed" ? (
-            <Button size="xs" variant="ghost" onClick={() => void act("up")}>
+            <Button
+              disabled={acting !== null}
+              size="xs"
+              variant="ghost"
+              onClick={() => void act("up")}
+            >
               <PlayIcon />
               {phase === "failed" ? "Try again" : "Start"}
             </Button>
@@ -263,6 +255,7 @@ export function useAppBanners(
             app={app}
             environmentId={threadRef.environmentId}
             phase={phase}
+            acting={acting !== null}
             onAct={(action) => void act(action)}
           />
         </>

@@ -183,7 +183,6 @@ export function resolveBackgroundActivityProfileOption(
       hostPowerMonitorIdleInterval: resolved.hostPowerMonitorIdleInterval,
       pauseWhenHostLocked: resolved.pauseWhenHostLocked,
       pauseWhenHostLowPower: resolved.pauseWhenHostLowPower,
-      pauseWhenClientLowPower: resolved.pauseWhenClientLowPower,
       pauseWhenOnBattery: resolved.pauseWhenOnBattery,
     },
   });
@@ -253,7 +252,6 @@ export function backgroundActivityOverrideSettings(
     hostPowerMonitorIdleInterval: resolved.hostPowerMonitorIdleInterval,
     pauseWhenHostLocked: resolved.pauseWhenHostLocked,
     pauseWhenHostLowPower: resolved.pauseWhenHostLowPower,
-    pauseWhenClientLowPower: resolved.pauseWhenClientLowPower,
     pauseWhenOnBattery: resolved.pauseWhenOnBattery,
     ...overrides,
   };

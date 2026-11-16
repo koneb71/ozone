@@ -44,11 +44,11 @@ vi.mock("./useUpdateEverything", () => ({
   }),
 }));
 
-function nightlyUpdate(releaseNotes: DesktopUpdateState["releaseNotes"]): DesktopUpdateState {
+function availableUpdate(releaseNotes: DesktopUpdateState["releaseNotes"]): DesktopUpdateState {
   return {
     enabled: true,
     status: "available",
-    channel: "nightly",
+    channel: "latest",
     currentVersion: "0.0.50-nightly.1",
     hostArch: "arm64",
     appArch: "arm64",
@@ -85,23 +85,23 @@ const releaseNotes = () => document.querySelector('[aria-label="Update release n
 
 describe("SidebarUpdatePill release notes", () => {
   it("closes when the release notes stop applying", async () => {
-    setup(nightlyUpdate(RELEASE_NOTES));
+    setup(availableUpdate(RELEASE_NOTES));
     await using _screen = await render(<SidebarUpdatePill />);
     await userEvent.tab();
     await vi.waitFor(() => expect(releaseNotes()).not.toBeNull());
 
-    await publish(nightlyUpdate([]));
+    await publish(availableUpdate([]));
     await vi.waitFor(() => expect(releaseNotes()).toBeNull());
   });
 
   it("opens when release notes arrive while the trigger has keyboard focus", async () => {
-    setup(nightlyUpdate([]));
+    setup(availableUpdate([]));
     await using _screen = await render(<SidebarUpdatePill />);
     await userEvent.tab();
     expect(releaseNotes()).toBeNull();
 
     await publish(
-      nightlyUpdate([
+      availableUpdate([
         {
           version: "0.0.50-nightly.2",
           items: ["**One-time tasks.** Pick a date."],

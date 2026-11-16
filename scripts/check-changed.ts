@@ -4,8 +4,8 @@
 // packages and their dependents, the test files beside the changed files, and
 // the cross-file checks those miss (agent context budget, React Compiler
 // coverage of the changed client files).
-// A dependency change also gets the unused-patch install check below. CI still
-// runs the full test suites and the jobs listed in the summary.
+// A dependency change also gets the unused-patch install check below. CI runs
+// the whole web suite and the app builder's tests, and no other tests.
 //
 //   vp run check:changed                  compare against the closest merge base with any remote main
 //   vp run check:changed <ref>            compare against the merge base with <ref>
@@ -529,12 +529,12 @@ const checkChanged = Effect.fn("checkChanged")(function* (input: {
         "Raise --timeout or lower --concurrency.",
     );
   }
-  const ciOnly = Object.entries({
-    "full test suites": outputs.test || outputs.test_web || outputs.test_server,
-    build: outputs.build,
-    rust: outputs.rust,
-  }).flatMap(([job, runs]) => (runs ? [job] : []));
-  if (ciOnly.length > 0) summary.push(`  CI also runs: ${ciOnly.join(", ")}`);
+  if (outputs.test || outputs.test_web || outputs.test_server) {
+    summary.push(
+      "  CI also runs the whole web suite and the app builder's tests, and no other tests: " +
+        "run the test folders you touched.",
+    );
+  }
   if (!runPatchCheck) summary.push("  unused patch check skipped: no dependency files changed");
   if (!runKnip) summary.push("  knip skipped: no code or manifest changed");
   yield* Console.log(`\n${summary.join("\n")}`);

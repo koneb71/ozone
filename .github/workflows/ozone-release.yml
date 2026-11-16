@@ -27,6 +27,9 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
+    # A build without this is a "dev" build, which reads a managed policy from a path the user sets.
+    env:
+      OZONE_TELEMETRY_CHANNEL: stable
     # Git's bash, on Windows too, so every step reads the same.
     defaults:
       run:

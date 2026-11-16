@@ -13,6 +13,7 @@ import * as Layer from "effect/Layer";
 
 import type { McpInvocationScope } from "../../mcp/McpInvocationContext.ts";
 import * as OrchestratorMcpService from "../../mcp/OrchestratorMcpService.ts";
+import { failed } from "../errors.ts";
 
 export interface WorkerHandle {
   readonly workerTaskId: NodeId;
@@ -57,8 +58,6 @@ export class BuildWorkers extends Context.Service<
     ) => Effect.Effect<void>;
   }
 >()("t3/ozone/builds/BuildWorkers") {}
-
-const failed = (message: string) => new OzoneAppError({ reason: "failed", message });
 
 const make = Effect.gen(function* () {
   const orchestrator = yield* OrchestratorMcpService.OrchestratorMcpService;

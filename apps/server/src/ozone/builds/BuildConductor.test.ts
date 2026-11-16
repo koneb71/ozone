@@ -7,7 +7,6 @@ import {
   ProjectId,
   ProviderInstanceId,
   ThreadId,
-  type OzoneAppManifest,
   type OzoneAppSettings,
   type OzoneBuildPlanInput,
   type OzoneGateResult,
@@ -30,6 +29,7 @@ import * as ThreadManagementService from "../../orchestration-v2/ThreadManagemen
 import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as AppData from "../data/AppData.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
+import { testApp, testManifest } from "../ozone.testkit.ts";
 import { NEXT } from "./briefs.ts";
 import * as BuildChecks from "./BuildChecks.ts";
 import * as BuildConductor from "./BuildConductor.ts";
@@ -42,22 +42,13 @@ import * as BuildWorkers from "./BuildWorkers.ts";
 
 const threadId = ThreadId.make("lead-thread");
 const projectId = ProjectId.make("project-habits");
-const manifest: OzoneAppManifest = {
-  version: 1,
-  runtime: {
-    kind: "compose",
-    file: "compose.yaml",
-    appService: "app",
-    appPort: 3000,
-    healthPath: "/api/health",
-  },
+const manifest = testManifest({
   gates: [
     { id: "typecheck", command: "npm run typecheck", when: "task" },
     { id: "test", command: "npm run test", when: "task" },
     { id: "build", command: "npm run build", when: "final" },
   ],
-  data: { services: [] },
-};
+});
 const scope: McpInvocationScope = {
   environmentId: "environment" as McpInvocationScope["environmentId"],
   requestNamespace: "provider-session",
@@ -258,15 +249,12 @@ const makeHarness = (settings: Partial<OzoneAppSettings> = {}) =>
       }),
     );
     const app: AppRegistry.ResolvedApp = {
-      app: {
+      app: testApp({
         projectId,
         slug: "habits-a1b2c3",
         name: "Habits",
-        templateId: "web-app",
-        port: 41_000,
-        createdAt: "2026-01-01T00:00:00.000Z",
         settings: { ...DEFAULT_OZONE_APP_SETTINGS, verifyBuilds: false, ...settings },
-      },
+      }),
       workspaceRoot,
       manifest,
     };

@@ -23,6 +23,7 @@ import * as Semaphore from "effect/Semaphore";
 
 import type { McpInvocationScope } from "../../mcp/McpInvocationContext.ts";
 import type { ResolvedApp } from "../apps/AppRegistry.ts";
+import { failed as refuse } from "../errors.ts";
 import { NEXT, planFile, specFile, workerBrief } from "./briefs.ts";
 import * as BuildChecks from "./BuildChecks.ts";
 import * as BuildGates from "./BuildGates.ts";
@@ -73,7 +74,6 @@ const SUMMARY_CHARS = 400;
 const isSettled = (task: OzoneBuildTask) => task.status === "done" || task.status === "skipped";
 const isActive = (task: OzoneBuildTask) => task.status === "running" || task.status === "checking";
 const failures = (gates: ReadonlyArray<OzoneGateResult>) => gates.filter((gate) => !gate.ok);
-const refuse = (message: string) => new OzoneAppError({ reason: "failed", message });
 
 const noteFor = (task: OzoneBuildTask): string | undefined => {
   if (task.status === "blocked") {

@@ -502,56 +502,6 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     }),
   );
 
-  it.effect("omits update feeds for pull request preview builds", () =>
-    Effect.gen(function* () {
-      const preview = yield* createBuildConfig(
-        "mac",
-        "dmg",
-        "0.0.33-pr.8182.1",
-        false,
-        false,
-        undefined,
-        undefined,
-      );
-      const release = yield* createBuildConfig(
-        "mac",
-        "dmg",
-        "0.0.33",
-        false,
-        false,
-        undefined,
-        undefined,
-      );
-
-      const previewChannel = yield* createBuildConfig(
-        "mac",
-        "dmg",
-        "0.0.41-preview.20260912.1589",
-        false,
-        false,
-        undefined,
-        undefined,
-      );
-
-      assert.isNull(preview.publish);
-      assert.isNull(previewChannel.publish);
-      assert.deepStrictEqual(release.publish, [
-        {
-          provider: "github",
-          owner: "koneb71",
-          repo: "ozone",
-          releaseType: "release",
-        },
-      ]);
-    }).pipe(
-      Effect.provide(
-        ConfigProvider.layer(
-          ConfigProvider.fromEnv({ env: { GITHUB_REPOSITORY: "koneb71/ozone" } }),
-        ),
-      ),
-    ),
-  );
-
   it.effect("names the Electron window class in the Linux desktop entry", () =>
     Effect.gen(function* () {
       const linux = yield* createBuildConfig(
@@ -1615,24 +1565,19 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     assert.notInclude(error.message, secret);
   });
 
-  it.effect("signs Windows builds with signtool on Windows and the jsign hook elsewhere", () =>
+  it.effect("signs Windows builds on Windows, and refuses to sign one anywhere else", () =>
     Effect.gen(function* () {
       const signedWinConfig = (hostPlatform: string) =>
         createBuildConfig("win", "nsis", "1.2.3", true, false, undefined, undefined).pipe(
-          Effect.map((config) => config.win as Record<string, unknown>),
           Effect.provideService(HostProcess.Platform, hostPlatform),
         );
 
-      const onWindows = yield* signedWinConfig("win32");
+      const onWindows = (yield* signedWinConfig("win32")).win as Record<string, unknown>;
       assert.equal((onWindows.azureSignOptions as Record<string, unknown>).publisherName, "T3");
       assert.notProperty(onWindows, "signtoolOptions");
 
-      const onLinux = yield* signedWinConfig("linux");
-      assert.notProperty(onLinux, "azureSignOptions");
-      const signtoolOptions = onLinux.signtoolOptions as Record<string, unknown>;
-      assert.match(signtoolOptions.sign as string, /scripts[\\/]lib[\\/]windows-jsign\.ts$/);
-      assert.deepStrictEqual(signtoolOptions.signingHashAlgorithms, ["sha256"]);
-      assert.deepStrictEqual(signtoolOptions.publisherName, ["T3"]);
+      const onLinux = yield* Effect.flip(signedWinConfig("linux"));
+      assert.strictEqual(onLinux._tag, "WindowsSigningHostError");
     }).pipe(
       Effect.provide(
         ConfigProvider.layer(

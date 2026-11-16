@@ -4,6 +4,9 @@ Use a 1Password Connect server when you already run one, for example on a home s
 want the Ozone server to read secrets through it. Connect needs no desktop approval, so it works on a
 headless or [remote](./remote-access.md) host.
 
+Secret providers are not in the released builds yet. This page applies to a build made from
+source with them turned on; see [Secrets](./secrets.md).
+
 If you do not run Connect, a [service account](./secrets-1password-service-account.md) is simpler. For the
 basics, see [Secrets](./secrets.md).
 

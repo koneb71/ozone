@@ -29,7 +29,6 @@ import {
 } from "./build-desktop-artifact.ts";
 import { assertLinuxArm64PageCompatibility } from "./lib/linux-arm64-sea.ts";
 import { selectCliRuntimeExternalDependencies } from "./lib/cli-external-packages.ts";
-import { signWithJsign } from "./lib/windows-jsign.ts";
 import { windowsSystemTar } from "./lib/windows-tar.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
 
@@ -69,6 +68,15 @@ export class CliArchiveLinuxArm64PageError extends Schema.TaggedError<CliArchive
 ) {
   override get message(): string {
     return `${this.executablePath} is not page-compatible with Linux arm64.`;
+  }
+}
+
+export class CliArchiveWindowsSigningHostError extends Schema.TaggedError<CliArchiveWindowsSigningHostError>()(
+  "CliArchiveWindowsSigningHostError",
+  { hostPlatform: Schema.String },
+) {
+  override get message(): string {
+    return `Signing ozone.exe needs a Windows host, and this one is '${this.hostPlatform}'.`;
   }
 }
 
@@ -559,12 +567,11 @@ const signWindowsExecutable = Effect.fn("signWindowsExecutable")(function* (
     yield* Effect.log("[cli-archive] Windows signing disabled (missing Azure Trusted Signing).");
     return;
   }
-  yield* stripStaleAuthenticodeEntry(executablePath);
-  if ((yield* HostProcess.Platform) !== "win32") {
-    yield* signWithJsign(executablePath);
-    yield* Effect.log("[cli-archive] Signed ozone.exe (Azure Trusted Signing via jsign).");
-    return;
+  const hostPlatform = yield* HostProcess.Platform;
+  if (hostPlatform !== "win32") {
+    return yield* new CliArchiveWindowsSigningHostError({ hostPlatform });
   }
+  yield* stripStaleAuthenticodeEntry(executablePath);
   const quote = (value: string) => `'${value.replaceAll("'", "''")}'`;
   const script = [
     "$ErrorActionPreference = 'Stop';",

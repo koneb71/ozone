@@ -632,8 +632,10 @@ process, both in `service.namespace` `t3code`. `OTEL_SERVICE_NAME` and a `servic
 resource attributes, such as `OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=staging`.
 
 Each process reports its own build, not the one it talks to: the server, the desktop main process
-and the UI each carry `t3code.release.channel`, derived from their own version (a server not built
-by the release workflow reports `dev`), and `deployment.environment.name`. On the server and the
+and the UI each carry `t3code.release.channel` and `deployment.environment.name`. The channel is
+`dev` or `stable`. The desktop process and the UI report `dev` in a development build and `stable`
+otherwise. The server's is set when it is built, by `OZONE_TELEMETRY_CHANNEL`: the release
+workflow builds it as `stable`, and any other build reports `dev`. On the server and the
 desktop main process either key in `OTEL_RESOURCE_ATTRIBUTES` wins. The UI never reads that
 variable.
 

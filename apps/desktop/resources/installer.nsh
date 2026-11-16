@@ -19,7 +19,6 @@
     ${If} $0 == 0
       ${If} $1 == "Ozone (Alpha)"
       ${OrIf} $1 == "Ozone (Beta)"
-      ${OrIf} $1 == "Ozone (Nightly)"
         ${T3StrRep} $appRunningMessage $appRunningMessage "${PRODUCT_NAME}" $1
         ${T3StrRep} $appClosingMessage $appClosingMessage "${PRODUCT_NAME}" $1
         ${T3StrRep} $appCannotBeClosedMessage $appCannotBeClosedMessage "${PRODUCT_NAME}" $1

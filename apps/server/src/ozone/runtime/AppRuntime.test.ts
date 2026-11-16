@@ -1,10 +1,8 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import {
-  DEFAULT_OZONE_APP_SETTINGS,
   OzoneAppError,
   ProjectId,
-  type OzoneAppManifest,
   type OzoneRuntimeService,
   type OzoneRuntimeStatus,
 } from "@t3tools/contracts";
@@ -22,28 +20,16 @@ import * as TestClock from "effect/testing/TestClock";
 import * as ServerConfig from "../../config.ts";
 import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as AppData from "../data/AppData.ts";
+import { TEST_DATABASE, TEST_MIGRATIONS, testApp, testManifest } from "../ozone.testkit.ts";
 import * as AppCompose from "./AppCompose.ts";
 import * as AppRuntime from "./AppRuntime.ts";
 import * as DockerCli from "./DockerCli.ts";
 
 const projectId = ProjectId.make("project-habits");
-const manifest: OzoneAppManifest = {
-  version: 1,
-  runtime: {
-    kind: "compose",
-    file: "compose.yaml",
-    appService: "app",
-    appPort: 3000,
-    healthPath: "/api/health",
-  },
-  gates: [],
-  data: { services: [{ service: "db", kind: "postgres", volume: "pgdata" }] },
-  migrations: {
-    directory: "drizzle",
-    generate: "npm run db:generate",
-    apply: "npm run db:migrate",
-  },
-};
+const manifest = testManifest({
+  data: { services: [TEST_DATABASE] },
+  migrations: TEST_MIGRATIONS,
+});
 
 const service = (
   name: string,
@@ -102,16 +88,12 @@ const makeHarness = (options: { readonly hostCa?: boolean; readonly docker?: "mi
     const registry = Layer.mock(AppRegistry.AppRegistry)({
       resolve: () =>
         Effect.map(Ref.get(firstStarts), (recorded) => ({
-          app: {
+          app: testApp({
             projectId,
             slug: "habits-a1b2c3",
             name: "Habits",
-            templateId: "web-app",
-            port: 41_000,
-            createdAt: "2026-01-01T00:00:00.000Z",
-            settings: DEFAULT_OZONE_APP_SETTINGS,
             firstStartedAt: recorded[0] ?? null,
-          },
+          }),
           workspaceRoot,
           manifest,
         })),
