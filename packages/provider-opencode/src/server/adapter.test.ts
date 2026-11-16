@@ -55,6 +55,7 @@ import {
   makeOpenCodeProtocolLogger,
   makeOpenCodeAdapterV2,
   OPENCODE_PROVIDER,
+  OPENCODE_QUESTION_INSTRUCTIONS,
   reconcileOpenCodePromptAdmissionStatus,
 } from "./adapter.ts";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
@@ -3654,6 +3655,7 @@ describe("OpenCodeAdapterV2", () => {
       assert.equal(start?.agent, "plan");
       assert.equal(start?.variant, "high");
       assert.include(start?.system ?? "", "OpenCode");
+      assert.include(start?.system ?? "", OPENCODE_QUESTION_INSTRUCTIONS);
       assert.deepEqual(
         { agent: steer?.agent, variant: steer?.variant, system: steer?.system },
         { agent: start?.agent, variant: start?.variant, system: start?.system },

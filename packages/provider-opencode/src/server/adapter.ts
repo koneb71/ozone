@@ -622,6 +622,10 @@ export function openCodePermissionRequestKind(
   return "command";
 }
 
+/** Without this a model often writes its questions as prose, which Ozone cannot show as a card. */
+export const OPENCODE_QUESTION_INSTRUCTIONS =
+  "When you need a decision from the user, call the `question` tool with every question and its options, if you have that tool. Ozone shows them as a card the user answers. Do not write the questions out in your reply.";
+
 const OPENCODE_ALWAYS_ALLOWED_PERMISSIONS = [
   "question",
   "read",
@@ -3478,6 +3482,7 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
             system: [
               orchestrationSystemPrompt,
               buildRuntimeInstructions({ harness: "OpenCode", model: turn.modelSelection.model }),
+              OPENCODE_QUESTION_INSTRUCTIONS,
             ]
               .filter(Boolean)
               .join("\n\n"),

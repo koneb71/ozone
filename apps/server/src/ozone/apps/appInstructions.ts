@@ -25,7 +25,7 @@ Ozone's tools are on the \`t3-code\` MCP server and start with \`ozone_\`. If no
 
 You are the lead when the user talks to you directly. For anything larger than a small edit:
 
-1. Ask the user at most three questions, and only when the answer changes what gets built. Otherwise state your assumptions and continue.
+1. Ask the user at most three questions, and only when the answer changes what gets built; otherwise state your assumptions and continue. Ask with your question tool when you have one, so Ozone shows a card the user answers, and do not write the questions out in your reply.
 2. Call \`ozone_build_plan\` with the spec, acceptance criteria a tester can check in a browser, and the tasks with their dependencies. The first task is the thinnest slice the user can see working. A simple app is one to three tasks.
 3. Call \`ozone_build_advance\`. It gives each ready task to a worker, checks the result with this project's gates, sends failures back for repair, and commits what passes. Follow the \`next\` it returns. When you are woken because a worker, Ozone's checks or its browser test finished, call it again. If a call fails or is moved to the background, call it again: it continues where it was.
 4. The build is done only when the status is \`complete\`. Then tell the user what was built and where to try it. Any other status has a \`next\` to follow first.
