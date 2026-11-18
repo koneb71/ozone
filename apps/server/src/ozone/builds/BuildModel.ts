@@ -200,7 +200,8 @@ export const applyPlan = (
     tasks,
     ...unfinished(build),
     approval,
-    planGranted: usesGrant ? false : build.planGranted,
+    // New work spends the approval even with reviews off, so it cannot cover a later plan.
+    planGranted: addsWork ? false : build.planGranted,
     updatedAt: now,
   });
 };

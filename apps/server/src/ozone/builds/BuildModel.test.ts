@@ -326,6 +326,12 @@ describe("BuildModel", () => {
     });
     if (!filed.ok) return assert.fail(filed.problems.join(" "));
     assert.deepStrictEqual([filed.build.approval, filed.build.planGranted], ["approved", false]);
+    // Approving turns Plan first off, so the plan is filed with reviews off. It still spends it.
+    const unreviewed = BuildModel.applyPlan(granted, plan(task("schema"), task("page")), LATER, {
+      reviewPlans: false,
+    });
+    if (!unreviewed.ok) return assert.fail(unreviewed.problems.join(" "));
+    assert.strictEqual(unreviewed.build.planGranted, false);
     const later = BuildModel.applyPlan(
       filed.build,
       plan(task("schema"), task("page"), task("more")),

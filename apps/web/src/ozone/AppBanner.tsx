@@ -28,7 +28,7 @@ import { AppMenu } from "./AppMenu";
 import { buildBannerItem } from "./BuildCard";
 import { useBuildStagedIn } from "./homeFiles";
 import { visiblePreviewShows } from "./preview.logic";
-import { ozoneEnvironment } from "./state";
+import { ozoneEnvironment, refreshApps } from "./state";
 import { useOzoneCommand } from "./ui/useOzoneCommand";
 import { useConfigureApp } from "./useConfigureApp";
 
@@ -168,7 +168,10 @@ export function useAppBanners(
     });
     if (result._tag === "Failure") {
       reportFailure("Could not start the build", squashAtomCommandFailure(result));
+      return;
     }
+    // Approving turned the app's Plan first off.
+    refreshApps(threadRef.environmentId);
   };
 
   const copy = appNotice(app, status);

@@ -395,7 +395,7 @@ import {
   useSystemComposerBanners,
 } from "./chat/useSystemComposerBanners";
 import { planFirstMessage } from "../ozone/home.logic";
-import { ozoneEnvironment } from "../ozone/state";
+import { ozoneEnvironment, refreshApps } from "../ozone/state";
 import { useOzoneComposer } from "../ozone/useOzoneComposer";
 import { planReviewBannerItem } from "./chat/ComposerPlanReview";
 import { type PlanAnswer, planToAnswer } from "./chat/planReview.logic";
@@ -2675,6 +2675,8 @@ export default function ChatView(props: ChatViewProps) {
         environmentId: activeThread.environmentId,
         input: { threadId: activeThread.id, shownInThread: true },
       });
+      // Approving turned the app's Plan first off.
+      refreshApps(activeThread.environmentId);
     }
     await leavePlanMode();
     const sent = await settlePromise(() =>

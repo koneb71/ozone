@@ -35,9 +35,9 @@ you its questions on a card in the conversation, and shows its plan on a card wi
 say what to change. Decline drops the plan.
 
 Plan first applies to every request while it is on, including a small change to an app that is
-already built. Turn it off when you want quick edits made straight away. The same switch sits
-above the message box in an app's thread, and as **Show me the plan first** on the app's Build
-page.
+already built. Approving a plan turns it off, so what you ask next is built straight away; turn
+it on again when you want to see a plan first. The same switch sits above the message box in an
+app's thread, and as **Show me the plan first** on the app's Build page.
 
 Antigravity, Fx, Grok, Kiro, Muse and Pi have no plan mode of their own. With those, Ozone asks
 the agent to plan first: it files its plan as a task list, and no task runs until you select

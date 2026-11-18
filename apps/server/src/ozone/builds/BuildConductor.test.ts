@@ -258,7 +258,12 @@ const makeHarness = (settings: Partial<OzoneAppSettings> = {}) =>
       workspaceRoot,
       manifest,
     };
-    const registry = Layer.mock(AppRegistry.AppRegistry)({ resolve: () => Effect.succeed(app) });
+    const configured = yield* Ref.make<ReadonlyArray<Partial<OzoneAppSettings>>>([]);
+    const registry = Layer.mock(AppRegistry.AppRegistry)({
+      resolve: () => Effect.succeed(app),
+      configure: (_projectId, change) =>
+        Ref.update(configured, (changes) => [...changes, change]).pipe(Effect.as(app.app)),
+    });
     const threads = Layer.mock(ThreadManagementService.ThreadManagementService)({
       getThreadShell: () => Effect.succeed({ projectId } as never),
     });
@@ -298,6 +303,7 @@ const makeHarness = (settings: Partial<OzoneAppSettings> = {}) =>
     return {
       ...services,
       lead,
+      configured: Ref.get(configured),
       set,
       steps,
       forget,
@@ -846,7 +852,9 @@ describe("BuildConductor", () => {
 
   it.effect("starts no work on a reviewed plan until the person approves it", () =>
     Effect.gen(function* () {
-      const { conductor, review, lead, steps, wakes } = yield* makeHarness({ reviewPlans: true });
+      const { conductor, review, lead, steps, wakes, configured } = yield* makeHarness({
+        reviewPlans: true,
+      });
       const planned = yield* conductor.plan(lead, plan(task("page")));
       assert.strictEqual(planned.status, "review");
       assert.strictEqual(planned.next, NEXT.review);
@@ -855,9 +863,11 @@ describe("BuildConductor", () => {
       assert.strictEqual((yield* conductor.advance(lead)).status, "review");
       assert.deepStrictEqual(yield* steps, []);
 
-      // Approving from the build card wakes the lead, which then builds.
+      // Approving from the build card wakes the lead, which then builds. It also turns Plan
+      // first off; the lead here keeps its setting, as if the person turned it back on.
       yield* review.approve(threadId);
       assert.strictEqual(yield* Queue.take(wakes), "Plan approved");
+      assert.deepStrictEqual(yield* configured, [{ reviewPlans: false }]);
       assert.strictEqual((yield* conductor.advance(lead)).status, "complete");
 
       // A plan the person approved in the thread, in plan mode, is not asked about again here.
@@ -869,6 +879,7 @@ describe("BuildConductor", () => {
       assert.strictEqual(refused.next, NEXT.planning);
       assert.deepStrictEqual(refused.tasks, []);
       yield* shown.review.grant(threadId);
+      assert.deepStrictEqual(yield* shown.configured, [{ reviewPlans: false }]);
       assert.strictEqual(
         (yield* shown.conductor.plan(shown.lead, plan(task("page")))).status,
         "building",
