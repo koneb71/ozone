@@ -69,18 +69,21 @@ task is still where it left it: a plan revised in the meantime wins.
 
 **A tester uses the finished app.** Every gate can pass on an app that does not do what was asked.
 When the final check passes, a read-only worker opens the app in the preview browser, tries each
-acceptance criterion as a person would, and ends with one verdict line per criterion. A failure
+acceptance criterion as a person would (for an app with pages, at 360 px wide and in dark and light
+too), and ends with one verdict line per criterion. A failure
 stops the build for the lead, which adds a fix task, has the app tried again, or keeps the build and
 says why. A tester that could try nothing, for want of a browser, does not hold the build; the
 report says so. Its brief and the parser of its verdicts are in
 [`verification.ts`](../../apps/server/src/ozone/builds/verification.ts).
 
-**A plan can wait for the person.** With the app's "Show me the plan" setting, every message the
-person sends the lead runs in the provider's plan mode, where the lead cannot write. Asking the
+**A plan can wait for the person.** With the app's "Show me the plan first" setting, every message
+the person sends the lead runs in the provider's plan mode, where the lead cannot write. Asking the
 lead to plan was not enough: one that describes a plan and then edits files passes any check on
 Ozone's own tools. The person answers the plan in the thread; approving it there records a grant
 on the build, which the plan the lead files next uses up, so the build card does not ask again.
-A lead in plan mode cannot file a plan at all, which keeps one place of review.
+A lead in plan mode cannot file a plan at all, which keeps one place of review. Approving also
+turns the setting off, as leaving plan mode does in the agent, so the next request is built rather
+than planned again.
 
 Without a grant, new work waits on the build card for the person to start it, and the lead has no
 way to start it: an agent told to build something reads that as permission. That path serves
@@ -103,8 +106,9 @@ the migration from the app's banner. See [data safety](./data-safety.md).
 and the worst an agent can do to the data is one task's worth.
 
 **The protocol reaches agents through the app's `AGENTS.md`.** Every provider loads that file
-itself and it survives compaction, so no provider adapter is edited. The tools are hidden from
-workers, and a worker's brief starts with `Ozone task`, which that file keys on.
+itself and it survives compaction, so no provider adapter is edited. The lead's tools are hidden
+from workers, which get only `ozone_build_check`, `ozone_app_runtime` and `ozone_web_guidance`, and
+a worker's brief starts with `Ozone task`, which that file keys on.
 
 ## Traps
 

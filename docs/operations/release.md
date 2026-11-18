@@ -12,6 +12,11 @@ platform builds on its own runner, so the Windows installer is built on Windows.
    titled `Ozone <version>` with generated notes.
 3. Read the draft, edit the notes, and publish it. Publishing the draft is the release.
 
+The workflow makes the draft only when the tag has no release yet. If one exists, for example one
+made on GitHub when the tag was pushed, it attaches the files to that one and leaves its title,
+notes and state alone. A release published by hand is live while its files are still uploading,
+so leave it as a draft until the workflow finishes.
+
 The version comes from the tag. The workflow stamps it into the package files of its own checkout
 with `scripts/update-release-package-versions.ts`. Never commit that change.
 

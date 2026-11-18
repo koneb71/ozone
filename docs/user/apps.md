@@ -44,8 +44,8 @@ Before it plans, the agent offers three design directions above the message box,
 small first screen in its own colours and faces, with its swatches, layout and mood. Pick one with
 **Use**, or say what you want instead and it offers new ones. **Let the lead choose** leaves the
 look to the agent and turns the setting off. Your pick is saved in the app's `DESIGN.md`, and later
-changes follow it. To choose again, ask the agent for new directions or delete `DESIGN.md`. The
-same switch is **Let me pick the design** on the app's Build page.
+changes follow it. To choose again, ask the agent for new directions, or delete `DESIGN.md` while
+the setting is on. The same switch is **Let me pick the design** on the app's Build page.
 
 The previews never download fonts: a face that is not installed on your device shows in a similar
 one. The app itself gets the real faces.

@@ -25,7 +25,8 @@ it as read, and see how many are left to read." This is the app it built:
 - **Builds apps from a prompt.** A new app is a real project on your disk, in a git repository of
   its own, started from a tested template: a **web app** (TanStack Start with React 19, Tailwind
   CSS 4, Drizzle on Postgres and Better Auth), a **landing page** with no database, or an **API**
-  (Hono, Drizzle on Postgres and zod).
+  (Hono, Drizzle on Postgres and zod). Apps with pages carry design and SEO skills for the agents,
+  and a landing page's final check covers every page's title, description and place in the sitemap.
 - **Runs them in Docker.** Each app is a Docker Compose project with one address that never
   changes. Start, stop, restart, rebuild and read its logs from the thread. Give it settings and
   secrets under **Environment**: they reach its container and never its code.
@@ -33,7 +34,7 @@ it as read, and see how many are left to read." This is the app it built:
   each task. The server, not the agent, runs the type check, the linter and the tests inside the
   app's container. A failed check goes to a fresh worker with the evidence. Every task that passes
   is a commit. When every check passes, a tester uses the app in a browser against what you asked
-  for.
+  for, at phone width and in dark and light too.
 - **Gives each app a page.** Open it from Home or from the app's thread: Overview, Data, History,
   Environment, Build and Logs while you build, then Deploy, Deployments and Monitoring for
   production. It is laid out like Settings.
