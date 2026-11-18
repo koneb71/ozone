@@ -2,7 +2,7 @@ name: Ozone release
 
 # Builds what people install, for Linux, Apple silicon and Windows: the desktop app and the
 # command-line archive the app fetches for a remote machine. A manual run keeps them as workflow artifacts. A v* tag also gathers them into a
-# draft GitHub Release, which a person reads and publishes. The Mac app is signed and notarized when
+# draft GitHub Release, with the version's CHANGELOG.md section as its notes, which a person reads and publishes. The Mac app is signed and notarized when
 # the signing secrets are set. Nothing else is signed.
 on:
   workflow_dispatch:
@@ -254,6 +254,23 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout the changelog
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            /CHANGELOG.md
+            /package.json
+            /pnpm-workspace.yaml
+            /.github/actions/
+            /scripts/package.json
+            /scripts/release-notes.ts
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Node.js
+        uses: ./.github/actions/setup-ci-deps
+        with:
+          install: "false"
+
       - name: Download
         uses: actions/download-artifact@v8
         with:
@@ -273,7 +290,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          version="${GITHUB_REF_NAME#v}"
+          notes="$RUNNER_TEMP/notes.md"
+          if ! node scripts/release-notes.ts "$version" > "$notes"; then
+            echo "::warning::CHANGELOG.md has no entries under '## $version', so the draft has only GitHub's generated notes."
+            : > "$notes"
+          fi
+          # gh puts the changelog's section above the generated notes, which end with the compare link.
           if ! gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            gh release create "$GITHUB_REF_NAME" --draft --verify-tag --generate-notes --title "Ozone ${GITHUB_REF_NAME#v}"
+            gh release create "$GITHUB_REF_NAME" --draft --verify-tag --generate-notes --notes-file "$notes" --title "Ozone $version"
           fi
           gh release upload "$GITHUB_REF_NAME" assets/* --clobber

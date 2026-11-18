@@ -11,13 +11,14 @@ platform builds on its own runner, so the Windows installer is built on Windows.
 2. Push a tag named `v<version>` with all three numbers, such as `v0.2.0`. A suffix such as
    `v0.2.0-rc.1` is accepted.
 3. The workflow builds the three platforms and gathers their files into a draft GitHub Release
-   titled `Ozone <version>` with generated notes.
-4. Replace the draft's notes with that version's section of the changelog, and publish it.
-   Publishing the draft is the release.
+   titled `Ozone <version>`. Its notes are that version's section of the changelog, which
+   `scripts/release-notes.ts` reads, followed by GitHub's generated notes and compare link. With no
+   section for the version, the run warns and the draft has only the generated notes.
+4. Read the draft and publish it. Publishing the draft is the release.
 
 The workflow makes the draft only when the tag has no release yet. If one exists, for example one
 made on GitHub when the tag was pushed, it attaches the files to that one and leaves its title,
-notes and state alone. A release published by hand is live while its files are still uploading,
+notes and state alone, so its notes do not come from the changelog. A release published by hand is live while its files are still uploading,
 so leave it as a draft until the workflow finishes.
 
 The version comes from the tag. The workflow stamps it into the package files of its own checkout
