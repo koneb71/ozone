@@ -68,6 +68,10 @@ export function createOzoneEnvironmentAtoms<R, E>(
       label: "environment-data:ozone:approve-build",
       tag: OZONE_WS_METHODS.buildApprove,
     }),
+    answerDesign: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:answer-design",
+      tag: OZONE_WS_METHODS.designAnswer,
+    }),
     snapshots: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:ozone:snapshots",
       tag: OZONE_WS_METHODS.dataList,
@@ -247,7 +251,9 @@ const failedCriteria = (build: OzoneBuild) =>
   build.verification.results.filter((result) => result.verdict === "fail");
 
 /** The one line that says where a build stands. Null when there is nothing to show yet. */
-export function buildHeadline(snapshot: OzoneBuildSnapshot | null): BuildHeadline | null {
+export function buildHeadline(
+  snapshot: Pick<OzoneBuildSnapshot, "build" | "status"> | null,
+): BuildHeadline | null {
   const build = snapshot?.build ?? null;
   if (snapshot === null || build === null || build.tasks.length === 0) return null;
   const done = build.tasks.filter(settled).length;

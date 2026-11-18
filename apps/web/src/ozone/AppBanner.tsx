@@ -3,7 +3,7 @@ import { appNotice } from "@t3tools/client-runtime/state/ozone";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { OzoneApp, OzoneRuntimeAction, ScopedThreadRef } from "@t3tools/contracts";
 import { BoxIcon, DatabaseIcon, HammerIcon, MonitorIcon, PlayIcon } from "lucide-react";
-import { useEffect, useEffectEvent } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 
 import { resolveDiscoveredServerUrl } from "~/browser/browserTargetResolver";
 import { previewRuntimeFor } from "~/browser/previewRuntime";
@@ -26,6 +26,7 @@ import { useOpenAppPage } from "./app-page/navigation";
 import { runtimeFailureTitle } from "./app-page/useAppRuntime";
 import { AppMenu } from "./AppMenu";
 import { buildBannerItem } from "./BuildCard";
+import { designBannerItem } from "./DesignPicker";
 import { useBuildStagedIn } from "./homeFiles";
 import { visiblePreviewShows } from "./preview.logic";
 import { ozoneEnvironment, refreshApps } from "./state";
@@ -73,6 +74,8 @@ export function useAppBanners(
   const { working: acting, run } = useOzoneCommand();
   const openPage = useOpenAppPage();
   const approveBuild = useAtomCommand(ozoneEnvironment.approveBuild, { reportFailure: false });
+  const answerDesign = useAtomCommand(ozoneEnvironment.answerDesign, { reportFailure: false });
+  const [answeringDesign, setAnsweringDesign] = useState(false);
   const settings = useConfigureApp();
   const sentThread = useQuietThreadShell(threadRef);
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
@@ -174,11 +177,35 @@ export function useAppBanners(
     refreshApps(threadRef.environmentId);
   };
 
+  const answer = async (pick: number | null) => {
+    setAnsweringDesign(true);
+    const result = await answerDesign({
+      environmentId: threadRef.environmentId,
+      input: { threadId: threadRef.threadId, pick },
+    });
+    setAnsweringDesign(false);
+    if (result._tag === "Failure") {
+      reportFailure(
+        pick === null ? "Could not leave the design to the lead" : "Could not use that design",
+        squashAtomCommandFailure(result),
+      );
+      return;
+    }
+    // Leaving it to the lead turned the app's "Let me pick the design" off.
+    if (pick === null) refreshApps(threadRef.environmentId);
+  };
+
   const copy = appNotice(app, status);
   const phase = status?.phase;
   const busy = phase === "starting";
   const buildItem = buildBannerItem(build.data, () => void approve());
+  const designItem = designBannerItem(
+    build.data?.design ?? null,
+    answeringDesign,
+    (pick) => void answer(pick),
+  );
   return [
+    ...(designItem === null ? [] : [designItem]),
     ...(awaitsSend
       ? [
           {

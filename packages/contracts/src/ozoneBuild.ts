@@ -1,7 +1,14 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import { IsoDateTime, NodeId, ProjectId, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import {
+  IsoDateTime,
+  NodeId,
+  NonNegativeInt,
+  ProjectId,
+  ThreadId,
+  TrimmedNonEmptyString,
+} from "./baseSchemas.ts";
 
 const TaskId = TrimmedNonEmptyString.check(
   Schema.isMaxLength(48),
@@ -206,6 +213,63 @@ export const OzoneBuildCheckResult = Schema.Struct({
 });
 export type OzoneBuildCheckResult = typeof OzoneBuildCheckResult.Type;
 
+const HexColor = Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/)).annotate({
+  description: "A colour as #rrggbb.",
+});
+
+export const OzoneDesignFace = Schema.Struct({
+  family: TrimmedNonEmptyString.check(Schema.isMaxLength(60)).annotate({
+    description: "The face's name as @fontsource publishes it, such as `Work Sans`.",
+  }),
+  style: Schema.Literals(["serif", "sans", "mono", "display", "script"]),
+});
+export type OzoneDesignFace = typeof OzoneDesignFace.Type;
+
+/** One complete look the lead offers before it plans. */
+export const OzoneDesignDirection = Schema.Struct({
+  name: TrimmedNonEmptyString.check(Schema.isMaxLength(40)),
+  idea: TrimmedNonEmptyString.check(Schema.isMaxLength(200)).annotate({
+    description: "The direction in one sentence.",
+  }),
+  colors: Schema.Struct({
+    background: HexColor,
+    surface: HexColor.annotate({ description: "Cards, inputs and raised areas." }),
+    text: HexColor,
+    muted: HexColor.annotate({ description: "Secondary text." }),
+    accent: HexColor.annotate({ description: "Buttons and links." }),
+    accentText: HexColor.annotate({ description: "Text on the accent." }),
+  }),
+  display: OzoneDesignFace.annotate({ description: "Headings." }),
+  body: OzoneDesignFace,
+  layout: TrimmedNonEmptyString.check(Schema.isMaxLength(300)).annotate({
+    description: "What the first screen shows and how it is arranged.",
+  }),
+  mood: TrimmedNonEmptyString.check(Schema.isMaxLength(120)),
+});
+export type OzoneDesignDirection = typeof OzoneDesignDirection.Type;
+
+export const OzoneDesignProposeInput = Schema.Struct({
+  directions: Schema.Array(OzoneDesignDirection).check(
+    Schema.isMinLength(2),
+    Schema.isMaxLength(4),
+  ),
+});
+export type OzoneDesignProposeInput = typeof OzoneDesignProposeInput.Type;
+
+/** Directions the person has not picked from yet. */
+export const OzoneDesignProposal = Schema.Struct({
+  directions: Schema.Array(OzoneDesignDirection),
+  proposedAt: IsoDateTime,
+});
+export type OzoneDesignProposal = typeof OzoneDesignProposal.Type;
+
+export const OzoneDesignAnswerInput = Schema.Struct({
+  threadId: ThreadId,
+  /** The direction picked, or null to leave the design to the lead. */
+  pick: Schema.NullOr(NonNegativeInt),
+});
+export type OzoneDesignAnswerInput = typeof OzoneDesignAnswerInput.Type;
+
 export const OzoneBuildSubscribeInput = Schema.Struct({ threadId: ThreadId });
 export const OzoneBuildApproveInput = Schema.Struct({
   threadId: ThreadId,
@@ -216,5 +280,9 @@ export type OzoneBuildApproveInput = typeof OzoneBuildApproveInput.Type;
 export const OzoneBuildSnapshot = Schema.Struct({
   build: Schema.NullOr(OzoneBuild),
   status: OzoneBuildStatus,
+  // Defaulted so a client can read a server from before design directions.
+  design: Schema.NullOr(OzoneDesignProposal).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+  ),
 });
 export type OzoneBuildSnapshot = typeof OzoneBuildSnapshot.Type;

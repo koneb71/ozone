@@ -40,10 +40,15 @@ it on again when you want to see a plan first. The same switch sits above the me
 app's thread, and as **Show me the plan first** on the app's Build page.
 
 To choose the look yourself, turn on **Pick the design** on Home (it is not offered for an API).
-Before it plans, the agent shows you three design directions on a card, each with its colours,
-type, first screen and mood, and builds the one you pick. Your pick is saved in the app's
-`DESIGN.md`, and later changes follow it. To choose again, ask for new directions or delete
-`DESIGN.md`. The same switch is **Let me pick the design** on the app's Build page.
+Before it plans, the agent offers three design directions above the message box, each drawn as a
+small first screen in its own colours and faces, with its swatches, layout and mood. Pick one with
+**Use**, or say what you want instead and it offers new ones. **Let the lead choose** leaves the
+look to the agent and turns the setting off. Your pick is saved in the app's `DESIGN.md`, and later
+changes follow it. To choose again, ask the agent for new directions or delete `DESIGN.md`. The
+same switch is **Let me pick the design** on the app's Build page.
+
+The previews never download fonts: a face that is not installed on your device shows in a similar
+one. The app itself gets the real faces.
 
 Antigravity, Fx, Grok, Kiro, Muse and Pi have no plan mode of their own. With those, Ozone asks
 the agent to plan first: it files its plan as a task list, and no task runs until you select

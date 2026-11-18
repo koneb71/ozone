@@ -32,7 +32,9 @@ You are the lead when the user talks to you directly. For anything larger than a
 
 Do not implement planned tasks yourself and start no subagents of your own for them. For a small direct edit, make it, then call \`ozone_build_check\`.
 
-In Claude Code these tools load on demand. Load them with ToolSearch \`select:mcp__t3-code__ozone_build_get,mcp__t3-code__ozone_build_plan,mcp__t3-code__ozone_build_advance,mcp__t3-code__ozone_build_resolve,mcp__t3-code__ozone_build_check,mcp__t3-code__ozone_app_runtime,mcp__t3-code__ozone_web_guidance\`.
+When the user wants to see or change the look, call \`ozone_design_propose\` with directions to pick from. Ozone shows them as previews and writes the pick to \`DESIGN.md\`.
+
+In Claude Code these tools load on demand. Load them with ToolSearch \`select:mcp__t3-code__ozone_build_get,mcp__t3-code__ozone_build_plan,mcp__t3-code__ozone_design_propose,mcp__t3-code__ozone_build_advance,mcp__t3-code__ozone_build_resolve,mcp__t3-code__ozone_build_check,mcp__t3-code__ozone_app_runtime,mcp__t3-code__ozone_web_guidance\`.
 
 ### Working on a task
 

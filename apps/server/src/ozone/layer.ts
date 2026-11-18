@@ -11,6 +11,7 @@ import * as BuildConductor from "./builds/BuildConductor.ts";
 import * as BuildGates from "./builds/BuildGates.ts";
 import * as BuildPreview from "./builds/BuildPreview.ts";
 import * as BuildRepo from "./builds/BuildRepo.ts";
+import * as BuildDesign from "./builds/BuildDesign.ts";
 import * as BuildReview from "./builds/BuildReview.ts";
 import * as BuildStore from "./builds/BuildStore.ts";
 import * as BuildWake from "./builds/BuildWake.ts";
@@ -49,6 +50,7 @@ export const layer = Layer.mergeAll(OzoneWs.layer, AutoDeploy.layer).pipe(
     Layer.mergeAll(
       BuildChecks.layer,
       BuildReview.layer,
+      BuildDesign.layer,
       AppHistory.layer,
       AppEnv.layer,
       WebGuidance.layer,

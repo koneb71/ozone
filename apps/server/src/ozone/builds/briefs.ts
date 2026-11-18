@@ -9,6 +9,7 @@ import {
   type OzoneBuildTask,
   type OzoneBuildVerification,
   type OzoneCriterionResult,
+  type OzoneDesignDirection,
   type OzoneGateResult,
   type ThreadId,
 } from "@t3tools/contracts";
@@ -69,7 +70,9 @@ export const workerBrief = (
 export const NEXT = {
   plan: "There is no plan yet. Call ozone_build_plan with the spec, the acceptance criteria and the tasks.",
   planned: "The plan is saved. Call ozone_build_advance to start the first task.",
-  chooseDesign: `Nothing was saved: the user asked to choose this app's design, and it has no ${DESIGN_FILE} yet. Propose three directions that fit the request and differ from each other. Give each the same parts: a name, its idea in one sentence, four to six colours as hex values, a display face and a body face, the layout of the first screen, and the mood in a few words. One may be the familiar look for this kind of app, done well. Ask the user to pick one with your question tool, one option per direction, and end your turn. When they answer, write the chosen direction to ${DESIGN_FILE} with those parts, then call ozone_build_plan again. If you cannot write files yet, as in plan mode, put the chosen direction at the top of your plan and write ${DESIGN_FILE} first once you can.`,
+  chooseDesign: `Nothing was saved: the user asked to pick this app's design, and it has no ${DESIGN_FILE} yet. Call ozone_design_propose with three directions that fit the request and differ in colour, type and layout. One may be the familiar look for this kind of app, done well. Ozone shows them to the user as previews. Then end your turn: Ozone writes their pick to ${DESIGN_FILE} and wakes you. Do not ask with your question tool.`,
+  designWaiting: `Nothing was saved: the user has not picked one of your design directions yet. End your turn: Ozone wakes you when they pick. If they asked for something else instead, call ozone_design_propose again with new directions.`,
+  designShown: `Ozone is showing your directions to the user. End your turn: Ozone writes their pick to ${DESIGN_FILE} and wakes you. If they ask for something else instead, call ozone_design_propose again.`,
   planning:
     "Nothing was saved: you are in plan mode, and the user reviews your plan in the thread. Present the plan there and end your turn. Call ozone_build_plan after they approve it.",
   review:
@@ -144,7 +147,60 @@ export const WAKE = {
     text: "The user approved the plan. Call ozone_build_advance to start building.",
     outcome: "completed",
   } satisfies WakeNote,
+  designPicked: (name: string): WakeNote => ({
+    summary: `Design picked: ${name}`,
+    text: `The user picked the "${name}" design, and Ozone wrote it to ${DESIGN_FILE}. Call ozone_build_plan to plan the build, or to revise the plan if the app is already built.`,
+    outcome: "completed",
+  }),
+  designLeft: {
+    summary: "Design left to the lead",
+    text: "The user left the design to you. Choose it with the Design section of AGENTS.md, then call ozone_build_plan.",
+    outcome: "completed",
+  } satisfies WakeNote,
 } as const;
+
+const COLOR_ROLES = [
+  ["background", "Background"],
+  ["surface", "Surface: cards, inputs, raised areas"],
+  ["text", "Text"],
+  ["muted", "Muted text"],
+  ["accent", "Accent: buttons and links"],
+  ["accentText", "Text on the accent"],
+] as const;
+
+/** The direction the person picked, as the app's DESIGN.md. */
+export const designFile = (direction: OzoneDesignDirection): string =>
+  [
+    `# Design: ${direction.name}`,
+    "",
+    direction.idea,
+    "",
+    "The user picked this look in Ozone. Every page follows it.",
+    "",
+    "## Colours",
+    "",
+    "| Role | Hex |",
+    "| --- | --- |",
+    ...COLOR_ROLES.map(([role, label]) => `| ${label} | \`${direction.colors[role]}\` |`),
+    "",
+    "These are the main theme. Make the other theme from the same colours, and keep the accent readable on both.",
+    "",
+    "## Type",
+    "",
+    `- Display: ${direction.display.family} (${direction.display.style})`,
+    `- Body: ${direction.body.family} (${direction.body.style})`,
+    "",
+    "Load both from `@fontsource` packages.",
+    "",
+    "## First screen",
+    "",
+    direction.layout,
+    "",
+    "## Mood",
+    "",
+    direction.mood,
+    "",
+  ].join("\n");
 
 /** The spec as a file in the app, so briefs point at it instead of repeating it. */
 export const specFile = (build: OzoneBuild): string =>

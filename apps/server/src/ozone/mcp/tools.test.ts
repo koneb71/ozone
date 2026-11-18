@@ -13,6 +13,7 @@ import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as OzoneApps from "../apps/OzoneApps.ts";
 import { NEXT, WAKE } from "../builds/briefs.ts";
 import * as BuildConductor from "../builds/BuildConductor.ts";
+import * as BuildDesign from "../builds/BuildDesign.ts";
 import { verifierBrief } from "../builds/verification.ts";
 import { OZONE_CHAT_INSTRUCTIONS } from "../chat/chatPersona.ts";
 import * as AppEnv from "../env/AppEnv.ts";
@@ -30,6 +31,7 @@ it.effect("every Ozone tool registers with the MCP server", () =>
         Layer.provide(
           Layer.mergeAll(
             Layer.mock(BuildConductor.BuildConductor)({}),
+            Layer.mock(BuildDesign.BuildDesign)({}),
             Layer.mock(AppRegistry.AppRegistry)({}),
             Layer.mock(AppRuntime.AppRuntime)({}),
             Layer.mock(AppEnv.AppEnv)({}),
@@ -49,6 +51,7 @@ it.effect("every Ozone tool registers with the MCP server", () =>
       "ozone_build_get",
       "ozone_build_plan",
       "ozone_build_resolve",
+      "ozone_design_propose",
       "ozone_web_guidance",
     ]);
   }),
@@ -66,6 +69,8 @@ it("the instructions Ozone writes name only tools that exist", () => {
     OZONE_CHAT_INSTRUCTIONS,
     ...Object.values(NEXT).filter((text) => typeof text === "string"),
     WAKE.approved.text,
+    WAKE.designPicked("Calm").text,
+    WAKE.designLeft.text,
     verifierBrief(["A habit can be added."], 41_000),
   ];
   const named: ReadonlyArray<string> =

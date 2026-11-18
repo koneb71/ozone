@@ -26,6 +26,7 @@ import type { ResolvedApp } from "../apps/AppRegistry.ts";
 import { failed as refuse } from "../errors.ts";
 import { DESIGN_FILE, NEXT, planFile, specFile, workerBrief } from "./briefs.ts";
 import * as BuildChecks from "./BuildChecks.ts";
+import * as BuildDesign from "./BuildDesign.ts";
 import * as BuildGates from "./BuildGates.ts";
 import * as BuildModel from "./BuildModel.ts";
 import * as BuildRepo from "./BuildRepo.ts";
@@ -137,6 +138,7 @@ const report = (lead: BuildLead, build: OzoneBuild, next?: string): OzoneBuildRe
 
 const make = Effect.gen(function* () {
   const store = yield* BuildStore.BuildStore;
+  const design = yield* BuildDesign.BuildDesign;
   const workers = yield* BuildWorkers.BuildWorkers;
   const checks = yield* BuildChecks.BuildChecks;
   const gates = yield* BuildGates.BuildGates;
@@ -434,7 +436,8 @@ const make = Effect.gen(function* () {
           const { reviewPlans, chooseDesign } = lead.app.app.settings;
           // The person picks the look first; DESIGN.md is their pick, and later plans follow it.
           if (chooseDesign && !(yield* hasDesign(lead))) {
-            return report(lead, yield* load(lead), NEXT.chooseDesign);
+            const shown = (yield* design.pending(lead.threadId)) !== null;
+            return report(lead, yield* load(lead), shown ? NEXT.designWaiting : NEXT.chooseDesign);
           }
           if (lead.planning) return report(lead, yield* load(lead), NEXT.planning);
           const build = yield* decide(lead, (current, at) =>

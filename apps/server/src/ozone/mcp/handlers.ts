@@ -8,7 +8,9 @@ import * as ThreadManagementService from "../../orchestration-v2/ThreadManagemen
 import * as ProviderRegistry from "../../provider/ProviderRegistry.ts";
 import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as OzoneApps from "../apps/OzoneApps.ts";
+import { NEXT } from "../builds/briefs.ts";
 import * as BuildConductor from "../builds/BuildConductor.ts";
+import * as BuildDesign from "../builds/BuildDesign.ts";
 import * as AppEnv from "../env/AppEnv.ts";
 import * as WebGuidance from "../guidance/WebGuidance.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
@@ -85,6 +87,14 @@ export const layer = McpToolAccess.toLayer(OzoneToolkit, {
   ),
   ozone_build_plan: McpToolAccess.actsAsCaller((input) =>
     conduct((conductor, caller) => conductor.plan(caller, input)),
+  ),
+  ozone_design_propose: McpToolAccess.actsAsCaller((input) =>
+    Effect.gen(function* () {
+      const caller = yield* lead;
+      const design = yield* BuildDesign.BuildDesign;
+      yield* design.propose(caller.threadId, input.directions).pipe(Effect.mapError(fromApp));
+      return { next: NEXT.designShown };
+    }),
   ),
   ozone_build_advance: McpToolAccess.actsAsCaller(() =>
     conduct((conductor, caller) => conductor.advance(caller)),

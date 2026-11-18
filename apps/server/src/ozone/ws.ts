@@ -14,6 +14,8 @@ import {
   type OzoneDeployRunInput,
   type OzoneRedeployInput,
   type OzoneDeployWebhookInput,
+  type OzoneDesignAnswerInput,
+  type OzoneDesignProposal,
   type OzoneNotifyChannel,
   type OzoneServerAddInput,
   type OzoneServerInput,
@@ -37,6 +39,7 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 
 import * as OzoneApps from "./apps/OzoneApps.ts";
+import * as BuildDesign from "./builds/BuildDesign.ts";
 import * as BuildModel from "./builds/BuildModel.ts";
 import * as BuildReview from "./builds/BuildReview.ts";
 import * as BuildStore from "./builds/BuildStore.ts";
@@ -56,6 +59,7 @@ const make = Effect.gen(function* () {
   const data = yield* AppData.AppData;
   const builds = yield* BuildStore.BuildStore;
   const review = yield* BuildReview.BuildReview;
+  const design = yield* BuildDesign.BuildDesign;
   const history = yield* AppHistory.AppHistory;
   const env = yield* AppEnv.AppEnv;
   const deploys = yield* AppDeploy.AppDeploy;
@@ -63,10 +67,13 @@ const make = Effect.gen(function* () {
   const notifier = yield* Notifier.Notifier;
   const saved = yield* SavedServers.SavedServers;
   const release = yield* OzoneRelease.OzoneRelease;
-  const buildSnapshot = (build: OzoneBuild | null) => ({
+  const buildSnapshot = (build: OzoneBuild | null, proposal: OzoneDesignProposal | null) => ({
     build,
     status: build === null ? ("planning" as const) : BuildModel.statusOf(build),
+    design: proposal,
   });
+  const snapshotNow = (threadId: ThreadId, build: OzoneBuild | null) =>
+    Effect.map(design.pending(threadId), (proposal) => buildSnapshot(build, proposal));
   return {
     [OZONE_WS_METHODS.appsList]: () => apps.list,
     [OZONE_WS_METHODS.appsCreate]: (input: OzoneAppCreateInput) => apps.create(input),
@@ -92,13 +99,22 @@ const make = Effect.gen(function* () {
     [OZONE_WS_METHODS.dataRestore]: (input: OzoneDataRestoreInput) =>
       input.production === true ? deploys.restore(input) : data.restore(input),
     [OZONE_WS_METHODS.buildSubscribe]: (input: { readonly threadId: ThreadId }) =>
-      Stream.map(builds.changes(input.threadId), buildSnapshot),
+      Stream.zipLatestWith(
+        builds.changes(input.threadId),
+        design.changes(input.threadId),
+        buildSnapshot,
+      ),
     [OZONE_WS_METHODS.buildApprove]: (input: OzoneBuildApproveInput) =>
-      Effect.map(
+      Effect.flatMap(
         input.shownInThread === true
           ? review.grant(input.threadId)
           : review.approve(input.threadId),
-        buildSnapshot,
+        (build) => snapshotNow(input.threadId, build),
+      ),
+    [OZONE_WS_METHODS.designAnswer]: (input: OzoneDesignAnswerInput) =>
+      design.answer(input.threadId, input.pick).pipe(
+        Effect.andThen(builds.get(input.threadId)),
+        Effect.flatMap((build) => snapshotNow(input.threadId, build)),
       ),
     [OZONE_WS_METHODS.historyList]: (input: { readonly projectId: ProjectId }) =>
       history.list(input.projectId),
@@ -167,6 +183,7 @@ export class OzoneWsHandlers extends Context.Reference<Effect.Success<typeof mak
       [OZONE_WS_METHODS.dataRestore]: () => notProvided,
       [OZONE_WS_METHODS.buildSubscribe]: () => Stream.fromEffect(notProvided),
       [OZONE_WS_METHODS.buildApprove]: () => notProvided,
+      [OZONE_WS_METHODS.designAnswer]: () => notProvided,
       [OZONE_WS_METHODS.historyList]: () => notProvided,
       [OZONE_WS_METHODS.historyRestore]: () => notProvided,
       [OZONE_WS_METHODS.envList]: () => notProvided,

@@ -9,6 +9,7 @@ import {
   ThreadId,
   type OzoneAppSettings,
   type OzoneBuildPlanInput,
+  type OzoneDesignDirection,
   type OzoneGateResult,
   type OzoneWorkerModel,
 } from "@t3tools/contracts";
@@ -30,11 +31,12 @@ import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as AppData from "../data/AppData.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
 import { testApp, testManifest } from "../ozone.testkit.ts";
-import { DESIGN_FILE, NEXT } from "./briefs.ts";
+import { DESIGN_FILE, NEXT, WAKE } from "./briefs.ts";
 import * as BuildChecks from "./BuildChecks.ts";
 import * as BuildConductor from "./BuildConductor.ts";
 import * as BuildGates from "./BuildGates.ts";
 import * as BuildRepo from "./BuildRepo.ts";
+import * as BuildDesign from "./BuildDesign.ts";
 import * as BuildReview from "./BuildReview.ts";
 import * as BuildStore from "./BuildStore.ts";
 import * as BuildWake from "./BuildWake.ts";
@@ -73,6 +75,23 @@ const plan = (...tasks: ReadonlyArray<TaskPlan>): OzoneBuildPlanInput => ({
   spec: "A habit tracker.",
   acceptance: ["A habit can be added."],
   tasks,
+});
+
+const direction = (name: string): OzoneDesignDirection => ({
+  name,
+  idea: `${name}, done well.`,
+  colors: {
+    background: "#14110f",
+    surface: "#3a2a20",
+    text: "#efe6d8",
+    muted: "#8a7f74",
+    accent: "#d98e3b",
+    accentText: "#14110f",
+  },
+  display: { family: "Fraunces", style: "serif" },
+  body: { family: "Work Sans", style: "sans" },
+  layout: "A full-width hero with one button.",
+  mood: "warm",
 });
 
 const PASS: ReadonlyArray<OzoneGateResult> = [
@@ -271,7 +290,7 @@ const makeHarness = (settings: Partial<OzoneAppSettings> = {}) =>
     // Built into the test's own scope: the in-memory database must outlive this setup.
     const context = yield* Layer.build(
       BuildConductor.layer.pipe(
-        Layer.provideMerge(Layer.mergeAll(BuildChecks.layer, BuildReview.layer)),
+        Layer.provideMerge(Layer.mergeAll(BuildChecks.layer, BuildReview.layer, BuildDesign.layer)),
         Layer.provideMerge(Layer.mergeAll(BuildStore.layer, wake, registry, threads)),
         Layer.provideMerge(
           Layer.mergeAll(workers, gates, repo, data, runtime, SqlitePersistence.layerMemory),
@@ -282,6 +301,7 @@ const makeHarness = (settings: Partial<OzoneAppSettings> = {}) =>
       conductor: Context.get(context, BuildConductor.BuildConductor),
       store: Context.get(context, BuildStore.BuildStore),
       review: Context.get(context, BuildReview.BuildReview),
+      design: Context.get(context, BuildDesign.BuildDesign),
     };
     /** What a server restart does to the checks: a new instance, which looks for cut-short work. */
     const restart = Layer.build(
@@ -852,9 +872,9 @@ describe("BuildConductor", () => {
 
   it.effect("asks for the design before the first plan when the person chose to pick it", () =>
     Effect.gen(function* () {
-      const { conductor, lead, steps, fs, path, workspaceRoot } = yield* makeHarness({
-        chooseDesign: true,
-      });
+      const { conductor, design, lead, steps, wakes, configured, fs, path, workspaceRoot } =
+        yield* makeHarness({ chooseDesign: true });
+      const designFile = path.join(workspaceRoot, DESIGN_FILE);
       const asked = yield* conductor.plan(lead, plan(task("page")));
       assert.strictEqual(asked.next, NEXT.chooseDesign);
       assert.deepStrictEqual(asked.tasks, []);
@@ -862,10 +882,39 @@ describe("BuildConductor", () => {
       const inPlanMode = yield* conductor.plan({ ...lead, planning: true }, plan(task("page")));
       assert.strictEqual(inPlanMode.next, NEXT.chooseDesign);
 
+      // While the directions wait, planning again tells the lead to wait, not to propose again.
+      yield* design.propose(lead.threadId, [direction("Calm"), direction("Loud")]);
+      assert.strictEqual(
+        (yield* conductor.plan(lead, plan(task("page")))).next,
+        NEXT.designWaiting,
+      );
+
+      // Leaving it to the lead turns the setting off and writes no file.
+      yield* design.answer(lead.threadId, null);
+      assert.deepStrictEqual(yield* configured, [{ chooseDesign: false }]);
+      assert.strictEqual(yield* Queue.take(wakes), WAKE.designLeft.summary);
+      assert.isFalse(yield* fs.exists(designFile));
+      assert.isNull(yield* design.pending(lead.threadId));
+
+      yield* design.propose(lead.threadId, [direction("Calm"), direction("Loud")]);
+      const missing = yield* Effect.flip(design.answer(lead.threadId, 2));
+      assert.include(missing.message, "no design direction 3");
+      yield* design.answer(lead.threadId, 1);
+      assert.strictEqual(yield* Queue.take(wakes), WAKE.designPicked("Loud").summary);
+      const written = yield* fs.readFileString(designFile);
+      assert.include(written, "# Design: Loud");
+      assert.include(written, "| Accent: buttons and links | `#d98e3b` |");
+      assert.include(written, "- Display: Fraunces (serif)");
+      // A second window's answer finds nothing waiting.
+      yield* design.answer(lead.threadId, 0);
+      assert.strictEqual(yield* Queue.size(wakes), 0);
+
       // DESIGN.md is the pick; with it, the plan is saved and later plans follow it.
-      yield* fs.writeFileString(path.join(workspaceRoot, DESIGN_FILE), "# Calm\n");
       assert.strictEqual((yield* conductor.plan(lead, plan(task("page")))).next, NEXT.planned);
-      assert.deepStrictEqual(yield* steps, []);
+      assert.deepStrictEqual(yield* steps, [
+        `wake ${WAKE.designLeft.summary}`,
+        `wake ${WAKE.designPicked("Loud").summary}`,
+      ]);
     }).pipe(Effect.provide(layerTest)),
   );
 

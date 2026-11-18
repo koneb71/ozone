@@ -12,6 +12,7 @@ import {
   OzoneBuildApproveInput,
   OzoneBuildSnapshot,
   OzoneBuildSubscribeInput,
+  OzoneDesignAnswerInput,
 } from "./ozoneBuild.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
 import {
@@ -445,6 +446,7 @@ export const OZONE_WS_METHODS = {
   dataRestore: "ozone.data.restore",
   buildSubscribe: "ozone.build.subscribe",
   buildApprove: "ozone.build.approve",
+  designAnswer: "ozone.design.answer",
   historyList: "ozone.history.list",
   historyRestore: "ozone.history.restore",
   envList: "ozone.env.list",
@@ -497,6 +499,8 @@ export const OZONE_OPERATE_RPC_SCOPES = {
   [OZONE_WS_METHODS.dataRestore]: AuthOrchestrationOperateScope,
   // Starts the work of a plan: the same right as sending the lead a message.
   [OZONE_WS_METHODS.buildApprove]: AuthOrchestrationOperateScope,
+  // Writes DESIGN.md or changes the app's settings, then wakes the lead.
+  [OZONE_WS_METHODS.designAnswer]: AuthOrchestrationOperateScope,
   // Replaces the app's code and data, behind a commit and a snapshot of both as they are.
   [OZONE_WS_METHODS.historyRestore]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.envSet]: AuthOrchestrationOperateScope,
@@ -622,6 +626,11 @@ export const OzoneWsRpcs = [
   }),
   Rpc.make(OZONE_WS_METHODS.buildApprove, {
     payload: OzoneBuildApproveInput,
+    success: OzoneBuildSnapshot,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.designAnswer, {
+    payload: OzoneDesignAnswerInput,
     success: OzoneBuildSnapshot,
     error: OzoneRpcError,
   }),

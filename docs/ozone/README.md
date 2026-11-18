@@ -41,8 +41,11 @@ starts its lead thread.
   its search module and offers it as `ozone_web_guidance`, which works offline, for every provider
   and for workers.
 - **A design pick is `DESIGN.md`.** With "Pick the design" on, `BuildConductor.plan` saves no plan
-  while the app has no `DESIGN.md` and tells the lead to ask. The file, not a setting, records the
-  pick, so it holds for later requests and the person can edit or delete it.
+  while the app has no `DESIGN.md` and tells the lead to call `ozone_design_propose`. The
+  directions are structured, not a provider's question card, so every provider's look the same and
+  the client can draw them; `BuildDesign` keeps them until the person answers, then writes the
+  file itself, because a lead in plan mode cannot. The file, not a setting, records the pick, so it
+  holds for later requests and the person can edit or delete it.
 - **An app is a plain Compose project.** Nothing about it depends on the machine that made it, so
   hosting an app later means another environment that runs Docker, not a second runtime.
 - **A deploy is a second Compose project.** `compose.prod.yaml` runs the production image as

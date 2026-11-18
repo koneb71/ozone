@@ -8,6 +8,7 @@ import {
   OzoneBuildPlanInput,
   OzoneBuildReport,
   OzoneBuildResolveInput,
+  OzoneDesignProposeInput,
   OzoneEnvVariable,
   OzoneRuntimeStatus,
   ProjectId,
@@ -23,6 +24,7 @@ import * as ThreadManagementService from "../../orchestration-v2/ThreadManagemen
 import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as OzoneApps from "../apps/OzoneApps.ts";
 import * as BuildConductor from "../builds/BuildConductor.ts";
+import * as BuildDesign from "../builds/BuildDesign.ts";
 import * as AppEnv from "../env/AppEnv.ts";
 import * as WebGuidance from "../guidance/WebGuidance.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
@@ -58,6 +60,17 @@ const BuildPlanTool = Tool.make("ozone_build_plan", {
   parameters: OzoneBuildPlanInput,
   success: OzoneBuildReport,
   dependencies: leadDependencies,
+})
+  .annotate(Tool.Destructive, false)
+  .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromSubagentsAndOutsideClients);
+
+const DesignProposeTool = Tool.make("ozone_design_propose", {
+  ...shared,
+  description:
+    "Show the user design directions to pick from. Ozone draws each as a preview of its first screen in its colours and faces, writes the one they pick to DESIGN.md, and wakes you. Make the directions differ in colour, type and layout. Calling it again replaces the directions.",
+  parameters: OzoneDesignProposeInput,
+  success: Schema.Struct({ next: Schema.String }),
+  dependencies: [...leadDependencies, BuildDesign.BuildDesign],
 })
   .annotate(Tool.Destructive, false)
   .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromSubagentsAndOutsideClients);
@@ -185,6 +198,7 @@ const AppCreateTool = Tool.make("ozone_app_create", {
 export const OzoneToolkit = Toolkit.make(
   BuildGetTool,
   BuildPlanTool,
+  DesignProposeTool,
   BuildAdvanceTool,
   BuildResolveTool,
   BuildCheckTool,
