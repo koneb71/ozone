@@ -28,6 +28,7 @@ The dev server is already running with hot reload. Saved edits appear without a 
 - `drizzle/` holds generated SQL migrations. Never edit or delete one that already exists. A migration that can lose data, such as one that drops a table or a column, waits for the person: `db:migrate` holds it back until they accept it in Ozone. Tell them what it does. Never change `src/db/migrate.ts` or `src/db/migration-guard.ts` to get one through.
 - `src/lib/auth.ts` is the server's auth configuration. `src/lib/auth-client.ts` exports `authClient` for the browser.
 - `src/styles/app.css` holds the design tokens.
+- `src/lib/site.ts` holds the app's name, description and, once it is deployed, its address. `src/lib/seo.ts` builds a page's head from them. `public/robots.txt` keeps search engines out of `/api/`.
 - `compose.prod.yaml` is how Ozone deploys the app: the production image, its own database and a migration step. Keep it working when you add a service.
 
 ## How to write it
@@ -42,6 +43,17 @@ The dev server is already running with hot reload. Saved edits appear without a 
 - Every page works at 360 px wide and on a desktop. Controls are reachable by keyboard and have accessible names.
 - Empty, loading and error states are part of the feature.
 - Cover logic that can break with vitest tests next to the code (`*.test.ts`).
+
+## Design
+
+When these disagree, what the person asked for comes first, then `DESIGN.md` when it exists (the look they chose), then this section, then the skills it names.
+
+- Before building or restyling a page, read `.agents/skills/design-taste-frontend/SKILL.md` and, from its `references/`, only what the part you build needs (`copy.md` for any words on a page). Its house rules and its Never list apply. This app is React routes and Tailwind, not the skill's HTML kit: never copy its `assets/` or `starter.html`, never run its `gate.mjs` or `deal.mjs`, and skip any step whose file is not there.
+- Screens behind sign-in are tools: they follow `.agents/skills/frontend-design/SKILL.md` and the rules above, and design-taste-frontend's page plans apply only to a public page that markets the app.
+- Pick the colours and the type with `./dev node .agents/skills/design-taste-frontend/scripts/start.mjs deal --page <kind> --trade <trade>`, then `css` with the palette and pairing it deals (its output names the command). Put the result into the tokens in `src/styles/app.css`, with a light and a dark value for each. Load the faces from `@fontsource` packages, never from Google Fonts.
+- `.agents/skills/frontend-design/SKILL.md` settles what the rest leaves open: the direction, the type pairing and one signature element.
+- `.agents/skills/design-taste-frontend/scripts/consistency.mjs` checks a page in headless Chrome at several widths. It needs Node 22 or later and Chrome on this machine, not in the container. When they are there, run it against the running app with `--out .taste-skill` and treat what it reports as advice. When they are not, skip it and say so.
+- Read `.agents/skills/seo/SKILL.md` before adding a page or changing a title, headings, links or images. Build each page's head with `seo()` from `src/lib/seo.ts`.
 
 ## Done means
 

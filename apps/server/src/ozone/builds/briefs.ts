@@ -17,6 +17,9 @@ import type { WakeNote } from "./BuildWake.ts";
 
 const bullets = (lines: ReadonlyArray<string>) => lines.map((line) => `- ${line}`).join("\n");
 
+/** The look the person picked, in the app's root. Its presence ends design mode's question. */
+export const DESIGN_FILE = "DESIGN.md";
+
 /** Everything a worker is told. It starts with `Ozone task`, which the app's AGENTS.md keys on. */
 export const workerBrief = (
   build: OzoneBuild,
@@ -52,6 +55,7 @@ export const workerBrief = (
       bullets([
         "The spec is in .ozone/spec.md and the whole plan in .ozone/plan.md. Read them only if you need the wider picture.",
         "Run every command through ./dev, for example `./dev npm run typecheck`.",
+        "If the task changes how a page looks, read the Design section of AGENTS.md first.",
         task.access === "read"
           ? "This task is read-only. Change no files."
           : `Do not commit, and do not start, stop or rebuild the app. Ozone runs the checks itself (${checks.join(", ")}) and commits your work when they pass.`,
@@ -65,6 +69,7 @@ export const workerBrief = (
 export const NEXT = {
   plan: "There is no plan yet. Call ozone_build_plan with the spec, the acceptance criteria and the tasks.",
   planned: "The plan is saved. Call ozone_build_advance to start the first task.",
+  chooseDesign: `Nothing was saved: the user asked to choose this app's design, and it has no ${DESIGN_FILE} yet. Propose three directions that fit the request and differ from each other. Give each the same parts: a name, its idea in one sentence, four to six colours as hex values, a display face and a body face, the layout of the first screen, and the mood in a few words. One may be the familiar look for this kind of app, done well. Ask the user to pick one with your question tool, one option per direction, and end your turn. When they answer, write the chosen direction to ${DESIGN_FILE} with those parts, then call ozone_build_plan again. If you cannot write files yet, as in plan mode, put the chosen direction at the top of your plan and write ${DESIGN_FILE} first once you can.`,
   planning:
     "Nothing was saved: you are in plan mode, and the user reviews your plan in the thread. Present the plan there and end your turn. Call ozone_build_plan after they approve it.",
   review:

@@ -10,6 +10,9 @@ export const Route = createRootRoute({
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: site.name },
+      { name: "description", content: site.description },
+      { property: "og:site_name", content: site.name },
+      { property: "og:type", content: "website" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },

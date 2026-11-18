@@ -42,6 +42,12 @@ export interface TemplateFile {
 
 /** Where templates live in a source checkout, from the repository's root. */
 export const SOURCE_TEMPLATES_ROOT = "packages/ozone-templates/templates";
+/** Agent skills for apps with pages, beside the templates (see `scripts/lib/app-skills.ts`). */
+const SKILLS_FOLDER = "skills";
+/** Apps made from these have pages, so they get the design and SEO skills. */
+const PAGE_TEMPLATES: ReadonlySet<string> = new Set(["web-app", "landing-page"]);
+/** Where an app keeps them: Codex, Cursor and others find skills here; AGENTS.md names each one. */
+const APP_SKILLS_PATH = ".agents/skills";
 /**
  * A build writes every template into this one file beside the server. Packagers drop dotfiles and
  * file modes, and a template without its `.gitignore` would commit the app's `.env`.
@@ -79,14 +85,28 @@ export const readTemplateTree = Effect.fn("OzoneTemplates.readTemplateTree")(fun
   return files;
 });
 
+/** What an app made from a template gets: the template's files, and the skills for an app with pages. */
+export const templateTree = Effect.fn("OzoneTemplates.templateTree")(function* (
+  templatesRoot: string,
+  templateId: string,
+) {
+  const path = yield* Path.Path;
+  const own = yield* readTemplateTree(path.join(templatesRoot, templateId));
+  if (!PAGE_TEMPLATES.has(templateId)) return own;
+  const skills = yield* readTemplateTree(path.join(path.dirname(templatesRoot), SKILLS_FOLDER));
+  return [
+    ...own,
+    ...skills.map((file) => ({ ...file, path: `${APP_SKILLS_PATH}/${file.path}` })),
+  ].toSorted((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
+});
+
 export const writeTemplateBundle = Effect.fn("OzoneTemplates.writeTemplateBundle")(function* (
   templatesRoot: string,
   outFile: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
   const entries = yield* Effect.forEach(TEMPLATES, (template) =>
-    readTemplateTree(path.join(templatesRoot, template.id)).pipe(
+    templateTree(templatesRoot, template.id).pipe(
       Effect.map(
         (files) =>
           [
@@ -136,8 +156,10 @@ export const templateFiles = Effect.fn("OzoneTemplates.templateFiles")(function*
     if (files !== undefined) return files;
   } else {
     for (const up of ["../../../../..", "../../.."]) {
-      const directory = path.resolve(here, up, SOURCE_TEMPLATES_ROOT, templateId);
-      if (yield* fs.exists(directory)) return yield* readTemplateTree(directory);
+      const templatesRoot = path.resolve(here, up, SOURCE_TEMPLATES_ROOT);
+      if (yield* fs.exists(path.join(templatesRoot, templateId))) {
+        return yield* templateTree(templatesRoot, templateId);
+      }
     }
   }
   return yield* new OzoneAppError({

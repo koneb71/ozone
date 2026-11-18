@@ -10,6 +10,7 @@ import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as OzoneApps from "../apps/OzoneApps.ts";
 import * as BuildConductor from "../builds/BuildConductor.ts";
 import * as AppEnv from "../env/AppEnv.ts";
+import * as WebGuidance from "../guidance/WebGuidance.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
 import { OzoneToolkit } from "./tools.ts";
 
@@ -124,6 +125,19 @@ export const layer = McpToolAccess.toLayer(OzoneToolkit, {
           ? runtime.status(projectId)
           : runtime.act({ projectId, action: input.action });
       return { status: yield* status.pipe(Effect.mapError(fromApp)) };
+    }),
+  ),
+  ozone_web_guidance: McpToolAccess.readsAsCaller((input) =>
+    Effect.gen(function* () {
+      const guidance = yield* WebGuidance.WebGuidance;
+      if (input.action === "search") {
+        if (input.query === undefined) return yield* invalid("`search` needs a `query`.");
+        return { matches: yield* guidance.search(input.query).pipe(Effect.mapError(fromApp)) };
+      }
+      if (input.ids === undefined || input.ids.length === 0) {
+        return yield* invalid("`retrieve` needs `ids` from a search.");
+      }
+      return { guides: yield* guidance.retrieve(input.ids).pipe(Effect.mapError(fromApp)) };
     }),
   ),
   ozone_app_create: McpToolAccess.writesWithCapability((input) =>

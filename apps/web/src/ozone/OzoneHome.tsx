@@ -55,6 +55,9 @@ const MODE_COPY = {
 
 const carriesFiles = (event: DragEvent) => event.dataTransfer.types.includes("Files");
 const REVIEW_PLANS_STORAGE_KEY = "ozone:review-plans:v1";
+const CHOOSE_DESIGN_STORAGE_KEY = "ozone:choose-design:v1";
+/** Templates whose apps have no pages, so there is no design to pick. */
+const NO_PAGES_TEMPLATES: ReadonlySet<string> = new Set(["api-service"]);
 const DEFAULT_TEMPLATE_ID = "web-app";
 
 export function OzoneHome() {
@@ -77,7 +80,14 @@ export function OzoneHome() {
     false,
     Schema.Boolean,
   );
+  const [chooseDesignPreference, setChooseDesign] = useLocalStorage(
+    CHOOSE_DESIGN_STORAGE_KEY,
+    false,
+    Schema.Boolean,
+  );
   const [templateId, setTemplateId] = useState(DEFAULT_TEMPLATE_ID);
+  const hasPages = !NO_PAGES_TEMPLATES.has(templateId);
+  const chooseDesign = hasPages && chooseDesignPreference;
   // Null until a model is picked: the build or chat then starts on the default.
   const [model, setModel] = useState<ModelSelection | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -109,7 +119,13 @@ export function OzoneHome() {
     const text = prompt.trim();
     const outcome =
       mode === "build"
-        ? await launch.build(environmentId, text, { files, reviewPlans, templateId, model })
+        ? await launch.build(environmentId, text, {
+            files,
+            reviewPlans,
+            chooseDesign,
+            templateId,
+            model,
+          })
         : files.length > 0
           ? await launch.chatWithFiles(environmentId, text, files, model)
           : await launch.chat(environmentId, text, model);
@@ -308,6 +324,17 @@ export function OzoneHome() {
                       onCheckedChange={setReviewPlans}
                     />
                     Plan first
+                  </label>
+                ) : null}
+                {mode === "build" && hasPages ? (
+                  <label className="me-2 flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-muted-foreground text-xs">
+                    <Switch
+                      size="sm"
+                      checked={chooseDesign}
+                      disabled={launching}
+                      onCheckedChange={setChooseDesign}
+                    />
+                    Pick the design
                   </label>
                 ) : null}
                 <input

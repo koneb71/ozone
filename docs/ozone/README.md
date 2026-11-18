@@ -30,6 +30,19 @@ starts its lead thread.
   Ozone's rules from the `AGENTS.md` in their folder. Every provider loads that file itself, so no
   provider adapter is involved and the rules survive compaction. A chat's folder can become a
   project in place, so a chat's text must stay true when that happens.
+- **Design and SEO skills ship inside each app with pages.** The web-app and landing-page
+  templates get `packages/ozone-templates/skills` copied to `.agents/skills` when the app is
+  created (`templateTree` in `apps/server/src/ozone/apps/templates.ts`). No one skills folder
+  reaches every provider, so the template's `AGENTS.md` names each `SKILL.md`, and every agent
+  reads it from there. Two are copied from upstream (`scripts/lib/app-skills.ts` pins the commit
+  and the files); `seo` is Ozone's own.
+- **Web guidance is a server tool.** Chrome's Modern Web Guidance has an 11 MB index, and its own
+  command fetches itself from npm on each run and sends the queries to Google. Ozone loads only
+  its search module and offers it as `ozone_web_guidance`, which works offline, for every provider
+  and for workers.
+- **A design pick is `DESIGN.md`.** With "Pick the design" on, `BuildConductor.plan` saves no plan
+  while the app has no `DESIGN.md` and tells the lead to ask. The file, not a setting, records the
+  pick, so it holds for later requests and the person can edit or delete it.
 - **An app is a plain Compose project.** Nothing about it depends on the machine that made it, so
   hosting an app later means another environment that runs Docker, not a second runtime.
 - **A deploy is a second Compose project.** `compose.prod.yaml` runs the production image as
@@ -164,6 +177,10 @@ Upstream lands a few hundred commits a day, so merge often: the conflicts grow w
   and copy the results back with the placeholders restored. An installed Ozone reads them from
   `ozone-templates.json`, which the server build writes into `dist`: packagers drop dotfiles and
   file modes, and an app without its `.gitignore` would commit its `.env`.
+- The skills under `packages/ozone-templates/skills` are copied from upstream byte for byte.
+  Change them only with `vp run sync:app-skills` after moving the pin in
+  `scripts/lib/app-skills.ts`, and read the diff: their scripts run on the person's machine.
+  The taste skill's scripts load three of its asset files; a sync that drops one breaks them.
 - Text that agents read is code: the instructions in `apps/server/src/ozone/apps/appInstructions.ts`
   and `chat/chatPersona.ts`, the briefs in `builds/briefs.ts`, the tool descriptions in
   `mcp/tools.ts` and the template's `AGENTS.md`. An agent follows it literally. It has no eval

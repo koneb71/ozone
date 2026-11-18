@@ -9,3 +9,5 @@ dist
 *.local
 *.tsbuildinfo
 .DS_Store
+.agents
+.taste-skill

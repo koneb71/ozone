@@ -9,3 +9,5 @@ dist
 *.local
 *.tsbuildinfo
 .DS_Store
+# Screenshots and history from the design skill's scripts.
+.taste-skill/

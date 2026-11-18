@@ -136,11 +136,12 @@ export function useOzoneLaunch() {
     options: {
       readonly files: ReadonlyArray<File>;
       readonly reviewPlans: boolean;
+      readonly chooseDesign: boolean;
       readonly templateId: string;
       readonly model: ModelSelection | null;
     },
   ): Promise<LaunchOutcome> => {
-    const { files, reviewPlans, templateId, model } = options;
+    const { files, reviewPlans, chooseDesign, templateId, model } = options;
     // Settled before the app exists, so a build with no model ready makes nothing.
     const defaults = newThreadDefaults(environmentId, null, model);
     if (defaults === null) return NO_MODEL_READY;
@@ -151,7 +152,11 @@ export function useOzoneLaunch() {
     });
     const created = await createApp({
       environmentId,
-      input: { name: appNameFromPrompt(prompt), templateId, settings: { reviewPlans } },
+      input: {
+        name: appNameFromPrompt(prompt),
+        templateId,
+        settings: { reviewPlans, chooseDesign },
+      },
     });
     if (created._tag === "Failure") return failureMessage(created, "Could not create the app.");
     // The thread it opens next looks the new app up in this list.

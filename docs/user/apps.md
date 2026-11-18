@@ -39,6 +39,12 @@ already built. Approving a plan turns it off, so what you ask next is built stra
 it on again when you want to see a plan first. The same switch sits above the message box in an
 app's thread, and as **Show me the plan first** on the app's Build page.
 
+To choose the look yourself, turn on **Pick the design** on Home (it is not offered for an API).
+Before it plans, the agent shows you three design directions on a card, each with its colours,
+type, first screen and mood, and builds the one you pick. Your pick is saved in the app's
+`DESIGN.md`, and later changes follow it. To choose again, ask for new directions or delete
+`DESIGN.md`. The same switch is **Let me pick the design** on the app's Build page.
+
 Antigravity, Fx, Grok, Kiro, Muse and Pi have no plan mode of their own. With those, Ozone asks
 the agent to plan first: it files its plan as a task list, and no task runs until you select
 **Start building** on that card. Nothing stops such an agent from editing a file while it plans,
@@ -51,8 +57,16 @@ Ozone itself runs the app's type check, linter and tests inside the app's contai
 fails goes to a fresh worker with the evidence. A task that passes becomes a commit and a
 snapshot of the app's data.
 
-When every task has passed, a tester can use the app in a browser against what you asked for.
-Turn that on or off under **Build** on the app's page.
+When every task has passed, a tester can use the app in a browser against what you asked for,
+on a phone-width screen and in dark and light too. Turn that on or off under **Build** on the
+app's page.
+
+Apps with pages are built with design and search guidance: agents follow the design skills in
+the app's `.agents/skills` folder and Chrome's guidance for modern HTML and CSS, which Ozone
+searches on your machine. Every page gets a title, a description and link-preview tags. A
+landing page also gets `robots.txt` and a sitemap, and its final check fails when a page is
+missing a title, a description, a single main heading, image descriptions, or its place in the
+sitemap.
 
 Ask for a change in the same thread to start another build on the same app.
 
@@ -67,8 +81,8 @@ Open it from Home, or from the app's status bar above the message box.
 - **Environment**: settings and secrets for the app. They reach its container and never its code.
   A value for one place only, such as the server, goes on the Deploy page: see
   [Variables for one place](deploy.md#variables-for-one-place).
-- **Build**: whether to show the plan first, whether a tester tries the finished app, which model
-  the workers use, and whether to deploy when a build completes.
+- **Build**: whether to show the plan first, whether you pick the design, whether a tester tries
+  the finished app, which model the workers use, and whether to deploy when a build completes.
 - **Logs**: what the app's containers print.
 - **Deploy**, **Deployments**, **Monitoring**: see [Deploying an app](./deploy.md).
 

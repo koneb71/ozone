@@ -29,6 +29,7 @@ import * as SavedServers from "./deploy/SavedServers.ts";
 import * as SshAccess from "./deploy/SshAccess.ts";
 import * as OzoneDeployWebhook from "./deploy/webhook.ts";
 import * as AppEnv from "./env/AppEnv.ts";
+import * as WebGuidance from "./guidance/WebGuidance.ts";
 import * as AppHistory from "./history/AppHistory.ts";
 import * as OzoneMcpHandlers from "./mcp/handlers.ts";
 import * as OzoneRelease from "./OzoneRelease.ts";
@@ -50,6 +51,7 @@ export const layer = Layer.mergeAll(OzoneWs.layer, AutoDeploy.layer).pipe(
       BuildReview.layer,
       AppHistory.layer,
       AppEnv.layer,
+      WebGuidance.layer,
       AppDeploy.layer,
       BuildPreview.layer,
     ),

@@ -112,6 +112,8 @@ export const OzoneAppSettings = Schema.Struct({
   ),
   /** A build that completes is deployed where the app was last deployed. */
   deployOnBuild: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  /** Before the first plan, the lead shows design directions and the person picks one. */
+  chooseDesign: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
 });
 export type OzoneAppSettings = typeof OzoneAppSettings.Type;
 
@@ -120,6 +122,7 @@ export const DEFAULT_OZONE_APP_SETTINGS: OzoneAppSettings = {
   verifyBuilds: true,
   workerModel: null,
   deployOnBuild: false,
+  chooseDesign: false,
 };
 
 export const OzoneApp = Schema.Struct({
@@ -179,6 +182,7 @@ const OzoneAppSettingsPatch = Schema.Struct({
   verifyBuilds: Schema.optionalKey(Schema.Boolean),
   workerModel: Schema.optionalKey(Schema.NullOr(OzoneWorkerModel)),
   deployOnBuild: Schema.optionalKey(Schema.Boolean),
+  chooseDesign: Schema.optionalKey(Schema.Boolean),
 });
 
 export const OzoneAppCreateInput = Schema.Struct({

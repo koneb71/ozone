@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* The agent skills are not part of the app. */
+@source not "../../.agents";
 
 /*
  * Design tokens. Use them through utilities such as `bg-background`,

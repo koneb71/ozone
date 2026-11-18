@@ -53,6 +53,20 @@ export function BuildSection(props: {
             />
           }
         />
+        {app.templateId === "api-service" ? null : (
+          <SettingsRow
+            title="Let me pick the design"
+            description="Before the lead plans, it shows you three directions. Your pick is kept in DESIGN.md, and later changes follow it."
+            control={
+              <Switch
+                aria-label="Let me pick the design"
+                checked={app.settings.chooseDesign}
+                disabled={saving}
+                onCheckedChange={(checked) => void save({ chooseDesign: checked })}
+              />
+            }
+          />
+        )}
         <SettingsRow
           title="Try the finished app in a browser"
           description="When every check passes, a tester uses the app against what you asked for."

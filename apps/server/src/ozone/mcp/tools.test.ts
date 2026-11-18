@@ -16,6 +16,7 @@ import * as BuildConductor from "../builds/BuildConductor.ts";
 import { verifierBrief } from "../builds/verification.ts";
 import { OZONE_CHAT_INSTRUCTIONS } from "../chat/chatPersona.ts";
 import * as AppEnv from "../env/AppEnv.ts";
+import * as WebGuidance from "../guidance/WebGuidance.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
 import * as OzoneMcpHandlers from "./handlers.ts";
 import { OzoneToolkit } from "./tools.ts";
@@ -32,6 +33,7 @@ it.effect("every Ozone tool registers with the MCP server", () =>
             Layer.mock(AppRegistry.AppRegistry)({}),
             Layer.mock(AppRuntime.AppRuntime)({}),
             Layer.mock(AppEnv.AppEnv)({}),
+            Layer.mock(WebGuidance.WebGuidance)({}),
             Layer.mock(OzoneApps.OzoneApps)({}),
             Layer.mock(ThreadManagementService.ThreadManagementService)({}),
             Layer.mock(ProviderRegistry.ProviderRegistry)({}),
@@ -47,6 +49,7 @@ it.effect("every Ozone tool registers with the MCP server", () =>
       "ozone_build_get",
       "ozone_build_plan",
       "ozone_build_resolve",
+      "ozone_web_guidance",
     ]);
   }),
 );

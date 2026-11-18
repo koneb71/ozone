@@ -12,6 +12,8 @@ const TEST_EXCLUDE = [
   "**/.{idea,git,cache,output,temp}/**",
   // A template is an app's source, tested inside its own container.
   "packages/ozone-templates/templates/**",
+  // Skills copied from upstream into apps, unchanged.
+  "packages/ozone-templates/skills/**",
 ];
 
 // Directories whose tests belong to a package's own test config. desktop also
@@ -152,6 +154,8 @@ export default defineConfig({
     ignorePatterns: [
       // Templates keep the formatting their own toolchain gives them.
       "packages/ozone-templates/templates/**",
+      // App skills stay byte for byte as upstream ships them (see scripts/lib/app-skills.ts).
+      "packages/ozone-templates/skills/**",
       ".repos/**",
       // Macroscope requires one glob per line; Markdown formatting corrupts it.
       ".macroscope/ignore.md",
@@ -183,6 +187,7 @@ export default defineConfig({
     ignorePatterns: [
       // Templates are linted by their own toolchain.
       "packages/ozone-templates/templates/**",
+      "packages/ozone-templates/skills/**",
       ".repos",
       ".repos/**",
       "dist",

@@ -10,3 +10,5 @@ dist
 *.tsbuildinfo
 .DS_Store
 .ozone/migrations.json
+# Screenshots and history from the design skill's scripts.
+.taste-skill/

@@ -10,10 +10,10 @@ import { findDestructiveStatements } from "../data/migrationGuard.ts";
 import { PROD_COMPOSE_FILE } from "../deploy/AppDeploy.ts";
 import {
   readTemplateBundle,
-  readTemplateTree,
   SOURCE_TEMPLATES_ROOT,
   TEMPLATE_BUNDLE_FILE,
   templateFiles,
+  templateTree,
   TEMPLATES,
   writeTemplateBundle,
 } from "./templates.ts";
@@ -44,7 +44,26 @@ it.effect.each(TEMPLATES.map((template) => template.id))(
       }
       // The prod file migrates where the app migrates, from a stage that has the tools.
       assert.strictEqual(prod.includes("migrate:"), manifest.migrations !== undefined);
-      assert.include(yield* read("AGENTS.md"), "<!-- ozone:instructions -->");
+      const agents = yield* read("AGENTS.md");
+      assert.include(agents, "<!-- ozone:instructions -->");
+      // An app with pages carries its design and SEO skills, with their licences, and every
+      // skill AGENTS.md names is there: it is how agents without skill discovery find them.
+      const skills = files.filter((entry) => entry.path.startsWith(".agents/skills/"));
+      if (id !== "api-service") {
+        for (const skill of ["design-taste-frontend", "frontend-design", "seo"]) {
+          assert.isTrue(has(`.agents/skills/${skill}/SKILL.md`), `${id}: ${skill}`);
+        }
+        assert.isTrue(has(".agents/skills/design-taste-frontend/LICENSE"));
+        assert.isTrue(has(".agents/skills/frontend-design/LICENSE.txt"));
+        // The app's own lint gate must not read them, nor Tailwind scan them.
+        assert.include(yield* read("biome.json"), '"!.agents"');
+        assert.include(yield* read("src/styles/app.css"), '@source not "../../.agents"');
+      } else {
+        assert.deepStrictEqual(skills, []);
+      }
+      for (const named of agents.matchAll(/\.agents\/skills\/[\w./-]+\.(?:md|mjs)/g)) {
+        assert.isTrue(has(named[0]), `${id} AGENTS.md names ${named[0]}`);
+      }
       assert.isTrue(has("package-lock.json"));
       assert.isTrue(has("dev"));
       // Windows cannot run a script with no extension, so each helper has a twin it can.
@@ -84,7 +103,7 @@ it.effect("the bundle a build ships holds every template file, with its mode", (
     yield* writeTemplateBundle(templatesRoot, bundle);
     const shipped = yield* readTemplateBundle(bundle);
     for (const template of TEMPLATES) {
-      const source = yield* readTemplateTree(path.join(templatesRoot, template.id));
+      const source = yield* templateTree(templatesRoot, template.id);
       assert.deepStrictEqual(shipped.get(template.id), source, template.id);
     }
     const webApp = shipped.get("web-app") ?? [];

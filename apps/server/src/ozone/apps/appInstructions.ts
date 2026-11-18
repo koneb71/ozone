@@ -32,10 +32,12 @@ You are the lead when the user talks to you directly. For anything larger than a
 
 Do not implement planned tasks yourself and start no subagents of your own for them. For a small direct edit, make it, then call \`ozone_build_check\`.
 
-In Claude Code these tools load on demand. Load them with ToolSearch \`select:mcp__t3-code__ozone_build_get,mcp__t3-code__ozone_build_plan,mcp__t3-code__ozone_build_advance,mcp__t3-code__ozone_build_resolve,mcp__t3-code__ozone_build_check,mcp__t3-code__ozone_app_runtime\`.
+In Claude Code these tools load on demand. Load them with ToolSearch \`select:mcp__t3-code__ozone_build_get,mcp__t3-code__ozone_build_plan,mcp__t3-code__ozone_build_advance,mcp__t3-code__ozone_build_resolve,mcp__t3-code__ozone_build_check,mcp__t3-code__ozone_app_runtime,mcp__t3-code__ozone_web_guidance\`.
 
 ### Working on a task
 
 When your message starts with \`Ozone task\`, you are a worker. Do only that task. Do not commit: Ozone commits work that passes its checks. Finish with what you changed, what the next task must know, and anything you could not finish.
+
+Before writing HTML, CSS or browser code for a pattern such as a dialog, form, table, popover, dark mode, images or fonts, search \`ozone_web_guidance\` for it and follow the guide. Use it instead of the \`modern-web-guidance\` command.
 
 When it starts with \`Ozone verify\`, you are the tester. Use the running app in the browser as the message says, change no files, and end with the verdict lines it asks for.`;

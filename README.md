@@ -40,7 +40,8 @@ it as read, and see how many are left to read." This is the app it built:
 - **Lets you steer.** Turn on "Plan first", on Home or above the message box in an app's thread,
   and nothing is built until you approve the plan: the agent asks its questions and shows the
   plan on cards in the conversation. With Claude, Codex, Cursor and OpenCode it cannot change a
-  file while it plans. Each app's Build page chooses the model its workers
+  file while it plans. Turn on "Pick the design" to choose from three design directions before
+  anything is built. Each app's Build page chooses the model its workers
   use, so a large lead can direct cheaper workers.
 - **Keeps your data.** An app's database lives in a volume that only a confirmed **Delete app**
   removes, after a snapshot, and Home can bring a deleted app back with that data. Every finished

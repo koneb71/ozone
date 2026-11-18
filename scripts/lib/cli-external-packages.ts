@@ -5,6 +5,8 @@ const CLI_RUNTIME_EXTERNAL_PREFIXES = [
   "@cursor/sdk",
   // Playwright reads package.json and browsers.json beside its runtime modules.
   "playwright-core",
+  // Modern Web Guidance reads its search index and guides beside its search module.
+  "modern-web-guidance",
   "node-pty",
   "ffi-rs",
   "@yuuang/",

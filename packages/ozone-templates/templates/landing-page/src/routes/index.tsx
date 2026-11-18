@@ -2,9 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Gauge, Layers, ShieldCheck } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { seo } from "@/lib/seo";
 import { site } from "@/lib/site";
 
 export const Route = createFileRoute("/")({
+  head: () => seo({ path: "/" }),
   component: Home,
 });
 

@@ -28,6 +28,11 @@
       "id": "build",
       "command": "npm run build",
       "when": "final"
+    },
+    {
+      "id": "seo",
+      "command": "npm run seo",
+      "when": "final"
     }
   ],
   "data": {

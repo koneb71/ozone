@@ -30,7 +30,7 @@ import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as AppData from "../data/AppData.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
 import { testApp, testManifest } from "../ozone.testkit.ts";
-import { NEXT } from "./briefs.ts";
+import { DESIGN_FILE, NEXT } from "./briefs.ts";
 import * as BuildChecks from "./BuildChecks.ts";
 import * as BuildConductor from "./BuildConductor.ts";
 import * as BuildGates from "./BuildGates.ts";
@@ -847,6 +847,25 @@ describe("BuildConductor", () => {
       assert.deepStrictEqual(yield* steps, ["dispatch verification", "wait verification"]);
       assert.strictEqual(passed.status, "complete");
       assert.include(passed.next, "A tester used the app in a browser");
+    }).pipe(Effect.provide(layerTest)),
+  );
+
+  it.effect("asks for the design before the first plan when the person chose to pick it", () =>
+    Effect.gen(function* () {
+      const { conductor, lead, steps, fs, path, workspaceRoot } = yield* makeHarness({
+        chooseDesign: true,
+      });
+      const asked = yield* conductor.plan(lead, plan(task("page")));
+      assert.strictEqual(asked.next, NEXT.chooseDesign);
+      assert.deepStrictEqual(asked.tasks, []);
+      // In plan mode too: the pick comes before any plan.
+      const inPlanMode = yield* conductor.plan({ ...lead, planning: true }, plan(task("page")));
+      assert.strictEqual(inPlanMode.next, NEXT.chooseDesign);
+
+      // DESIGN.md is the pick; with it, the plan is saved and later plans follow it.
+      yield* fs.writeFileString(path.join(workspaceRoot, DESIGN_FILE), "# Calm\n");
+      assert.strictEqual((yield* conductor.plan(lead, plan(task("page")))).next, NEXT.planned);
+      assert.deepStrictEqual(yield* steps, []);
     }).pipe(Effect.provide(layerTest)),
   );
 

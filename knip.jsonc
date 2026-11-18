@@ -64,6 +64,8 @@
         "@t3tools/web",
         "@napi-rs/keyring",
         "ffi-rs",
+        // Loaded with createRequire, which knip does not trace.
+        "modern-web-guidance",
         "transcribe-cpp",
       ],
     },

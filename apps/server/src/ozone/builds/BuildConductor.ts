@@ -24,7 +24,7 @@ import * as Semaphore from "effect/Semaphore";
 import type { McpInvocationScope } from "../../mcp/McpInvocationContext.ts";
 import type { ResolvedApp } from "../apps/AppRegistry.ts";
 import { failed as refuse } from "../errors.ts";
-import { NEXT, planFile, specFile, workerBrief } from "./briefs.ts";
+import { DESIGN_FILE, NEXT, planFile, specFile, workerBrief } from "./briefs.ts";
 import * as BuildChecks from "./BuildChecks.ts";
 import * as BuildGates from "./BuildGates.ts";
 import * as BuildModel from "./BuildModel.ts";
@@ -384,6 +384,11 @@ const make = Effect.gen(function* () {
     }
   });
 
+  const hasDesign = (lead: BuildLead) =>
+    fs
+      .exists(path.join(lead.app.workspaceRoot, DESIGN_FILE))
+      .pipe(Effect.orElseSucceed(() => false));
+
   const writeMirror = Effect.fn("BuildConductor.writeMirror")(function* (
     lead: BuildLead,
     build: OzoneBuild,
@@ -426,7 +431,11 @@ const make = Effect.gen(function* () {
       exclusively(
         lead.threadId,
         Effect.gen(function* () {
-          const { reviewPlans } = lead.app.app.settings;
+          const { reviewPlans, chooseDesign } = lead.app.app.settings;
+          // The person picks the look first; DESIGN.md is their pick, and later plans follow it.
+          if (chooseDesign && !(yield* hasDesign(lead))) {
+            return report(lead, yield* load(lead), NEXT.chooseDesign);
+          }
           if (lead.planning) return report(lead, yield* load(lead), NEXT.planning);
           const build = yield* decide(lead, (current, at) =>
             BuildModel.applyPlan(current, input, at, { reviewPlans }),

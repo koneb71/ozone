@@ -24,6 +24,7 @@ import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as OzoneApps from "../apps/OzoneApps.ts";
 import * as BuildConductor from "../builds/BuildConductor.ts";
 import * as AppEnv from "../env/AppEnv.ts";
+import * as WebGuidance from "../guidance/WebGuidance.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
 
 // A tool that takes nothing declares no `parameters`: MCP needs an object schema, and Tool.make
@@ -120,6 +121,37 @@ const AppRuntimeTool = Tool.make("ozone_app_runtime", {
   .annotate(Tool.Destructive, false)
   .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromOutsideClients);
 
+const WebGuidanceTool = Tool.make("ozone_web_guidance", {
+  ...shared,
+  description:
+    "Current guidance for HTML, CSS and browser APIs, from Chrome's Modern Web Guidance (CC BY 4.0), searched on this machine. Use it before writing a dialog, popover, form, validation, table, dark mode, images, fonts, animation, layout or anything else a browser renders. `search` takes a short query for one pattern, two to five words with no framework names, such as `light dismiss dialog`, and returns guide ids. `retrieve` returns up to three guides by id. Use this instead of the `modern-web-guidance` command.",
+  parameters: Schema.Struct({
+    action: Schema.Literals(["search", "retrieve"]),
+    query: Schema.optional(
+      TrimmedNonEmptyString.check(Schema.isMaxLength(120)).annotate({
+        description: "For `search`: the pattern, in two to five words.",
+      }),
+    ),
+    ids: Schema.optional(
+      Schema.Array(TrimmedNonEmptyString.check(Schema.isMaxLength(120)))
+        .check(Schema.isMaxLength(WebGuidance.RETRIEVE_LIMIT))
+        .annotate({ description: "For `retrieve`: guide ids from a search." }),
+    ),
+  }),
+  success: Schema.Struct({
+    matches: Schema.optional(
+      Schema.Array(Schema.Struct({ id: Schema.String, description: Schema.String })),
+    ),
+    guides: Schema.optional(
+      Schema.Array(Schema.Struct({ id: Schema.String, guide: Schema.String })),
+    ),
+  }),
+  dependencies: [McpInvocationContext.McpInvocationContext, WebGuidance.WebGuidance],
+})
+  .annotate(Tool.Readonly, true)
+  .annotate(Tool.Destructive, false)
+  .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromOutsideClients);
+
 const AppCreateTool = Tool.make("ozone_app_create", {
   ...shared,
   description:
@@ -157,5 +189,6 @@ export const OzoneToolkit = Toolkit.make(
   BuildResolveTool,
   BuildCheckTool,
   AppRuntimeTool,
+  WebGuidanceTool,
   AppCreateTool,
 );

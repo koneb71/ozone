@@ -10,6 +10,7 @@
       "**",
       "!**/*.md",
       "!**/*.svg",
+      "!.agents",
       "!.ozone",
       "!drizzle",
       "!public",
