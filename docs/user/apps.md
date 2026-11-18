@@ -65,6 +65,8 @@ Open it from Home, or from the app's status bar above the message box.
 - **History**: every finished task. Go back to any of them, code and data together, and undo
   that the same way.
 - **Environment**: settings and secrets for the app. They reach its container and never its code.
+  A value that should differ on one server goes on that server instead: see
+  [Variables on a server](deploy.md#variables-on-a-server).
 - **Build**: whether to show the plan first, whether a tester tries the finished app, which model
   the workers use, and whether to deploy when a build completes.
 - **Logs**: what the app's containers print.

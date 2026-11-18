@@ -16,7 +16,13 @@ import * as Semaphore from "effect/Semaphore";
 import * as ServerConfig from "../../config.ts";
 import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
-import { ENV_FILE_MODE, encodeEnvFile, envFilePath, readEnvFile } from "./envFile.ts";
+import {
+  ENV_FILE_MODE,
+  encodeEnvFile,
+  envFilePath,
+  readEnvFile,
+  shownVariables as shown,
+} from "./envFile.ts";
 
 /**
  * An app's environment variables: settings and secrets the person gives it, which reach its
@@ -35,13 +41,6 @@ export class AppEnv extends Context.Service<
   }
 >()("t3/ozone/env/AppEnv") {}
 
-const shown = (variables: ReadonlyArray<OzoneEnvVariableValue>): OzoneEnvListResult => ({
-  variables: variables.map((variable) => ({
-    name: variable.name,
-    secret: variable.secret,
-    value: variable.secret ? null : variable.value,
-  })),
-});
 const saveFailed = () =>
   new OzoneAppError({ reason: "failed", message: "Ozone could not save the variables." });
 

@@ -31,6 +31,7 @@ import {
   OzoneNotifyListResult,
   OzoneNotifyRemoveInput,
   OzoneServerAddInput,
+  OzoneServerId,
   OzoneServerInput,
   OzoneServerKeyResult,
   OzoneServerRemoveInput,
@@ -407,6 +408,16 @@ export type OzoneEnvSetInput = typeof OzoneEnvSetInput.Type;
 export const OzoneEnvRemoveInput = Schema.Struct({ projectId: ProjectId, name: EnvName });
 export type OzoneEnvRemoveInput = typeof OzoneEnvRemoveInput.Type;
 
+/** A saved server's own variables: every app deployed there gets them, over its own of the same name. */
+export const OzoneServerEnvListInput = Schema.Struct({ serverId: OzoneServerId });
+export const OzoneServerEnvSetInput = Schema.Struct({
+  serverId: OzoneServerId,
+  ...OzoneEnvVariableValue.fields,
+});
+export type OzoneServerEnvSetInput = typeof OzoneServerEnvSetInput.Type;
+export const OzoneServerEnvRemoveInput = Schema.Struct({ serverId: OzoneServerId, name: EnvName });
+export type OzoneServerEnvRemoveInput = typeof OzoneServerEnvRemoveInput.Type;
+
 export const OZONE_WS_METHODS = {
   appsList: "ozone.apps.list",
   appsCreate: "ozone.apps.create",
@@ -442,6 +453,9 @@ export const OZONE_WS_METHODS = {
   serversAdd: "ozone.servers.add",
   serversRemove: "ozone.servers.remove",
   serversKey: "ozone.servers.key",
+  serversEnvList: "ozone.servers.env.list",
+  serversEnvSet: "ozone.servers.env.set",
+  serversEnvRemove: "ozone.servers.env.remove",
   notifyList: "ozone.notify.list",
   notifySet: "ozone.notify.set",
   notifyRemove: "ozone.notify.remove",
@@ -489,6 +503,8 @@ export const OZONE_OPERATE_RPC_SCOPES = {
   [OZONE_WS_METHODS.serversRemove]: AuthOrchestrationOperateScope,
   // Makes Ozone's SSH key the first time; what it shows is public.
   [OZONE_WS_METHODS.serversKey]: AuthOrchestrationOperateScope,
+  [OZONE_WS_METHODS.serversEnvSet]: AuthOrchestrationOperateScope,
+  [OZONE_WS_METHODS.serversEnvRemove]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.notifySet]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.notifyRemove]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.notifyTest]: AuthOrchestrationOperateScope,
@@ -516,6 +532,8 @@ export const OZONE_RPC_SCOPES = {
   [OZONE_WS_METHODS.notifyList]: AuthOrchestrationReadScope,
   // API keys are never in the list.
   [OZONE_WS_METHODS.serversList]: AuthOrchestrationReadScope,
+  // A secret's value is never in the list.
+  [OZONE_WS_METHODS.serversEnvList]: AuthOrchestrationReadScope,
 } as const;
 
 /** Every Ozone method reports under one aggregate in traces. */
@@ -697,6 +715,21 @@ export const OzoneWsRpcs = [
   Rpc.make(OZONE_WS_METHODS.serversKey, {
     payload: Schema.Struct({}),
     success: OzoneServerKeyResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.serversEnvList, {
+    payload: OzoneServerEnvListInput,
+    success: OzoneEnvListResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.serversEnvSet, {
+    payload: OzoneServerEnvSetInput,
+    success: OzoneEnvListResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.serversEnvRemove, {
+    payload: OzoneServerEnvRemoveInput,
+    success: OzoneEnvListResult,
     error: OzoneRpcError,
   }),
   Rpc.make(OZONE_WS_METHODS.notifyList, {

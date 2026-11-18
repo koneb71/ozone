@@ -75,6 +75,7 @@ const makeHarness = (options: { readonly keepsData: boolean; readonly data: bool
                   kind: "host" as const,
                   provider: "railway" as const,
                   token: "token",
+                  variables: [],
                 }),
             }),
           ),

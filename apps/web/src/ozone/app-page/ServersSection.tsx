@@ -45,6 +45,7 @@ import { ozoneEnvironment } from "../state";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { EmptyRow, SectionRows } from "../ui/SectionRows";
 import { useOzoneCommand } from "../ui/useOzoneCommand";
+import { VariablesSection } from "../ui/VariablesSection";
 import { ServerSection } from "./ServerRows";
 
 const METHODS: ReadonlyArray<ServerMethod> = [
@@ -81,6 +82,7 @@ export function ServersSection(props: { readonly environmentId: EnvironmentId })
   const { working, run } = useOzoneCommand();
   const [adding, setAdding] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
+  const [variablesOf, setVariablesOf] = useState<string | null>(null);
   const [removing, setRemoving] = useState<OzoneSavedServer | null>(null);
 
   const remove = async (server: OzoneSavedServer) => {
@@ -129,6 +131,13 @@ export function ServersSection(props: { readonly environmentId: EnvironmentId })
                 description={serverLine(server)}
                 control={
                   <div className="flex items-center gap-1">
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => setVariablesOf(variablesOf === server.id ? null : server.id)}
+                    >
+                      {variablesOf === server.id ? "Hide variables" : "Variables"}
+                    </Button>
                     {server.kind === "ssh" ? (
                       <Button
                         size="xs"
@@ -159,6 +168,15 @@ export function ServersSection(props: { readonly environmentId: EnvironmentId })
           }
         </SectionRows>
       </SettingsSection>
+      {(servers.data?.servers ?? []).map((server) =>
+        variablesOf === server.id ? (
+          <VariablesSection
+            key={server.id}
+            environmentId={props.environmentId}
+            scope={{ kind: "server", serverId: server.id, name: server.name }}
+          />
+        ) : null,
+      )}
       {(servers.data?.servers ?? []).map((server) =>
         server.kind === "ssh" && open === server.id ? (
           <ServerSection key={server.id} environmentId={props.environmentId} host={server.host} />

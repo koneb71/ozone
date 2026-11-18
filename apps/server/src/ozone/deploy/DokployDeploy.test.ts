@@ -100,6 +100,7 @@ const makeHarness = (options: {
                   kind: "dokploy" as const,
                   url: "https://dokploy.example.com",
                   apiKey: "key",
+                  variables: [],
                 }),
             }),
           ),

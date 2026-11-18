@@ -177,6 +177,19 @@ export function createOzoneEnvironmentAtoms<R, E>(
       label: "environment-data:ozone:server-key",
       tag: OZONE_WS_METHODS.serversKey,
     }),
+    serverEnv: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:ozone:server-env",
+      tag: OZONE_WS_METHODS.serversEnvList,
+      staleTimeMs: 0,
+    }),
+    setServerEnv: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:set-server-env",
+      tag: OZONE_WS_METHODS.serversEnvSet,
+    }),
+    removeServerEnv: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:remove-server-env",
+      tag: OZONE_WS_METHODS.serversEnvRemove,
+    }),
     notifyChannels: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:ozone:notify-channels",
       tag: OZONE_WS_METHODS.notifyList,

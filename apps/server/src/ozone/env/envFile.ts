@@ -2,7 +2,7 @@
  * Where an app's environment variables are kept and how they reach its container. They live in
  * Ozone's state folder, never in the app's repository, in a file only its owner can read.
  */
-import { OzoneEnvVariableValue } from "@t3tools/contracts";
+import { OzoneEnvVariableValue, type OzoneEnvListResult } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
@@ -15,6 +15,17 @@ const EnvFile = Schema.fromJsonString(
 );
 const decodeEnvFile = Schema.decodeUnknownEffect(EnvFile);
 export const encodeEnvFile = Schema.encodeEffect(EnvFile);
+
+/** Variables as a client sees them: a secret's value never leaves the server. */
+export const shownVariables = (
+  variables: ReadonlyArray<OzoneEnvVariableValue>,
+): OzoneEnvListResult => ({
+  variables: variables.map((variable) => ({
+    name: variable.name,
+    secret: variable.secret,
+    value: variable.secret ? null : variable.value,
+  })),
+});
 
 /** Beside the Compose override, in the app's folder of Ozone's state. */
 export const envFilePath = (path: Path.Path, stateDir: string, slug: string) =>

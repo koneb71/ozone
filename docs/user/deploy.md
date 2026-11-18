@@ -43,6 +43,17 @@ tokens stay on your machine and are never shown again.
 For an SSH server, **Set up** on the Deploy page checks it, installs Docker if it has none and
 starts the proxy that serves domains.
 
+### Variables on a server
+
+A server can hold environment variables of its own, for values that belong to the place and not
+to one app, such as an API address or a mail server's password. On **Servers**, choose
+**Variables** on the server's row and add them. Every app deployed to that server gets them at
+its next deploy.
+
+When an app has a variable of the same name, the server's value is used on that server. The
+app's own value still applies on this computer and on every other server. A secret is never
+shown again.
+
 ## Deploy
 
 The Deploy button appears once the app has started successfully for the first time. Before
