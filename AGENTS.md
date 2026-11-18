@@ -73,7 +73,7 @@ The most common defect in this repo is a change that works on the path you teste
 - **Contracts.** Anything crossing the wire is typed in `packages/contracts`. Change the schema and the server, web, and desktop all follow.
 - **Reverse states.** If you added a way in, add the way out and the way to see it. Snooze needs unsnooze. Close needs reopen. A one-way door is a bug.
 - **Connection modes.** A local server, a paired server on the network or tailnet, and an SSH remote behave differently. Multi-device and multi-environment cases are real.
-- **Docs.** Check whether the change makes existing guidance inaccurate. Apply the [documentation rules](#documentation) before adding anything.
+- **Docs and changelog.** Fix every doc the change made inaccurate and add a `CHANGELOG.md` line for anything a user will notice, in the same commit. See [Documentation](#documentation) and [Changelog](#changelog).
 
 ## Dev servers
 
@@ -157,7 +157,7 @@ An empty database is a bad test. Seed your worktree's `.t3` with a copy of real 
 
 ## Documentation
 
-Most code changes do not need an internal documentation change. Agents can read the code.
+Every change updates the docs it affects, in the same commit, without being asked. Before you call work done, search `README.md` and `docs/` for the names and wording the change touched, not only the feature's own page, and fix every sentence that is now wrong. A change a user will notice updates its section in `docs/user/`, and `README.md` too when it changes what the README says Ozone does. Internal docs change when a decision or constraint they record changes. Agents can read the code for the rest, so most code changes need no internal doc.
 
 - `docs/internals/` is for architectural decisions and their reasons, constraints that span components, and implementation traps that are hard to discover from the source. Before adding a paragraph, ask what a maintainer would get wrong without it. If reading the relevant code answers the question, leave it out.
 - Do not document every feature, enumerate fields or methods, narrate control flow, maintain file catalogs, or append PR summaries. Types, tests, and code already record the implementation. The glossary defines shared vocabulary; it is not a feature index.
@@ -167,6 +167,17 @@ Most code changes do not need an internal documentation change. Agents can read 
 - Keep user docs in the shipped product's voice, without implementation details or contributor tooling. Update the relevant feature section when how to use it changes. A UI tweak does not need a documentation entry, and a new control does not need its own page.
 - `docs/operations/` holds setup, release, and debugging procedures for people working on Ozone. Keep instructions for operating an installed Ozone server in the user guides.
 - `docs/ozone/` records the decisions behind the app builder: apps, builds, data safety and deploys. The rules for `docs/internals/` apply to it.
+
+## Changelog
+
+[CHANGELOG.md](CHANGELOG.md) tells users what changed in each release. If it is missing, create it in the same layout.
+
+- Every change a user will notice adds a line under `## Unreleased` in the same commit, under `### Added`, `### Changed`, `### Fixed` or `### Removed`. Add the subheading when it is not there yet.
+- Write for the user: what they can do now, or what no longer goes wrong, in a sentence or two in the product's voice. No file paths, PR numbers, internal names or contributor tooling.
+- Start a change that breaks an existing setup with `**Breaking:**` and say what to do about it.
+- Refactors, tests, CI, internal docs and dev tooling get no line. A merge from T3 Code gets one line naming the upstream commit, plus a line for anything a user will notice.
+- When a change that is not released yet is reworked or reverted, edit or remove its line instead of adding another.
+- A release renames `## Unreleased` to `## <version> - <date>` and opens a new, empty `## Unreleased` above it. See [Release](docs/operations/release.md).
 
 ## Plans and work artifacts
 

@@ -13,8 +13,8 @@ the [security policy](.github/SECURITY.md) describes.
 <a id="one-problem"></a>
 
 - **One problem per pull request.** Include every change that problem needs across contracts,
-  server, clients, tests and docs. Cleanup, refactors and a second fix go in their own pull
-  requests.
+  server, clients, tests and docs, and a line in [CHANGELOG.md](CHANGELOG.md) when users will
+  notice it. Cleanup, refactors and a second fix go in their own pull requests.
 - **Run the checks before you push.** `vp run check:changed` runs CI's fast checks for the files
   you changed.
 - **Show that it works.** Say how you checked the change and what you saw. UI changes need before

@@ -6,11 +6,14 @@ platform builds on its own runner, so the Windows installer is built on Windows.
 
 ## Cut a release
 
-1. Push a tag named `v<version>` with all three numbers, such as `v0.2.0`. A suffix such as
+1. In [CHANGELOG.md](../../CHANGELOG.md), rename `## Unreleased` to `## <version> - <date>`, add
+   a new, empty `## Unreleased` above it, and commit that.
+2. Push a tag named `v<version>` with all three numbers, such as `v0.2.0`. A suffix such as
    `v0.2.0-rc.1` is accepted.
-2. The workflow builds the three platforms and gathers their files into a draft GitHub Release
+3. The workflow builds the three platforms and gathers their files into a draft GitHub Release
    titled `Ozone <version>` with generated notes.
-3. Read the draft, edit the notes, and publish it. Publishing the draft is the release.
+4. Replace the draft's notes with that version's section of the changelog, and publish it.
+   Publishing the draft is the release.
 
 The workflow makes the draft only when the tag has no release yet. If one exists, for example one
 made on GitHub when the tag was pushed, it attaches the files to that one and leaves its title,
