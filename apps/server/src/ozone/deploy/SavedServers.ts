@@ -1,16 +1,11 @@
 import {
   OzoneAppError,
-  OzoneEnvVariableValue,
   OzoneHostProvider,
   OzoneServerHost,
   OzoneServerId,
   OzoneSshAccess,
-  type OzoneDeployTarget,
-  type OzoneEnvListResult,
   type OzoneSavedServer,
   type OzoneServerAddInput,
-  type OzoneServerEnvRemoveInput,
-  type OzoneServerEnvSetInput,
   type OzoneServerKeyResult,
   type OzoneServerRemoveResult,
   type OzoneServersListResult,
@@ -24,17 +19,12 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 
 import * as ServerConfig from "../../config.ts";
-import { ENV_FILE_MODE, shownVariables } from "../env/envFile.ts";
+import { ENV_FILE_MODE } from "../env/envFile.ts";
 import { failed } from "../errors.ts";
 import * as AppServers from "./AppServers.ts";
 import * as Dokploy from "./Dokploy.ts";
 import { HostDrivers } from "./hosts/HostDriver.ts";
 import * as SshAccess from "./SshAccess.ts";
-
-/** What every app deployed to the server gets. A file saved before these existed has none. */
-const variables = Schema.Array(OzoneEnvVariableValue).pipe(
-  Schema.withDecodingDefaultKey(Effect.succeed([])),
-);
 
 const StoredServer = Schema.Union([
   Schema.Struct({
@@ -43,7 +33,6 @@ const StoredServer = Schema.Union([
     kind: Schema.Literal("ssh"),
     host: OzoneServerHost,
     access: OzoneSshAccess,
-    variables,
   }),
   Schema.Struct({
     id: OzoneServerId,
@@ -51,7 +40,6 @@ const StoredServer = Schema.Union([
     kind: Schema.Literal("dokploy"),
     url: Schema.String,
     apiKey: Schema.String,
-    variables,
   }),
   Schema.Struct({
     id: OzoneServerId,
@@ -59,7 +47,6 @@ const StoredServer = Schema.Union([
     kind: Schema.Literal("host"),
     provider: OzoneHostProvider,
     token: Schema.String,
-    variables,
   }),
 ]);
 export type StoredServer = typeof StoredServer.Type;
@@ -88,32 +75,13 @@ export class SavedServers extends Context.Service<
     readonly dokploy: (id: string) => Effect.Effect<DokployServer, OzoneAppError>;
     /** A hosting account with its token, for the deploys that run there. */
     readonly host: (id: string) => Effect.Effect<HostServer, OzoneAppError>;
-    /** A server's variables as a client sees them: a secret's value is never in the list. */
-    readonly variables: (id: string) => Effect.Effect<OzoneEnvListResult, OzoneAppError>;
-    /** Adds or replaces one. Apps there read it at their next deploy. */
-    readonly setVariable: (
-      input: OzoneServerEnvSetInput,
-    ) => Effect.Effect<OzoneEnvListResult, OzoneAppError>;
-    readonly removeVariable: (
-      input: OzoneServerEnvRemoveInput,
-    ) => Effect.Effect<OzoneEnvListResult, OzoneAppError>;
-    /** The variables of the saved server a deploy runs on, values included. None for this machine. */
-    readonly variablesFor: (
-      target: OzoneDeployTarget,
-    ) => Effect.Effect<ReadonlyArray<OzoneEnvVariableValue>, OzoneAppError>;
   }
 >()("t3/ozone/deploy/SavedServers") {}
 
 const summaryOf = (server: StoredServer): OzoneSavedServer => {
   switch (server.kind) {
     case "ssh":
-      return {
-        id: server.id,
-        name: server.name,
-        kind: "ssh",
-        host: server.host,
-        access: server.access,
-      };
+      return server;
     case "dokploy":
       return {
         id: server.id,
@@ -205,14 +173,7 @@ const make = Effect.gen(function* () {
             ? "with Ozone's key. Run the command Ozone shows on the server first."
             : "with this computer's SSH keys. Check that `ssh " + input.host + "` works here.",
         );
-        return {
-          id,
-          name: input.name,
-          kind: "ssh",
-          host: input.host,
-          access: input.access,
-          variables: [],
-        };
+        return { id, name: input.name, kind: "ssh", host: input.host, access: input.access };
       }
       case "ssh-password": {
         const publicKey = yield* access.publicKey;
@@ -229,19 +190,12 @@ const make = Effect.gen(function* () {
           );
         }
         yield* reach(input.host, "with the key it just installed.");
-        return {
-          id,
-          name: input.name,
-          kind: "ssh",
-          host: input.host,
-          access: "ozone-key",
-          variables: [],
-        };
+        return { id, name: input.name, kind: "ssh", host: input.host, access: "ozone-key" };
       }
       case "dokploy": {
         const url = input.url.replace(/\/+$/, "");
         yield* dokploy.verify({ url, apiKey: input.apiKey });
-        return { id, name: input.name, kind: "dokploy", url, apiKey: input.apiKey, variables: [] };
+        return { id, name: input.name, kind: "dokploy", url, apiKey: input.apiKey };
       }
       case "host": {
         yield* drivers.of(input.provider).verify(input.token);
@@ -251,29 +205,9 @@ const make = Effect.gen(function* () {
           kind: "host",
           provider: input.provider,
           token: input.token,
-          variables: [],
         };
       }
     }
-  });
-
-  const notListed = failed("That server is no longer in Ozone's list. Add it again under Servers.");
-  const changeVariables = Effect.fn("SavedServers.changeVariables")(function* (
-    id: string,
-    edit: (current: ReadonlyArray<OzoneEnvVariableValue>) => ReadonlyArray<OzoneEnvVariableValue>,
-  ) {
-    return yield* writing.withPermits(1)(
-      Effect.gen(function* () {
-        const servers = yield* read;
-        const server = servers.find((entry) => entry.id === id);
-        if (server === undefined) return yield* notListed;
-        const next = edit(server.variables).toSorted((a, b) => a.name.localeCompare(b.name));
-        yield* write(
-          servers.map((entry) => (entry.id === id ? { ...entry, variables: next } : entry)),
-        );
-        return shownVariables(next);
-      }),
-    );
   });
 
   return SavedServers.of({
@@ -356,33 +290,6 @@ const make = Effect.gen(function* () {
         );
       }
       return server;
-    }),
-    variables: Effect.fn("SavedServers.variables")(function* (id) {
-      const server = (yield* read).find((entry) => entry.id === id);
-      if (server === undefined) return yield* notListed;
-      return shownVariables(server.variables);
-    }),
-    setVariable: Effect.fn("SavedServers.setVariable")((input) =>
-      changeVariables(input.serverId, (current) => [
-        ...current.filter((variable) => variable.name !== input.name),
-        { name: input.name, value: input.value, secret: input.secret },
-      ]),
-    ),
-    removeVariable: Effect.fn("SavedServers.removeVariable")((input) =>
-      changeVariables(input.serverId, (current) =>
-        current.filter((variable) => variable.name !== input.name),
-      ),
-    ),
-    variablesFor: Effect.fn("SavedServers.variablesFor")(function* (target) {
-      const servers = yield* read;
-      // An SSH deploy names its host, not a saved server, so the host finds it.
-      const server =
-        target.dokploy !== null
-          ? servers.find((entry) => entry.kind === "dokploy" && entry.id === target.dokploy)
-          : target.hosted !== null
-            ? servers.find((entry) => entry.kind === "host" && entry.id === target.hosted)
-            : servers.find((entry) => entry.kind === "ssh" && entry.host === target.host);
-      return server?.variables ?? [];
     }),
   });
 });

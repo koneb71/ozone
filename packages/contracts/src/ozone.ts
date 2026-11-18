@@ -30,8 +30,8 @@ import {
   OzoneNotifyChannel,
   OzoneNotifyListResult,
   OzoneNotifyRemoveInput,
+  OzoneDeployPlace,
   OzoneServerAddInput,
-  OzoneServerId,
   OzoneServerInput,
   OzoneServerKeyResult,
   OzoneServerRemoveInput,
@@ -408,15 +408,24 @@ export type OzoneEnvSetInput = typeof OzoneEnvSetInput.Type;
 export const OzoneEnvRemoveInput = Schema.Struct({ projectId: ProjectId, name: EnvName });
 export type OzoneEnvRemoveInput = typeof OzoneEnvRemoveInput.Type;
 
-/** A saved server's own variables: every app deployed there gets them, over its own of the same name. */
-export const OzoneServerEnvListInput = Schema.Struct({ serverId: OzoneServerId });
-export const OzoneServerEnvSetInput = Schema.Struct({
-  serverId: OzoneServerId,
+/** An app's variables for one place it deploys to: there, they are used over its own of the same name. */
+export const OzoneDeployEnvListInput = Schema.Struct({
+  projectId: ProjectId,
+  place: OzoneDeployPlace,
+});
+export type OzoneDeployEnvListInput = typeof OzoneDeployEnvListInput.Type;
+export const OzoneDeployEnvSetInput = Schema.Struct({
+  projectId: ProjectId,
+  place: OzoneDeployPlace,
   ...OzoneEnvVariableValue.fields,
 });
-export type OzoneServerEnvSetInput = typeof OzoneServerEnvSetInput.Type;
-export const OzoneServerEnvRemoveInput = Schema.Struct({ serverId: OzoneServerId, name: EnvName });
-export type OzoneServerEnvRemoveInput = typeof OzoneServerEnvRemoveInput.Type;
+export type OzoneDeployEnvSetInput = typeof OzoneDeployEnvSetInput.Type;
+export const OzoneDeployEnvRemoveInput = Schema.Struct({
+  projectId: ProjectId,
+  place: OzoneDeployPlace,
+  name: EnvName,
+});
+export type OzoneDeployEnvRemoveInput = typeof OzoneDeployEnvRemoveInput.Type;
 
 export const OZONE_WS_METHODS = {
   appsList: "ozone.apps.list",
@@ -453,9 +462,9 @@ export const OZONE_WS_METHODS = {
   serversAdd: "ozone.servers.add",
   serversRemove: "ozone.servers.remove",
   serversKey: "ozone.servers.key",
-  serversEnvList: "ozone.servers.env.list",
-  serversEnvSet: "ozone.servers.env.set",
-  serversEnvRemove: "ozone.servers.env.remove",
+  deployEnvList: "ozone.deploy.env.list",
+  deployEnvSet: "ozone.deploy.env.set",
+  deployEnvRemove: "ozone.deploy.env.remove",
   notifyList: "ozone.notify.list",
   notifySet: "ozone.notify.set",
   notifyRemove: "ozone.notify.remove",
@@ -503,8 +512,8 @@ export const OZONE_OPERATE_RPC_SCOPES = {
   [OZONE_WS_METHODS.serversRemove]: AuthOrchestrationOperateScope,
   // Makes Ozone's SSH key the first time; what it shows is public.
   [OZONE_WS_METHODS.serversKey]: AuthOrchestrationOperateScope,
-  [OZONE_WS_METHODS.serversEnvSet]: AuthOrchestrationOperateScope,
-  [OZONE_WS_METHODS.serversEnvRemove]: AuthOrchestrationOperateScope,
+  [OZONE_WS_METHODS.deployEnvSet]: AuthOrchestrationOperateScope,
+  [OZONE_WS_METHODS.deployEnvRemove]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.notifySet]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.notifyRemove]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.notifyTest]: AuthOrchestrationOperateScope,
@@ -533,7 +542,7 @@ export const OZONE_RPC_SCOPES = {
   // API keys are never in the list.
   [OZONE_WS_METHODS.serversList]: AuthOrchestrationReadScope,
   // A secret's value is never in the list.
-  [OZONE_WS_METHODS.serversEnvList]: AuthOrchestrationReadScope,
+  [OZONE_WS_METHODS.deployEnvList]: AuthOrchestrationReadScope,
 } as const;
 
 /** Every Ozone method reports under one aggregate in traces. */
@@ -717,18 +726,18 @@ export const OzoneWsRpcs = [
     success: OzoneServerKeyResult,
     error: OzoneRpcError,
   }),
-  Rpc.make(OZONE_WS_METHODS.serversEnvList, {
-    payload: OzoneServerEnvListInput,
+  Rpc.make(OZONE_WS_METHODS.deployEnvList, {
+    payload: OzoneDeployEnvListInput,
     success: OzoneEnvListResult,
     error: OzoneRpcError,
   }),
-  Rpc.make(OZONE_WS_METHODS.serversEnvSet, {
-    payload: OzoneServerEnvSetInput,
+  Rpc.make(OZONE_WS_METHODS.deployEnvSet, {
+    payload: OzoneDeployEnvSetInput,
     success: OzoneEnvListResult,
     error: OzoneRpcError,
   }),
-  Rpc.make(OZONE_WS_METHODS.serversEnvRemove, {
-    payload: OzoneServerEnvRemoveInput,
+  Rpc.make(OZONE_WS_METHODS.deployEnvRemove, {
+    payload: OzoneDeployEnvRemoveInput,
     success: OzoneEnvListResult,
     error: OzoneRpcError,
   }),

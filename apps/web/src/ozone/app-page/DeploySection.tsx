@@ -50,6 +50,7 @@ import { LoadingRow } from "../ui/SectionRows";
 import { OutputView } from "../ui/OutputView";
 import { StatusDot } from "../ui/StatusDot";
 import { useOzoneCommand } from "../ui/useOzoneCommand";
+import { VariablesSection } from "../ui/VariablesSection";
 import { RemoteRow, useAppRemote } from "./RemoteRow";
 import { ServerSection } from "./ServerRows";
 import type { AppDeploy } from "./useAppDeploy";
@@ -452,6 +453,18 @@ function DeployForm(props: {
           />
         )}
       </SettingsSection>
+
+      {hostProblem === null ? (
+        <VariablesSection
+          environmentId={props.environmentId}
+          scope={{
+            kind: "place",
+            projectId: props.app.projectId,
+            place: { host: chosenHost, dokploy: chosenDokploy, hosted: chosenHosted },
+            name: where === "here" ? "this computer" : (chosen?.name ?? trimmedHost),
+          }}
+        />
+      ) : null}
 
       {where === "server" &&
       hostProblem === null &&

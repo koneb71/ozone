@@ -42,7 +42,13 @@ import {
   parseHeldBack,
   type MigrationReport,
 } from "../data/migrationGuard.ts";
-import { composeValue, ENV_FILE_MODE, envFilePath, readEnvFile } from "../env/envFile.ts";
+import {
+  composeValue,
+  ENV_FILE_MODE,
+  envFilePath,
+  placeKey,
+  readStoredEnv,
+} from "../env/envFile.ts";
 import * as DockerCli from "../runtime/DockerCli.ts";
 import { hostCaPath } from "../runtime/hostCa.ts";
 import { failed } from "../errors.ts";
@@ -52,7 +58,6 @@ import * as HostedDeploy from "./HostedDeploy.ts";
 import { historyEntries, withDeployment } from "./deployments.ts";
 import { containerMetrics, parseComposePs } from "./metrics.ts";
 import * as Notifier from "./Notifier.ts";
-import * as SavedServers from "./SavedServers.ts";
 import { proxyNetworkDeclaration, routeOverride } from "./proxy.ts";
 
 /**
@@ -179,13 +184,13 @@ const prodEnv = (input: {
   return environment;
 };
 
-/** The app's variables with the server's on top: on that server, its value for a name wins. */
-const variablesOnServer = (
-  app: ReadonlyArray<OzoneEnvVariableValue>,
-  server: ReadonlyArray<OzoneEnvVariableValue>,
+/** The app's own variables with the ones for this place on top: there, its value for a name wins. */
+const variablesAt = (
+  own: ReadonlyArray<OzoneEnvVariableValue>,
+  here: ReadonlyArray<OzoneEnvVariableValue>,
 ): ReadonlyArray<OzoneEnvVariableValue> => {
-  const named = new Map(app.map((variable) => [variable.name, variable]));
-  for (const variable of server) named.set(variable.name, variable);
+  const named = new Map(own.map((variable) => [variable.name, variable]));
+  for (const variable of here) named.set(variable.name, variable);
   return [...named.values()];
 };
 
@@ -273,7 +278,6 @@ const make = Effect.gen(function* () {
   const servers = yield* AppServers.AppServers;
   const notifier = yield* Notifier.Notifier;
   const dokploy = yield* DokployDeploy.DokployDeploy;
-  const saved = yield* SavedServers.SavedServers;
   const hosted = yield* HostedDeploy.HostedDeploy;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -285,8 +289,8 @@ const make = Effect.gen(function* () {
     app: ResolvedApp,
     target: OzoneDeployTarget,
   ) {
-    const own = yield* readEnvFile(fs, envFilePath(path, config.stateDir, app.app.slug));
-    return variablesOnServer(own, yield* saved.variablesFor(target));
+    const stored = yield* readStoredEnv(fs, envFilePath(path, config.stateDir, app.app.slug));
+    return variablesAt(stored.variables, stored.places[placeKey(target)] ?? []);
   });
   const scope = yield* Scope.Scope;
   /** What a deploy in flight is doing, by app. */

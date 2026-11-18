@@ -23,15 +23,10 @@ import * as AppServers from "./AppServers.ts";
 import * as DokployDeploy from "./DokployDeploy.ts";
 import * as HostedDeploy from "./HostedDeploy.ts";
 import * as Notifier from "./Notifier.ts";
-import * as SavedServers from "./SavedServers.ts";
 
 const projectId = ProjectId.make("project-notes");
 const here = { host: null, dokploy: null, hosted: null, publicUrl: null, domain: null };
-/** What the saved server in these tests gives every app deployed to it. */
-const SERVER_VARIABLES = [
-  { name: "API_URL", value: "https://api.example.com", secret: false },
-  { name: "REGION", value: "eu", secret: true },
-];
+
 const manifest = testManifest({
   data: { services: [{ ...TEST_DATABASE, database: "app", user: "app" }] },
   migrations: TEST_MIGRATIONS,
@@ -179,10 +174,6 @@ const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: bool
             // Only a target that names a Dokploy server reaches Dokploy.
             Layer.mock(DokployDeploy.DokployDeploy)({}),
             Layer.mock(HostedDeploy.HostedDeploy)({}),
-            Layer.mock(SavedServers.SavedServers)({
-              variablesFor: (target) =>
-                Effect.succeed(target.host === null ? [] : SERVER_VARIABLES),
-            }),
             Layer.mock(Notifier.Notifier)({
               notify: (notice) => Ref.update(notices, (all) => [...all, notice]),
             }),
@@ -380,11 +371,18 @@ it.effect("moves to a server with its data, and stops what ran before", () =>
           { name: "API_URL", value: "http://localhost:4000", secret: false },
           { name: "FEATURE", value: "on", secret: false },
         ],
+        // What this app has for the server alone.
+        places: {
+          "ssh:deploy@example.com": [
+            { name: "API_URL", value: "https://api.example.com", secret: false },
+            { name: "REGION", value: "eu", secret: true },
+          ],
+        },
       }),
     );
     const override = fs.readFileString(path.join(directory, "compose.prod.override.yaml"));
     yield* deploy.deploy({ projectId, target: here });
-    // On this machine the app has its own variables and no server's.
+    // On this machine the app has its own variables and none of the server's.
     assert.include(yield* override, 'API_URL: "http://localhost:4000"');
     assert.notInclude(yield* override, "REGION");
     yield* forget;
@@ -392,7 +390,7 @@ it.effect("moves to a server with its data, and stops what ran before", () =>
 
     const moved = yield* deploy.deploy({ projectId, target: server, bringData: true });
     assert.include(moved, { state: "running", url: "http://example.com:42005" });
-    // On the server its variables are added, and its value wins for a name both set.
+    // On the server the ones for it are added, and its value wins for a name both set.
     assert.include(yield* override, 'API_URL: "https://api.example.com"');
     assert.include(yield* override, 'REGION: "eu"');
     assert.include(yield* override, 'FEATURE: "on"');

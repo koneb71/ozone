@@ -29,6 +29,17 @@ export const OzoneServerId = TrimmedNonEmptyString.check(
 );
 export type OzoneServerId = typeof OzoneServerId.Type;
 
+/**
+ * The part of a deploy's target that says where it runs: this machine when all three are null,
+ * an SSH host, or a saved Dokploy server or hosting account.
+ */
+export const OzoneDeployPlace = Schema.Struct({
+  host: Schema.NullOr(OzoneServerHost),
+  dokploy: Schema.NullOr(OzoneServerId),
+  hosted: Schema.NullOr(OzoneServerId),
+});
+export type OzoneDeployPlace = typeof OzoneDeployPlace.Type;
+
 /** Where Deploy runs the production image. */
 export const OzoneDeployTarget = Schema.Struct({
   /** Null: this machine, or the Dokploy server below. */

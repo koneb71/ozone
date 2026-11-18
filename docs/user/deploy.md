@@ -43,17 +43,6 @@ tokens stay on your machine and are never shown again.
 For an SSH server, **Set up** on the Deploy page checks it, installs Docker if it has none and
 starts the proxy that serves domains.
 
-### Variables on a server
-
-A server can hold environment variables of its own, for values that belong to the place and not
-to one app, such as an API address or a mail server's password. On **Servers**, choose
-**Variables** on the server's row and add them. Every app deployed to that server gets them at
-its next deploy.
-
-When an app has a variable of the same name, the server's value is used on that server. The
-app's own value still applies on this computer and on every other server. A secret is never
-shown again.
-
 ## Deploy
 
 The Deploy button appears once the app has started successfully for the first time. Before
@@ -75,6 +64,17 @@ on the Deploy page and press **Deploy here instead**.
 Each deploy builds the app's last commit, applies its database migrations and starts it. A
 migration that could lose data is held back until you apply it. On Dokploy and hosting platforms
 Ozone cannot take a snapshot first, so apply such a migration on the host.
+
+### Variables for one place
+
+An app's variables, under **Environment**, go wherever it runs. To give it a value that applies
+in one place only, such as a live API key on the server, add it under **Variables on …** on the
+Deploy page, below **Where it runs**. The list is for the place selected there: this computer
+or the chosen server.
+
+The app gets those at its next deploy to that place. When it has a variable of the same name
+under Environment, the one for the place is used there. They belong to this app; other apps on
+the same server do not get them. A secret is never shown again.
 
 ## Hosts that build from a Git repository
 

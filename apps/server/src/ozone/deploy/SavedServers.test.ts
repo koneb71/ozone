@@ -97,35 +97,6 @@ it.effect("keeps reading the servers and targets saved before hosting accounts e
     });
     assert.strictEqual((yield* saved.dokploy("dokploy")).apiKey, "dk-secret-1234");
 
-    // A server keeps variables for the apps deployed to it. A secret's value never comes back.
-    yield* saved.setVariable({ serverId: "prod", name: "REGION", value: "eu", secret: false });
-    const listed = yield* saved.setVariable({
-      serverId: "prod",
-      name: "API_KEY",
-      value: "sk-1",
-      secret: true,
-    });
-    assert.deepStrictEqual(listed.variables, [
-      { name: "API_KEY", secret: true, value: null },
-      { name: "REGION", secret: false, value: "eu" },
-    ]);
-    assert.deepStrictEqual(yield* saved.variables("prod"), listed);
-    assert.notProperty((yield* saved.list).servers[0], "variables");
-    // A deploy finds them by where it runs: an SSH host, or a saved server's id.
-    const onServer = (host: string | null, dokploy: string | null) =>
-      saved
-        .variablesFor({ host, dokploy, hosted: null, publicUrl: null, domain: null })
-        .pipe(Effect.map((variables) => variables.map((variable) => variable.name)));
-    assert.deepStrictEqual(yield* onServer("root@1.2.3.4", null), ["API_KEY", "REGION"]);
-    assert.deepStrictEqual(yield* onServer(null, "dokploy"), []);
-    assert.deepStrictEqual(yield* onServer(null, null), []);
-    yield* saved.removeVariable({ serverId: "prod", name: "API_KEY" });
-    assert.deepStrictEqual(yield* onServer("root@1.2.3.4", null), ["REGION"]);
-    assert.include(
-      (yield* Effect.flip(saved.variables("gone"))).message,
-      "no longer in Ozone's list",
-    );
-
     // A target saved by a Dokploy deploy has no `hosted` field.
     const target = yield* decodeTarget({
       host: null,

@@ -1,4 +1,9 @@
-import type { EnvironmentId, OzoneEnvVariable, ProjectId } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  OzoneDeployPlace,
+  OzoneEnvVariable,
+  ProjectId,
+} from "@t3tools/contracts";
 import { PlusIcon } from "lucide-react";
 import { useState } from "react";
 
@@ -28,10 +33,16 @@ import { useOzoneCommand } from "./useOzoneCommand";
 
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-/** Whose variables: one app's, or a saved server's, which every app deployed there gets. */
+/** Which of an app's variables: its own, or the ones it has for one place it deploys to. */
 export type VariablesScope =
   | { readonly kind: "app"; readonly projectId: ProjectId }
-  | { readonly kind: "server"; readonly serverId: string; readonly name: string };
+  | {
+      readonly kind: "place";
+      readonly projectId: ProjectId;
+      readonly place: OzoneDeployPlace;
+      /** The place as the page names it, such as "this computer" or a server's name. */
+      readonly name: string;
+    };
 
 const copyFor = (scope: VariablesScope) =>
   scope.kind === "app"
@@ -43,11 +54,11 @@ const copyFor = (scope: VariablesScope) =>
     : {
         title: `Variables on ${scope.name}`,
         empty:
-          "Every app deployed here gets these at its next deploy, over its own variable of the same name. A secret is never shown again.",
-        removed: "Apps deployed here lose it at their next deploy.",
+          "This app gets these when it is deployed there, over its own variable of the same name. A secret is never shown again.",
+        removed: "The app loses it there at its next deploy.",
       };
 
-/** Settings and secrets kept outside an app's code, for one app or for a server. */
+/** Settings and secrets kept outside an app's code: its own, or the ones for one place. */
 export function VariablesSection(props: {
   readonly environmentId: EnvironmentId;
   readonly scope: VariablesScope;
@@ -56,10 +67,13 @@ export function VariablesSection(props: {
   const env = useEnvironmentQuery(
     scope.kind === "app"
       ? ozoneEnvironment.env({ environmentId, input: { projectId: scope.projectId } })
-      : ozoneEnvironment.serverEnv({ environmentId, input: { serverId: scope.serverId } }),
+      : ozoneEnvironment.deployEnv({
+          environmentId,
+          input: { projectId: scope.projectId, place: scope.place },
+        }),
   );
   const removeEnv = useAtomCommand(ozoneEnvironment.removeEnv, { reportFailure: false });
-  const removeServerEnv = useAtomCommand(ozoneEnvironment.removeServerEnv, {
+  const removeDeployEnv = useAtomCommand(ozoneEnvironment.removeDeployEnv, {
     reportFailure: false,
   });
   const { working, run } = useOzoneCommand();
@@ -71,9 +85,9 @@ export function VariablesSection(props: {
     await run(variable.name, `Could not remove ${variable.name}`, () =>
       scope.kind === "app"
         ? removeEnv({ environmentId, input: { projectId: scope.projectId, name: variable.name } })
-        : removeServerEnv({
+        : removeDeployEnv({
             environmentId,
-            input: { serverId: scope.serverId, name: variable.name },
+            input: { projectId: scope.projectId, place: scope.place, name: variable.name },
           }),
     );
     env.refresh();
@@ -165,7 +179,7 @@ function AddVariableDialog(props: {
 }) {
   const { environmentId, scope } = props;
   const setEnv = useAtomCommand(ozoneEnvironment.setEnv, { reportFailure: false });
-  const setServerEnv = useAtomCommand(ozoneEnvironment.setServerEnv, { reportFailure: false });
+  const setDeployEnv = useAtomCommand(ozoneEnvironment.setDeployEnv, { reportFailure: false });
   const { working, run } = useOzoneCommand();
   const [name, setName] = useState("");
   const [value, setValue] = useState("");
@@ -182,7 +196,10 @@ function AddVariableDialog(props: {
     const result = await run("save", `Could not save ${trimmedName}`, () =>
       scope.kind === "app"
         ? setEnv({ environmentId, input: { projectId: scope.projectId, ...variable } })
-        : setServerEnv({ environmentId, input: { serverId: scope.serverId, ...variable } }),
+        : setDeployEnv({
+            environmentId,
+            input: { projectId: scope.projectId, place: scope.place, ...variable },
+          }),
     );
     if (result._tag === "Success") props.onSaved();
   };

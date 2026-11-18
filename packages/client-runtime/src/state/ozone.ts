@@ -103,6 +103,19 @@ export function createOzoneEnvironmentAtoms<R, E>(
       label: "environment-data:ozone:remove-env",
       tag: OZONE_WS_METHODS.envRemove,
     }),
+    deployEnv: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:ozone:deploy-env",
+      tag: OZONE_WS_METHODS.deployEnvList,
+      staleTimeMs: 0,
+    }),
+    setDeployEnv: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:set-deploy-env",
+      tag: OZONE_WS_METHODS.deployEnvSet,
+    }),
+    removeDeployEnv: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:remove-deploy-env",
+      tag: OZONE_WS_METHODS.deployEnvRemove,
+    }),
     deployStatus: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:ozone:deploy-status",
       tag: OZONE_WS_METHODS.deployStatus,
@@ -176,19 +189,6 @@ export function createOzoneEnvironmentAtoms<R, E>(
     serverKey: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:ozone:server-key",
       tag: OZONE_WS_METHODS.serversKey,
-    }),
-    serverEnv: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:ozone:server-env",
-      tag: OZONE_WS_METHODS.serversEnvList,
-      staleTimeMs: 0,
-    }),
-    setServerEnv: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:ozone:set-server-env",
-      tag: OZONE_WS_METHODS.serversEnvSet,
-    }),
-    removeServerEnv: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:ozone:remove-server-env",
-      tag: OZONE_WS_METHODS.serversEnvRemove,
     }),
     notifyChannels: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:ozone:notify-channels",

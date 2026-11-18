@@ -87,5 +87,30 @@ it.effect("keeps a secret's value from every reader, and restarts only a running
     );
     // A stopped app reads the change when it starts; it is not started for it.
     assert.deepStrictEqual(yield* Ref.get(actions), ["apply", "apply"]);
+
+    // Variables for one place it deploys to are kept apart, and restart nothing here.
+    yield* Ref.set(phase, "running");
+    const server = { host: "deploy@example.com", dokploy: null, hosted: null };
+    const there = yield* env.setAt({
+      projectId,
+      place: server,
+      name: "API_KEY",
+      value: "sk-live",
+      secret: true,
+    });
+    assert.deepStrictEqual(there.variables, [{ name: "API_KEY", secret: true, value: null }]);
+    assert.deepStrictEqual(yield* env.listAt({ projectId, place: server }), there);
+    const here = { host: null, dokploy: null, hosted: null };
+    assert.deepStrictEqual((yield* env.listAt({ projectId, place: here })).variables, []);
+    assert.deepStrictEqual(yield* Ref.get(actions), ["apply", "apply"]);
+    // Changing the app's own keeps them, and removing one there keeps the app's own.
+    yield* env.set({ projectId, name: "PLAN", value: "team", secret: false });
+    assert.include(yield* fs.readFileString(file), "sk-live");
+    yield* env.removeAt({ projectId, place: server, name: "API_KEY" });
+    assert.deepStrictEqual((yield* env.listAt({ projectId, place: server })).variables, []);
+    assert.deepStrictEqual(
+      (yield* env.list(projectId)).variables.map((variable) => variable.name),
+      ["API_KEY", "PLAN"],
+    );
   }).pipe(Effect.provide(NodeServices.layer)),
 );
