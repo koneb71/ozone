@@ -92,6 +92,10 @@ export const layer = McpToolAccess.toLayer(OzoneToolkit, {
     Effect.gen(function* () {
       const caller = yield* lead;
       const design = yield* BuildDesign.BuildDesign;
+      if (input.directions === undefined) {
+        const seeds = yield* design.deal(caller.threadId, input).pipe(Effect.mapError(fromApp));
+        return { next: NEXT.designDeal(seeds) };
+      }
       yield* design.propose(caller.threadId, input.directions).pipe(Effect.mapError(fromApp));
       return { next: NEXT.designShown };
     }),

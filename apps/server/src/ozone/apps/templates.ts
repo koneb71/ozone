@@ -45,7 +45,7 @@ export const SOURCE_TEMPLATES_ROOT = "packages/ozone-templates/templates";
 /** Agent skills for apps with pages, beside the templates (see `scripts/lib/app-skills.ts`). */
 const SKILLS_FOLDER = "skills";
 /** Apps made from these have pages, so they get the design and SEO skills. */
-const PAGE_TEMPLATES: ReadonlySet<string> = new Set(["web-app", "landing-page"]);
+export const PAGE_TEMPLATES: ReadonlySet<string> = new Set(["web-app", "landing-page"]);
 /** Where an app keeps them: Codex, Cursor and others find skills here; AGENTS.md names each one. */
 const APP_SKILLS_PATH = ".agents/skills";
 /**

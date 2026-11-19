@@ -23,6 +23,7 @@ import * as Semaphore from "effect/Semaphore";
 
 import type { McpInvocationScope } from "../../mcp/McpInvocationContext.ts";
 import type { ResolvedApp } from "../apps/AppRegistry.ts";
+import { PAGE_TEMPLATES } from "../apps/templates.ts";
 import { failed as refuse } from "../errors.ts";
 import { DESIGN_FILE, NEXT, planFile, specFile, workerBrief } from "./briefs.ts";
 import * as BuildChecks from "./BuildChecks.ts";
@@ -435,7 +436,9 @@ const make = Effect.gen(function* () {
         Effect.gen(function* () {
           const { reviewPlans, chooseDesign } = lead.app.app.settings;
           // The person picks the look first; DESIGN.md is their pick, and later plans follow it.
-          if (chooseDesign && !(yield* hasDesign(lead))) {
+          // An API has no pages, so it has no design to pick even if the setting was turned on.
+          const pages = PAGE_TEMPLATES.has(lead.app.app.templateId);
+          if (chooseDesign && pages && !(yield* hasDesign(lead))) {
             const shown = (yield* design.pending(lead.threadId)) !== null;
             return report(lead, yield* load(lead), shown ? NEXT.designWaiting : NEXT.chooseDesign);
           }

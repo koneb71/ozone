@@ -159,7 +159,7 @@
     {
       "bundles": ["desktop", "web"],
       "license": "MIT",
-      "name": "taste-skill (design-taste-frontend)",
+      "name": "taste-skill (design-taste-frontend; high-end-visual-design, gpt-taste, minimalist-ui and industrial-brutalist-ui from commit b9ca2fd8)",
       "sourceUrl": "https://github.com/Leonxlnx/taste-skill",
       "noticeFile": "packages/ozone-templates/skills/design-taste-frontend/LICENSE"
     },

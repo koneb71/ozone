@@ -10,6 +10,8 @@ import { assert, expect, it } from "@effect/vitest";
 import {
   ComposerContextId,
   EnvironmentId,
+  type OzoneDesignDirectionInput,
+  type OzoneDesignSkill,
   PreviewAutomationUnavailableError,
   ThreadId,
 } from "@t3tools/contracts";
@@ -30,6 +32,7 @@ import {
   normalizeToolInput,
   normalizeToolName,
   pastedText,
+  resolveOzoneApp,
   type SampleRun,
   shellOutput,
   namedPathsLine,
@@ -41,9 +44,14 @@ import {
   t3SubagentContext,
   withBackgroundWait,
   withDevices,
+  withOzoneApp,
 } from "./run.ts";
 import { briefRoute, gradeDevice, shellInvocations } from "./device-grading.ts";
 import { taskPrompt } from "../../apps/server/src/mcp/delegatedTaskModes.ts";
+import { OZONE_APP_INSTRUCTIONS } from "../../apps/server/src/ozone/apps/appInstructions.ts";
+import { designFile, NEXT } from "../../apps/server/src/ozone/builds/briefs.ts";
+import type { DesignSeed } from "../../apps/server/src/ozone/builds/designDeal.ts";
+import { skillFits } from "../../apps/server/src/ozone/builds/designVocabulary.ts";
 
 it("grades Codex shell and subagent calls with the shared rules", () => {
   const calls = [
@@ -4698,4 +4706,388 @@ it.each([
     }),
     [],
   );
+});
+
+it("grades files on what calls wrote: Write content, Edit new_string and a patch's additions", () => {
+  const expect = { filesMust: ["perspective", "rotateY"], filesMustNot: ["\\bgsap\\b"] };
+  const run = (calls: ReadonlyArray<Omit<SampleRun["calls"][number], "step">>) => ({
+    calls: calls.map((call) => ({ step: 0, ...call })),
+    text: "",
+    stopReason: "end_turn",
+  });
+  const patch = (lines: string) => ({
+    tool: normalizeToolName("apply_patch"),
+    input: normalizeToolInput(
+      "apply_patch",
+      `*** Begin Patch\n*** Update File: src/routes/index.tsx\n@@\n${lines}\n*** End Patch`,
+    ),
+  });
+  const edit = {
+    tool: "Edit",
+    input: { file_path: "src/a.tsx", old_string: "x", new_string: "rotateY(8deg)" },
+  };
+  assert.deepEqual(
+    failed(expect, run([write("src/a.css", ".hero { perspective: 900px; }"), edit])),
+    [],
+  );
+  assert.deepEqual(
+    failed(expect, run([patch("+.card { perspective: 900px; }\n+rotateY(8deg)")])),
+    [],
+  );
+  // Context and removed lines were already in the file.
+  assert.deepEqual(failed(expect, run([patch(" perspective: 900px;\n-rotateY(0)\n+rotate: 0;")])), [
+    "filesMust /perspective/",
+    "filesMust /rotateY/",
+  ]);
+  // A refused write landed nothing, but trying to add a banned import still fails, and for good.
+  const banned = patch('+import { gsap } from "gsap";');
+  assert.deepEqual(failed(expect, run([write("src/a.css", "perspective rotateY", true), banned])), [
+    "filesMust /perspective/",
+    "filesMust /rotateY/",
+    "filesMustNot /\\bgsap\\b/",
+  ]);
+  assert.isTrue(failedEarly(expect, run([banned])));
+});
+
+const COLORS = {
+  background: "#f7f7f7",
+  surface: "#ebebeb",
+  text: "#0d2a1c",
+  muted: "#5f6b64",
+  accent: "#456f3a",
+  accentText: "#ffffff",
+};
+const seed = (skill: OzoneDesignSkill): DesignSeed => ({
+  skill,
+  palette: { id: skill, name: skill, note: "", colors: COLORS },
+  type: {
+    id: skill,
+    display: { family: "Fraunces", style: "serif" },
+    body: { family: "Figtree", style: "sans" },
+  },
+  fits: skillFits(skill, { dark: false }),
+});
+const look = (
+  skill: OzoneDesignSkill,
+  composition: OzoneDesignDirectionInput["composition"],
+  material: OzoneDesignDirectionInput["material"],
+  motion: OzoneDesignDirectionInput["motion"],
+  headline = "Sourdough out of the oven by seven",
+): OzoneDesignDirectionInput => ({
+  name: `${skill} look`,
+  idea: "One look for the bakery.",
+  colors: COLORS,
+  display: { family: "Fraunces", style: "serif" },
+  body: { family: "Figtree", style: "sans" },
+  layout: "The headline on the left, the loaves on the right.",
+  mood: "Warm",
+  skill,
+  composition,
+  material,
+  motion,
+  copy: {
+    brand: "Harbor Street Bakery",
+    headline,
+    lede: "Baked overnight in Leith.",
+    cta: "See today's bread",
+  },
+});
+
+it("grades sent directions against the deal before them", () => {
+  const seeds = [
+    "design-taste-frontend",
+    "high-end-visual-design",
+    "industrial-brutalist-ui",
+  ] as const;
+  const dealt = seeds.map(seed);
+  const good = [
+    look("design-taste-frontend", "split", "soft", "rise"),
+    look("high-end-visual-design", "cascade", "bezel", "tilt"),
+    look("industrial-brutalist-ui", "ledger", "print", "flip"),
+  ];
+  const propose = (directions?: ReadonlyArray<OzoneDesignDirectionInput>, failed = false) => ({
+    step: 0,
+    tool: "ozone_design_propose",
+    input: { kind: "place", ...(directions === undefined ? {} : { directions }) },
+    failed,
+  });
+  const expect = { design: { followsDeal: true, brand: "harbou?r" } };
+  const run = (calls: SampleRun["calls"], designDeals = [dealt]): SampleRun => ({
+    calls,
+    text: "",
+    stopReason: "end_turn",
+    designDeals,
+  });
+  assert.deepEqual(failed(expect, run([propose(), propose(good)])), []);
+  assert.deepEqual(failed(expect, run([propose(), propose([good[0]!, good[2]!, good[1]!])])), [
+    "design.skills",
+    "design.fits",
+  ]);
+  assert.deepEqual(
+    failed(
+      expect,
+      run([propose(), propose([good[0]!, { ...good[1]!, material: "soft" }, good[2]!])]),
+    ),
+    ["design.distinct"],
+  );
+  for (const headline of ["Welcome to Harbor Street Bakery", "design-taste-frontend look"])
+    assert.deepEqual(
+      failed(
+        expect,
+        run([
+          propose(),
+          propose([
+            look("design-taste-frontend", "split", "soft", "rise", headline),
+            ...good.slice(1),
+          ]),
+        ]),
+      ),
+      ["design.copy"],
+      headline,
+    );
+  assert.deepEqual(
+    failed(
+      expect,
+      run([propose(), propose(good.map((d) => ({ ...d, copy: { ...d.copy, brand: "Acme" } })))]),
+    ),
+    ["design.brand /harbou?r/i"],
+  );
+  // Directions sent with no deal before them, or refused by Ozone, follow nothing.
+  assert.deepEqual(failed(expect, run([propose(good)], [])), ["design.skills", "design.fits"]);
+  assert.deepEqual(failed(expect, run([propose(), propose(good, true)])), [
+    "design.sent",
+    "design.skills",
+    "design.fits",
+    "design.distinct",
+    "design.copy",
+    "design.brand /harbou?r/i",
+  ]);
+  // After a re-deal, directions follow the new seeds, not the old ones.
+  const redealt = (["design-taste-frontend", "minimalist-ui", "gpt-taste"] as const).map(seed);
+  assert.deepEqual(
+    failed(expect, run([propose(), propose(good), propose(), propose(good)], [dealt, redealt])),
+    ["design.skills", "design.fits"],
+  );
+});
+
+const designCases = () =>
+  NodeFS.readFileSync(new URL("./cases/design-directions.ndjson", import.meta.url), "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => decodeDeviceCase(line));
+
+it.effect("builds Ozone app cases from this checkout's template, briefs and deal", () =>
+  Effect.gen(function* () {
+    const withRead = {
+      ...template,
+      tools: [...template.tools, { name: "Read", input_schema: { type: "object" } }],
+    };
+    const options = {
+      model: "claude-haiku-5-5",
+      keepUserInstructions: false,
+      ozone: true,
+    } as const;
+    const lead = buildBase(withRead, options);
+    const worker = buildBase(withRead, { ...options, subagent: true });
+    const names = (base: typeof lead) =>
+      base.t3.map((tool) => tool.name).filter((name) => name.includes("__ozone_"));
+    assert.includeMembers(names(lead), [
+      "mcp__t3-code__ozone_design_propose",
+      "mcp__t3-code__ozone_build_plan",
+    ]);
+    // A worker gets the tools Ozone lists to subagents, not the lead's.
+    assert.sameMembers(names(worker), [
+      "mcp__t3-code__ozone_build_check",
+      "mcp__t3-code__ozone_app_runtime",
+      "mcp__t3-code__ozone_web_guidance",
+    ]);
+    assert.notInclude(
+      buildBase(withRead, { model: "claude-haiku-5-5", keepUserInstructions: false }).t3.map(
+        (t) => t.name,
+      ),
+      "mcp__t3-code__ozone_build_plan",
+    );
+    const resolved = new Map<string, McpToolUseCase>();
+    for (const testCase of designCases()) {
+      const base = testCase.setup.role === "delegated-child" ? worker : lead;
+      const ready = yield* resolveOzoneApp(testCase, base);
+      const sample = makeSample(ready, base);
+      yield* withOzoneApp(sample);
+      assert.doesNotThrow(() => buildMessages(sample), testCase.id);
+      resolved.set(testCase.id, ready);
+    }
+    const worldFile = (id: string, path: string) =>
+      (resolved.get(id)!.setup.world!.files as Record<string, string>)[path];
+    const agents = worldFile("DD-04", "AGENTS.md")!;
+    assert.include(agents, OZONE_APP_INSTRUCTIONS);
+    assert.include(agents, "# Harbor Street Bakery");
+    assert.notMatch(agents, /__OZONE_|<!-- ozone:/);
+    assert.include(
+      resolved.get("DD-04")!.setup.context,
+      `/AGENTS.md (project instructions, checked into the codebase):\n\n${agents.trim()}`,
+    );
+    const dd04 = designCases().find((c) => c.id === "DD-04")!;
+    assert.equal(
+      worldFile("DD-04", "DESIGN.md"),
+      designFile(dd04.setup.ozoneApp!.design!, { skillFile: true }),
+    );
+    assert.isString(worldFile("DD-04", ".agents/skills/gpt-taste/SKILL.md"));
+    // The worker gets Ozone's brief around the lead's, with the template's task checks.
+    const brief = resolved.get("DD-04")!.prompt;
+    assert.match(brief, /^Ozone task 1 of 1: Build the home page's first screen\n\n/);
+    assert.include(brief, dd04.prompt);
+    assert.include(brief, "(typecheck, lint, test)");
+    // A file the case gives wins over the template's.
+    const dc03 = designCases().find((c) => c.id === "DC-03")!;
+    assert.equal(
+      worldFile("DC-03", "src/routes/pricing.tsx"),
+      (dc03.setup.world!.files as Record<string, string>)["src/routes/pricing.tsx"],
+    );
+  }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+);
+
+it.effect("answers Ozone app tools from this checkout's deal, NEXT and plan rules", () =>
+  Effect.gen(function* () {
+    const base = buildBase(template, {
+      model: "claude-haiku-5-5",
+      keepUserInstructions: false,
+      ozone: true,
+    });
+    const config = {
+      apiKey: "",
+      model: "claude-haiku-5-5",
+      effort: "high",
+      maxSteps: 6,
+      shellModel: "claude-haiku-5-5",
+    } as const;
+    const ready = (id: string) =>
+      Effect.gen(function* () {
+        const sample = makeSample(
+          yield* resolveOzoneApp(
+            designCases().find((c) => c.id === id)!,
+            base,
+          ),
+          base,
+        );
+        yield* withOzoneApp(sample);
+        sample.tools.push(...base.t3);
+        return sample;
+      });
+    let n = 0;
+    const call = (sample: ReturnType<typeof makeSample>, tool: string, input: unknown) =>
+      answerToolCall(sample, config, {
+        type: "tool_use",
+        id: `toolu_${n++}`,
+        name: `mcp__t3-code__${tool}`,
+        input,
+      }).pipe(
+        Effect.map((result) => ({
+          error: result.is_error === true,
+          text: String(result.content),
+        })),
+      );
+    const next = (result: { readonly text: string }) => JSON.parse(result.text).next as string;
+    const directions = [
+      look("design-taste-frontend", "split", "soft", "rise"),
+      look("high-end-visual-design", "cascade", "bezel", "rise"),
+    ];
+    const plan = {
+      spec: "A bakery site.",
+      acceptance: ["The page lists today's breads."],
+      tasks: [{ id: "home-page", title: "Build the home page", brief: "Build it." }],
+    };
+
+    const bakery = yield* ready("DD-01");
+    // Arguments that do not decode fail as the MCP server fails them: here, a shared motion.
+    const shared = yield* call(bakery, "ozone_design_propose", { kind: "place", directions });
+    assert.isTrue(shared.error);
+    assert.match(shared.text, /^MCP error -32602: /);
+    assert.equal(next(yield* call(bakery, "ozone_build_plan", plan)), NEXT.chooseDesign);
+    const dealt = yield* call(bakery, "ozone_design_propose", { kind: "place", trade: "bakery" });
+    assert.lengthOf(bakery.ozone!.deals, 1);
+    assert.equal(next(dealt), NEXT.designDeal(bakery.ozone!.deals[0]!));
+    // Every sample of a case gets the same deal.
+    const again = yield* ready("DD-01");
+    yield* call(again, "ozone_design_propose", { kind: "place", trade: "bakery" });
+    assert.deepEqual(again.ozone!.deals, bakery.ozone!.deals);
+    const sent = [directions[0]!, { ...directions[1]!, motion: "tilt" as const }];
+    assert.equal(
+      next(yield* call(bakery, "ozone_design_propose", { kind: "place", directions: sent })),
+      NEXT.designShown,
+    );
+    assert.equal(next(yield* call(bakery, "ozone_build_plan", plan)), NEXT.designWaiting);
+
+    // With Pick the design off, the plan is saved and advance starts its first task.
+    const tracker = yield* ready("DC-01");
+    assert.equal(next(yield* call(tracker, "ozone_build_plan", plan)), NEXT.planned);
+    const advanced = JSON.parse((yield* call(tracker, "ozone_build_advance", {})).text);
+    assert.equal(advanced.tasks[0].status, "running");
+    assert.equal(advanced.next, NEXT.working({ ...advanced.tasks[0], id: "home-page" }));
+    assert.isTrue((yield* call(tracker, "ozone_build_plan", { ...plan, tasks: [] })).error);
+
+    // Prior calls whose result is "default" got Ozone's results, in order.
+    const redeal = yield* ready("DD-02");
+    assert.deepEqual(
+      [...redeal.priorResults.values()].map((text) => JSON.parse(text).next.split("\n")[0]),
+      [NEXT.chooseDesign, NEXT.designDeal([]).split("\n")[0], NEXT.designShown],
+    );
+    assert.deepEqual(redeal.ozone!.deals, []);
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer)),
+  ),
+);
+
+const designWrite = (content: string) => ({
+  tool: "Write",
+  input: { file_path: "src/x.tsx", content },
+});
+it.each([
+  [
+    "DD-04",
+    `className="perspective-[1000px] hover:rotate-x-6 motion-reduce:transform-none"`,
+    false,
+  ],
+  [
+    "DD-04",
+    ".card { transform: perspective(1000px) rotateY(8deg); } @media (prefers-reduced-motion: reduce) {}",
+    false,
+  ],
+  [
+    "DD-04",
+    "// No GSAP or Framer Motion, as DESIGN.md says.\nperspective rotate motion-reduce:",
+    false,
+  ],
+  ["DD-04", 'import { gsap } from "gsap";\nperspective rotate motion-reduce:', true],
+  ["DD-04", 'import { motion } from "motion/react";\nperspective rotate motion-reduce:', true],
+  ["DD-04", 'const { gsap } = await import("gsap");\nperspective rotate motion-reduce:', true],
+  [
+    "DD-04",
+    '"dependencies": {\n  "motion": "^12.23.12"\n}\nperspective rotate motion-reduce:',
+    true,
+  ],
+  ["DD-04", 'const look = { "motion": "tilt" };\nperspective rotate motion-reduce:', false],
+  ["DD-04", "perspective: 1000px; transform: rotateY(8deg);", true],
+  ["DC-03", '<img src="https://picsum.photos/800/600" alt="" />', true],
+  ["DC-03", 'import { motion } from "framer-motion";', true],
+  ["DC-03", '<Card className="ring-2 ring-primary">', false],
+] as const)("%s file checks on %j fail=%s", (id, content, fails) => {
+  const { expect } = designCases().find((c) => c.id === id)!;
+  const files = { filesMust: expect.filesMust, filesMustNot: expect.filesMustNot };
+  const run = { calls: [{ step: 0, ...designWrite(content) }], text: "", stopReason: "end_turn" };
+  assert.equal(failed(files, run).length > 0, fails);
+});
+
+it.each([
+  ["DD-04", "./dev npm install gsap", true],
+  ["DD-04", "./dev npm i -D motion@latest", true],
+  ["DD-04", "./dev npm install @fontsource-variable/fraunces", false],
+  ["DD-04", "./dev npm install && ./dev npm run lint -- src/motion.css", false],
+  ["DC-03", "cat .agents/skills/gpt-taste/SKILL.md", true],
+  ["DC-03", "./dev pnpm add framer-motion", true],
+  ["DC-03", "cat .agents/skills/design-taste-frontend/SKILL.md", false],
+] as const)("%s shell checks on %j fail=%s", (id, command, fails) => {
+  const { shellMustNot } = designCases().find((c) => c.id === id)!.expect;
+  const run = { calls: [{ step: 0, ...bash(command) }], text: "", stopReason: "end_turn" };
+  assert.equal(failed({ shellMustNot }, run).length > 0, fails);
 });

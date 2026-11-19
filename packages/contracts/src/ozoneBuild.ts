@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import {
+  ForwardCompatibleOptional,
   IsoDateTime,
   NodeId,
   NonNegativeInt,
@@ -219,18 +220,184 @@ const HexColor = Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/)).anno
 
 export const OzoneDesignFace = Schema.Struct({
   family: TrimmedNonEmptyString.check(Schema.isMaxLength(60)).annotate({
-    description: "The face's name as @fontsource publishes it, such as `Work Sans`.",
+    description:
+      "The face's name as @fontsource publishes it, such as `Work Sans`. Keep the face Ozone dealt: the preview shows any other in a stand-in.",
   }),
   style: Schema.Literals(["serif", "sans", "mono", "display", "script"]),
 });
 export type OzoneDesignFace = typeof OzoneDesignFace.Type;
 
-/** One complete look the lead offers before it plans. */
-export const OzoneDesignDirection = Schema.Struct({
-  name: TrimmedNonEmptyString.check(Schema.isMaxLength(40)),
-  idea: TrimmedNonEmptyString.check(Schema.isMaxLength(200)).annotate({
-    description: "The direction in one sentence.",
-  }),
+/** The taste skills a direction can come from, each vendored in an app's `.agents/skills`. */
+export const OZONE_DESIGN_SKILLS = [
+  "design-taste-frontend",
+  "high-end-visual-design",
+  "gpt-taste",
+  "minimalist-ui",
+  "industrial-brutalist-ui",
+] as const;
+export const OzoneDesignSkill = Schema.Literals(OZONE_DESIGN_SKILLS);
+export type OzoneDesignSkill = typeof OzoneDesignSkill.Type;
+
+/** How the first screen is arranged. Ozone draws each one in the preview. */
+export const OZONE_DESIGN_COMPOSITIONS = [
+  "monument",
+  "split",
+  "centred",
+  "bento",
+  "cascade",
+  "ledger",
+  "manuscript",
+] as const;
+export const OzoneDesignComposition = Schema.Literals(OZONE_DESIGN_COMPOSITIONS).annotate({
+  description:
+    "monument: the headline is the picture. split: words on one side, the product on the other. centred: a centred headline over a window cut off by the fold. bento: a grid of unequal tiles. cascade: overlapping cards stepping back in depth. ledger: a ruled blueprint grid. manuscript: a left-weighted page like a document.",
+});
+export type OzoneDesignComposition = typeof OzoneDesignComposition.Type;
+
+export const OZONE_DESIGN_MATERIALS = [
+  "paper",
+  "glass",
+  "bezel",
+  "soft",
+  "print",
+  "terminal",
+] as const;
+export const OzoneDesignMaterial = Schema.Literals(OZONE_DESIGN_MATERIALS).annotate({
+  description:
+    "The surfaces. paper: flat with hairlines. glass: translucent panels over a soft colour field. bezel: a shell around an inset core. soft: large radii and soft shadows. print: hard edges and solid rules. terminal: mono details on a dark ground.",
+});
+export type OzoneDesignMaterial = typeof OzoneDesignMaterial.Type;
+
+export const OZONE_DESIGN_MOTIONS = [
+  "lift",
+  "tilt",
+  "rise",
+  "unfold",
+  "stack",
+  "depth",
+  "flip",
+] as const;
+export const OzoneDesignMotion = Schema.Literals(OZONE_DESIGN_MOTIONS).annotate({
+  description:
+    "The 3D motion the app is built with. lift: cards rise toward the viewer. tilt: the hero and cards turn toward the pointer. rise: headline lines turn up into place. unfold: the hero stands up from flat. stack: cards fly in from depth. depth: layers at different depths drift apart on scroll. flip: cells and cards turn over.",
+});
+export type OzoneDesignMotion = typeof OzoneDesignMotion.Type;
+
+/** The kinds of page the taste library deals for. */
+export const OZONE_DESIGN_KINDS = [
+  "tech",
+  "software",
+  "gaming",
+  "product",
+  "service",
+  "place",
+] as const;
+export const OzoneDesignKind = Schema.Literals(OZONE_DESIGN_KINDS).annotate({
+  description:
+    "tech: hardware and technical products. software: apps, SaaS, AI, developer tools, fintech. gaming: games. product: a consumer product or brand. service: a firm, agency, clinic or studio. place: somewhere people visit, such as a cafe, shop or hotel.",
+});
+export type OzoneDesignKind = typeof OzoneDesignKind.Type;
+
+export const OZONE_DESIGN_TRADES = [
+  "cafe",
+  "bakery",
+  "restaurant",
+  "hotel",
+  "wellness",
+  "studio",
+  "workshop",
+  "wedding",
+  "retail",
+  "law",
+  "clinic",
+  "agency",
+  "saas",
+  "devtool",
+  "fintech",
+  "ai",
+  "game",
+  "hardware",
+  "consumer-product",
+] as const;
+export const OzoneDesignTrade = Schema.Literals(OZONE_DESIGN_TRADES);
+export type OzoneDesignTrade = typeof OzoneDesignTrade.Type;
+
+/** The faces the taste library pairs, which every client bundles for the previews. */
+export const OZONE_DESIGN_FACES = [
+  "Albert Sans",
+  "Anybody",
+  "Archivo",
+  "Besley",
+  "Bricolage Grotesque",
+  "Chivo",
+  "EB Garamond",
+  "Epilogue",
+  "Familjen Grotesk",
+  "Figtree",
+  "Fraunces",
+  "Funnel Display",
+  "Funnel Sans",
+  "Gabarito",
+  "Geist",
+  "Hanken Grotesk",
+  "Host Grotesk",
+  "IBM Plex Sans",
+  "Instrument Sans",
+  "Instrument Serif",
+  "Jost",
+  "Libre Franklin",
+  "Literata",
+  "Lora",
+  "Manrope",
+  "Mona Sans",
+  "Newsreader",
+  "Nunito",
+  "Nunito Sans",
+  "Onest",
+  "Outfit",
+  "Red Hat Display",
+  "Red Hat Text",
+  "Reddit Sans",
+  "Rethink Sans",
+  "SUSE",
+  "Schibsted Grotesk",
+  "Sora",
+  "Source Serif 4",
+  "Urbanist",
+  "Vollkorn",
+  "Work Sans",
+  "Zilla Slab",
+] as const;
+export type OzoneDesignFaceFamily = (typeof OZONE_DESIGN_FACES)[number];
+
+// The limits sit on the encoded side so they reach the tool's JSON Schema: a lead that cannot
+// see a limit writes past it, and the whole proposal fails.
+const notBlank = Schema.makeFilter((value: string) => value.trim().length > 0, {
+  expected: "a non-blank string",
+  toJsonSchema: () => [{ minLength: 1 }, true],
+});
+const words = (max: number, description?: string) =>
+  Schema.String.check(notBlank, Schema.isMaxLength(max)).annotate({
+    description: `${description === undefined ? "" : `${description} `}At most ${max} characters.`,
+  });
+
+/** The words the first screen shows, as the app would ship them. */
+export const OzoneDesignCopy = Schema.Struct({
+  brand: words(24),
+  headline: words(70),
+  lede: words(140, "The line under the headline."),
+  cta: words(24, "The main button."),
+  facts: Schema.optionalKey(
+    Schema.Array(words(28))
+      .annotate({ description: "Up to three short proof points, such as `Open daily from 7`." })
+      .check(Schema.isMaxLength(3)),
+  ),
+});
+export type OzoneDesignCopy = typeof OzoneDesignCopy.Type;
+
+const directionFields = {
+  name: words(40),
+  idea: words(200, "The direction in one sentence."),
   colors: Schema.Struct({
     background: HexColor,
     surface: HexColor.annotate({ description: "Cards, inputs and raised areas." }),
@@ -241,17 +408,65 @@ export const OzoneDesignDirection = Schema.Struct({
   }),
   display: OzoneDesignFace.annotate({ description: "Headings." }),
   body: OzoneDesignFace,
-  layout: TrimmedNonEmptyString.check(Schema.isMaxLength(300)).annotate({
-    description: "What the first screen shows and how it is arranged.",
-  }),
-  mood: TrimmedNonEmptyString.check(Schema.isMaxLength(120)),
+  layout: words(300, "What the first screen shows and how it is arranged."),
+  mood: words(120),
+};
+
+/**
+ * One complete look the lead offers before it plans, as Ozone keeps and shows it. A proposal from
+ * 1.9.0 has none of the new keys, and a newer server may send a value this build cannot read:
+ * either is left out instead of failing the whole build snapshot.
+ */
+export const OzoneDesignDirection = Schema.Struct({
+  ...directionFields,
+  skill: ForwardCompatibleOptional(OzoneDesignSkill),
+  composition: ForwardCompatibleOptional(OzoneDesignComposition),
+  material: ForwardCompatibleOptional(OzoneDesignMaterial),
+  motion: ForwardCompatibleOptional(OzoneDesignMotion),
+  copy: ForwardCompatibleOptional(OzoneDesignCopy),
 });
 export type OzoneDesignDirection = typeof OzoneDesignDirection.Type;
 
+/** One direction as the lead sends it. */
+export const OzoneDesignDirectionInput = Schema.Struct({
+  ...directionFields,
+  skill: OzoneDesignSkill.annotate({
+    description: "The taste skill Ozone dealt for this direction.",
+  }),
+  composition: OzoneDesignComposition,
+  material: OzoneDesignMaterial,
+  motion: OzoneDesignMotion,
+  copy: OzoneDesignCopy,
+});
+export type OzoneDesignDirectionInput = typeof OzoneDesignDirectionInput.Type;
+
+const allDiffer = (
+  directions: ReadonlyArray<OzoneDesignDirectionInput>,
+  key: "skill" | "composition" | "motion",
+) => new Set(directions.map((direction) => direction[key])).size === directions.length;
+
 export const OzoneDesignProposeInput = Schema.Struct({
-  directions: Schema.Array(OzoneDesignDirection).check(
-    Schema.isMinLength(2),
-    Schema.isMaxLength(4),
+  kind: OzoneDesignKind,
+  trade: Schema.optionalKey(OzoneDesignTrade).annotate({
+    description: "The trade, when one fits. Ozone deals the palettes made for it first.",
+  }),
+  directions: Schema.optionalKey(
+    Schema.Array(OzoneDesignDirectionInput)
+      .annotate({
+        description:
+          "Leave out to have Ozone deal one seed per direction. Then send one direction per seed.",
+      })
+      .check(
+        Schema.isMinLength(2),
+        Schema.isMaxLength(4),
+        Schema.makeFilter((directions: ReadonlyArray<OzoneDesignDirectionInput>) =>
+          allDiffer(directions, "skill") &&
+          allDiffer(directions, "composition") &&
+          allDiffer(directions, "motion")
+            ? undefined
+            : "Each direction needs its own skill, composition and motion.",
+        ),
+      ),
   ),
 });
 export type OzoneDesignProposeInput = typeof OzoneDesignProposeInput.Type;

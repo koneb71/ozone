@@ -39,6 +39,23 @@ export const appSkills: ReadonlyArray<AppSkill> = [
     ],
     extras: [{ from: "LICENSE", to: "LICENSE" }],
   },
+  // The four looks Pick the design deals besides design-taste-frontend. Upstream removed them after
+  // this commit, the last that has them. `agents/openai.yaml` keeps Codex from using one unasked.
+  ...(
+    [
+      ["high-end-visual-design", "skills/soft-skill"],
+      ["gpt-taste", "skills/gpt-tasteskill"],
+      ["minimalist-ui", "skills/minimalist-skill"],
+      ["industrial-brutalist-ui", "skills/brutalist-skill"],
+    ] as const
+  ).map(([id, root]) => ({
+    id,
+    repository: "https://github.com/Leonxlnx/taste-skill.git",
+    commit: "b9ca2fd8047f4c72d7da90ebc1c1203e57c72cd2",
+    root,
+    include: ["SKILL.md", "agents/openai.yaml"],
+    extras: [{ from: "LICENSE", to: "LICENSE" }],
+  })),
   {
     id: "frontend-design",
     repository: "https://github.com/anthropics/skills.git",

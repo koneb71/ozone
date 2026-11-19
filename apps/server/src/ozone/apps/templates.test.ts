@@ -55,14 +55,40 @@ it.effect.each(TEMPLATES.map((template) => template.id))(
         }
         assert.isTrue(has(".agents/skills/design-taste-frontend/LICENSE"));
         assert.isTrue(has(".agents/skills/frontend-design/LICENSE.txt"));
+        // Pick the design deals these, and AGENTS.md keeps them for when DESIGN.md names one.
+        for (const skill of [
+          "high-end-visual-design",
+          "gpt-taste",
+          "minimalist-ui",
+          "industrial-brutalist-ui",
+        ]) {
+          for (const file of ["SKILL.md", "agents/openai.yaml", "LICENSE"]) {
+            assert.isTrue(has(`.agents/skills/${skill}/${file}`), `${id}: ${skill}/${file}`);
+          }
+          assert.include(agents, `.agents/skills/${skill}/SKILL.md`);
+        }
+        // Agents list a skill by its frontmatter name, and DESIGN.md names it by its folder.
+        for (const entry of skills) {
+          const folder = /^\.agents\/skills\/([^/]+)\/SKILL\.md$/.exec(entry.path)?.[1];
+          if (folder === undefined) continue;
+          const frontmatter = /^---\n([\s\S]*?)\n---/.exec(new TextDecoder().decode(entry.bytes));
+          assert.strictEqual(
+            /^name: *(.+)$/m.exec(frontmatter?.[1] ?? "")?.[1],
+            folder,
+            entry.path,
+          );
+        }
         // The app's own lint gate must not read them, nor Tailwind scan them.
         assert.include(yield* read("biome.json"), '"!.agents"');
         assert.include(yield* read("src/styles/app.css"), '@source not "../../.agents"');
       } else {
         assert.deepStrictEqual(skills, []);
       }
-      for (const named of agents.matchAll(/\.agents\/skills\/[\w./-]+\.(?:md|mjs)/g)) {
-        assert.isTrue(has(named[0]), `${id} AGENTS.md names ${named[0]}`);
+      for (const [named] of agents.matchAll(/\.agents\/skills\/[\w./-]*[\w-]/g)) {
+        assert.isTrue(
+          has(named) || files.some((entry) => entry.path.startsWith(`${named}/`)),
+          `${id} AGENTS.md names ${named}`,
+        );
       }
       assert.isTrue(has("package-lock.json"));
       assert.isTrue(has("dev"));

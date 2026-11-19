@@ -1,6 +1,7 @@
 /**
- * The tools Ozone adds to the `t3-code` MCP server. Descriptions and schemas are model-facing,
- * with no eval cases yet: after a change, run a real build and read what agents do.
+ * The tools Ozone adds to the `t3-code` MCP server. Descriptions and schemas are model-facing:
+ * `ozone_design_propose` has eval cases in `evals/mcp-tool-use/cases/design-directions.ndjson`.
+ * After any other change, run a real build and read what agents do.
  */
 import {
   OrchestratorMcpFailure,
@@ -67,7 +68,7 @@ const BuildPlanTool = Tool.make("ozone_build_plan", {
 const DesignProposeTool = Tool.make("ozone_design_propose", {
   ...shared,
   description:
-    "Show the user design directions to pick from. Ozone draws each as a preview of its first screen in its colours and faces, writes the one they pick to DESIGN.md, and wakes you. Make the directions differ in colour, type and layout. Calling it again replaces the directions.",
+    "Show the user design directions to pick from, in two calls. First call it with the app's `kind` (and `trade` if one fits) and no directions: Ozone deals one seed per direction, each from a different design skill (design-taste-frontend, high-end-visual-design, gpt-taste, minimalist-ui, industrial-brutalist-ui), with its colours, faces and the compositions, materials and motions that fit it. Then call it again with one direction per seed. Ozone draws each as a large animated first screen in its own colours and faces, writes the one the user picks to DESIGN.md with its motion, and wakes you. Calling it again with directions replaces them.",
   parameters: OzoneDesignProposeInput,
   success: Schema.Struct({ next: Schema.String }),
   dependencies: [...leadDependencies, BuildDesign.BuildDesign],

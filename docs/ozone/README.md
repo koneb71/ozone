@@ -34,8 +34,10 @@ starts its lead thread.
   templates get `packages/ozone-templates/skills` copied to `.agents/skills` when the app is
   created (`templateTree` in `apps/server/src/ozone/apps/templates.ts`). No one skills folder
   reaches every provider, so the template's `AGENTS.md` names each `SKILL.md`, and every agent
-  reads it from there. Two are copied from upstream (`scripts/lib/app-skills.ts` pins the commit
-  and the files); `seo` is Ozone's own.
+  reads it from there. Six are copied from upstream (`scripts/lib/app-skills.ts` pins the commits
+  and the files); `seo` is Ozone's own. Four of them, the looks Pick the design deals besides
+  design-taste-frontend, are pinned to the last upstream commit that has them, and the template
+  tells agents to use one only when `DESIGN.md` names it.
 - **Web guidance is a server tool.** Chrome's Modern Web Guidance has an 11 MB index, and its own
   command fetches itself from npm on each run and sends the queries to Google. Ozone loads only
   its search module and offers it as `ozone_web_guidance`, which works offline, for every provider
@@ -46,6 +48,18 @@ starts its lead thread.
   provider and the client can draw them. `BuildDesign` keeps them until the person answers, then
   writes the file itself, because a lead in plan mode cannot. The file, not a setting, records the pick, so it
   holds for later requests and the person can edit or delete it.
+- **Ozone deals the looks; the lead fills them in.** Asked to choose freely, models keep landing
+  on the same few safe looks. So the first `ozone_design_propose` call returns a deal from
+  `builds/designDeal.ts`: a different taste skill per direction, with a palette and a type pairing
+  from the taste library in Ozone's own copy of the skills, so it works before the app's container
+  is up and for apps made before the skills shipped. The lead picks composition, material and
+  motion from closed sets in `packages/contracts/src/ozoneBuild.ts` and writes the copy. Closed
+  sets are what let the client draw every direction as a real first screen, in faces it bundles,
+  with motion it controls (played once, never looping in Ozone's own UI).
+- **`DESIGN.md`'s motion beats the skills' motion rules.** design-taste-frontend forbids tilt,
+  flip, parallax and scroll reveals and keeps effects for tech pages. The person picked the motion,
+  so `designFile` overrides those rules for the motion it names and says so in the file, and the
+  template's Design section repeats it, because a worker reads the skill and runs its checker.
 - **An app is a plain Compose project.** Nothing about it depends on the machine that made it, so
   hosting an app later means another environment that runs Docker, not a second runtime.
 - **A deploy is a second Compose project.** `compose.prod.yaml` runs the production image as
@@ -186,7 +200,8 @@ Upstream lands a few hundred commits a day, so merge often: the conflicts grow w
   The taste skill's scripts load three of its asset files; a sync that drops one breaks them.
 - Text that agents read is code: the instructions in `apps/server/src/ozone/apps/appInstructions.ts`
   and `chat/chatPersona.ts`, the briefs in `builds/briefs.ts`, the tool descriptions in
-  `mcp/tools.ts` and the template's `AGENTS.md`. An agent follows it literally. It has no eval
-  cases yet, so after a change run a real build and read what the agents did.
+  `mcp/tools.ts` and the template's `AGENTS.md`. An agent follows it literally. Only design
+  directions have eval cases (`evals/mcp-tool-use/cases/design-directions.ndjson`), so after any
+  other change run a real build and read what the agents did.
 
 Further reading: [orchestrator](./orchestrator.md), [data safety](./data-safety.md).

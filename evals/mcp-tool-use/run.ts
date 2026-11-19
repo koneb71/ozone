@@ -17,9 +17,16 @@ import {
   ComposerContextRecord,
   DeviceOperationError,
   DeviceSummary,
+  OrchestratorMcpFailure,
   OrchestratorMcpTaskRole,
+  OzoneAppManifest,
+  OzoneBuildPlanInput,
+  type OzoneBuild,
+  OzoneDesignDirection,
+  OzoneDesignProposeInput,
   PreviewAutomationError,
   PreviewAutomationUnavailableError,
+  ProjectId,
   ProviderInstanceId,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
@@ -30,6 +37,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
@@ -74,7 +82,34 @@ import {
 } from "../../apps/server/src/orchestration-v2/Adapters/ClaudeAdapterV2.ts";
 import { proxyConfig } from "../shared/proxy.ts";
 import { changeRequestsCreatedBy } from "../../apps/server/src/orchestration-v2/PullRequestSyncReactor.ts";
+import { OZONE_APP_INSTRUCTIONS } from "../../apps/server/src/ozone/apps/appInstructions.ts";
+import { safeAppName } from "../../apps/server/src/ozone/apps/AppScaffolder.ts";
+import {
+  PAGE_TEMPLATES,
+  type TemplateFile,
+  templateFiles,
+} from "../../apps/server/src/ozone/apps/templates.ts";
+import * as BuildModel from "../../apps/server/src/ozone/builds/BuildModel.ts";
+import {
+  DESIGN_FILE,
+  designFile,
+  NEXT,
+  NO_PAGES,
+  workerBrief,
+} from "../../apps/server/src/ozone/builds/briefs.ts";
+import {
+  APP_SKILLS_PATH,
+  type DealIds,
+  deal,
+  dealtIds,
+  decodeLibrary,
+  type DesignSeed,
+  LIBRARY_FILES,
+} from "../../apps/server/src/ozone/builds/designDeal.ts";
+import * as WebGuidance from "../../apps/server/src/ozone/guidance/WebGuidance.ts";
+import { OzoneToolkit } from "../../apps/server/src/ozone/mcp/tools.ts";
 import { type BackgroundWait, makeBackgroundWait } from "./backgroundWait.ts";
+import { DesignExpect, gradeDesign, gradeFiles } from "./design-grading.ts";
 import { DeviceExpect, gradeDevice } from "./device-grading.ts";
 import { FileLinksExpect, gradeFileLinks } from "./file-link-grading.ts";
 import {
@@ -98,6 +133,7 @@ import {
 const MODELS = {
   "claude-sonnet-5-5": "Sonnet 5.5",
   "claude-opus-5-5": "Opus 5.5",
+  "claude-haiku-5-5": "Haiku 5.5",
   "gpt-6.1-sol": "GPT-6.1 Sol",
   "gpt-6-astra": "GPT-6 Astra",
 } as const;
@@ -164,6 +200,8 @@ export type SampleRun = {
   readonly cwd?: string;
   /** The `agent-device` commands Ozone's device_open returned, prior turns included. */
   readonly launchers?: ReadonlyArray<string>;
+  /** In an Ozone app, the seeds each ozone_design_propose without directions dealt, in order. */
+  readonly designDeals?: ReadonlyArray<ReadonlyArray<DesignSeed>>;
 };
 
 const Rest = [Schema.Record(Schema.String, Schema.Unknown)] as const;
@@ -172,8 +210,8 @@ const PriorToolCall = Schema.Struct({
   tool: Schema.String,
   input: Schema.Unknown,
   /**
-   * For a device tool or t3_background_wait, `"default"` runs the call on the world's devices or
-   * background tasks for Ozone's result.
+   * For a device tool, t3_background_wait or an Ozone app tool, `"default"` runs the call on the
+   * world's devices, background tasks or app for Ozone's result.
    */
   result: Schema.Unknown,
   /** Repository-relative file whose current contents supply this tool result. */
@@ -217,6 +255,13 @@ const McpToolUseExpect = Schema.Struct({
   shellMustNot: Schema.optional(Schema.Array(Schema.String)),
   /** Regexes that some shell command must match, each. */
   shellMust: Schema.optional(Schema.Array(Schema.String)),
+  /**
+   * Regexes that some text a successful call wrote into a file must match, each: a Write's
+   * content, an Edit's new_string, or the lines a Codex apply_patch adds.
+   */
+  filesMust: Schema.optional(Schema.Array(Schema.String)),
+  /** Regexes that no text the agent tried to write into a file may match. */
+  filesMustNot: Schema.optional(Schema.Array(Schema.String)),
   /** Case-sensitive regexes on the agent's visible text. */
   textMust: Schema.optional(Schema.Array(Schema.String)),
   textMustNot: Schema.optional(Schema.Array(Schema.String)),
@@ -235,7 +280,38 @@ const McpToolUseExpect = Schema.Struct({
   secret: Schema.optional(SecretExpect),
   /** File pills in the final answer resolve against the thread cwd to `world.files` entries. */
   fileLinks: Schema.optional(FileLinksExpect),
+  /** Pick the design checks. See `DesignExpect` in design-grading.ts. */
+  design: Schema.optional(DesignExpect),
 });
+
+/**
+ * The thread belongs to an Ozone app. The model gets Ozone's app tools, answered from this
+ * checkout's text and design deal, and the template's AGENTS.md with Ozone's instructions as its
+ * project instructions. `world.files` gets the template's instruction files, every skill's
+ * SKILL.md, `files` and DESIGN.md; a file the case's own world names wins.
+ */
+const OzoneAppSetup = Schema.Struct({
+  template: Schema.Literals(["web-app", "landing-page", "api-service"]),
+  /** The app's name, as the template's AGENTS.md shows it. Defaults to `Acme`. */
+  name: Schema.optional(Schema.String),
+  /** Pick the design is on: until DESIGN.md exists, the lead's ozone_build_plan asks for directions. */
+  chooseDesign: Schema.optional(Schema.Boolean),
+  /** The look the user picked earlier, which Ozone wrote to DESIGN.md. */
+  design: Schema.optional(OzoneDesignDirection),
+  /** More of the app's files, as the template has them, by path. */
+  files: Schema.optional(Schema.Array(Schema.String)),
+  /**
+   * The thread is a build worker: `prompt` is the task's brief as the lead wrote it, and the model
+   * gets the whole brief Ozone sends a worker, from a one-task plan.
+   */
+  worker: Schema.optional(
+    Schema.Struct({
+      title: Schema.String,
+      acceptance: Schema.optional(Schema.Array(Schema.String)),
+    }),
+  ),
+});
+type OzoneAppSetup = typeof OzoneAppSetup.Type;
 
 /**
  * The agent's machine, as the shell simulator and the gitStatus reminder see it. Only these keys
@@ -337,6 +413,8 @@ export const McpToolUseCase = Schema.Struct({
     sideChat: Schema.optional(
       Schema.Struct({ parentThreadId: Schema.String, digest: Schema.Array(Schema.String) }),
     ),
+    /** The thread belongs to an Ozone app. See `OzoneAppSetup`. */
+    ozoneApp: Schema.optional(OzoneAppSetup),
   }),
   /** Empty to resume a top-level thread without side-chat context after its last tool result. */
   prompt: Schema.String,
@@ -461,20 +539,28 @@ const t3SourceTools: ReadonlyArray<Tool.Any> = [
   HtmlToolkit,
   MessageToolkit,
 ].flatMap((toolkit): ReadonlyArray<Tool.Any> => Object.values(toolkit.tools));
+// The same server lists these in threads of an Ozone app.
+const ozoneSourceTools: ReadonlyArray<Tool.Any> = Object.values(OzoneToolkit.tools);
+const argsCodec = (tool: Tool.Any) =>
+  Schema.toCodecJson(tool.parametersSchema as Schema.Codec<unknown, unknown>);
 // McpHttpServer decodes arguments with each tool's JSON codec, which drops undeclared keys.
 const t3InputDecoders = new Map(
-  t3SourceTools.map((tool) => [
+  [...t3SourceTools, ...ozoneSourceTools].map((tool) => [
     tool.name,
-    Schema.decodeUnknownOption(
-      Schema.toCodecJson(tool.parametersSchema as Schema.Codec<unknown, unknown>),
-    ),
+    Schema.decodeUnknownOption(argsCodec(tool)),
   ]),
 );
-const t3Tools: ReadonlyArray<ApiTool> = t3SourceTools.map((tool) => ({
+// Arguments that do not decode never reach the handler: the call fails with the schema's message.
+const ozoneArgs = new Map(
+  ozoneSourceTools.map((tool) => [tool.name, Schema.decodeUnknownResult(argsCodec(tool))]),
+);
+const apiTool = (tool: Tool.Any): ApiTool => ({
   name: `${T3_PREFIX}${tool.name}`,
   description: Tool.getDescription(tool) ?? "",
   input_schema: advertisedJsonSchema(tool),
-}));
+});
+const t3Tools: ReadonlyArray<ApiTool> = t3SourceTools.map(apiTool);
+const ozoneTools: ReadonlyArray<ApiTool> = ozoneSourceTools.map(apiTool);
 // Ozone gates these on the `preview` capability, which agent browser access decides.
 const PREVIEW_TOOLS = new Set(
   [PreviewToolkit, PreviewControlsToolkit].flatMap((toolkit) =>
@@ -483,17 +569,18 @@ const PREVIEW_TOOLS = new Set(
 );
 const decodePreviewError = Schema.decodeUnknownOption(PreviewAutomationError);
 const previewFailure = (mock: unknown) => Option.getOrUndefined(decodePreviewError(mock));
-const enabledWhen = (predicate: () => boolean) =>
+const enabledWhen = (...predicates: ReadonlyArray<() => boolean>) =>
   new Set(
-    t3SourceTools
-      .filter(
-        (tool) => Context.getOrUndefined(tool.annotations, McpSchema.EnabledWhen) === predicate,
-      )
+    [...t3SourceTools, ...ozoneSourceTools]
+      .filter((tool) => {
+        const enabled = Context.getOrUndefined(tool.annotations, McpSchema.EnabledWhen);
+        return predicates.some((predicate) => predicate === enabled);
+      })
       .map((tool) => `${T3_PREFIX}${tool.name}`),
   );
 // Claude Code loads a tool whose `_meta` sets anthropic/alwaysLoad up front instead of deferring it.
 const alwaysLoaded = new Set(
-  t3SourceTools
+  [...t3SourceTools, ...ozoneSourceTools]
     .filter((tool) => {
       const meta = Context.getOrUndefined(tool.annotations, Tool.Meta);
       return meta !== undefined && meta["anthropic/alwaysLoad"] === true;
@@ -512,11 +599,19 @@ export const savesPastedSecrets = t3Tools.some(
 const pastedSecret = (name: string, input: Readonly<Record<string, unknown>>) =>
   savesPastedSecrets && name === "request_secret" && typeof input.value === "string";
 // Ozone does not offer these to a delegated child, so its harness never lists them.
-const hiddenFromSubagents = enabledWhen(McpInvocationContext.hiddenFromSubagents);
+const hiddenFromSubagents = enabledWhen(
+  McpInvocationContext.hiddenFromSubagents,
+  McpInvocationContext.hiddenFromSubagentsAndOutsideClients,
+);
 // The Linked environments beta starts off, and Ozone lists its tools only while it is on.
 const hiddenWhileLinksOff = enabledWhen(McpInvocationContext.hiddenWhileLinksOff);
-const visibleT3Tools = (options: { readonly subagent?: boolean; readonly links?: boolean }) =>
-  t3Tools.filter(
+const visibleT3Tools = (options: {
+  readonly subagent?: boolean;
+  readonly links?: boolean;
+  /** The thread belongs to an Ozone app, so Ozone's app tools are listed too. */
+  readonly ozone?: boolean;
+}) =>
+  [...t3Tools, ...(options.ozone === true ? ozoneTools : [])].filter(
     (tool) =>
       (options.links === true || !hiddenWhileLinksOff.has(tool.name)) &&
       !(options.subagent === true && hiddenFromSubagents.has(tool.name)),
@@ -629,6 +724,7 @@ export const buildBase = (
     readonly keepUserInstructions: boolean;
     readonly subagent?: boolean;
     readonly links?: boolean;
+    readonly ozone?: boolean;
     /** A native subagent starts from its task: Ozone appends nothing to its system prompt. */
     readonly nativeSubagent?: boolean;
     /** false: the thread has no agent device access, so Ozone's text leaves devices out. */
@@ -725,6 +821,7 @@ const buildCodexBase = (
     readonly effort?: string | undefined;
     readonly subagent?: boolean;
     readonly links?: boolean;
+    readonly ozone?: boolean;
     /** false: the thread has no agent device access, so Ozone's text leaves devices out. */
     readonly deviceAccess?: boolean;
     /** false: the thread has no agent browser access, so Ozone's text leaves the browser out. */
@@ -877,6 +974,8 @@ type Sample = {
   readonly priorErrors: Set<unknown>;
   /** Ozone's t3_background_wait, once `withBackgroundWait` builds it for `world.backgroundTasks`. */
   backgroundWait?: BackgroundWait;
+  /** Ozone's app tools, once `withOzoneApp` builds them for `setup.ozoneApp`. */
+  ozone?: OzoneApp;
   /** Calls so far per mocked tool, for mocks that answer in sequence. */
   readonly mockCalls: Map<string, number>;
 };
@@ -974,6 +1073,298 @@ export const withBackgroundWait = Effect.fn("evaluateMcpToolUse.withBackgroundWa
   }
 });
 
+// AppScaffolder's tokens in a template's AGENTS.md.
+const APP_NAME_TOKEN = "__OZONE_APP_NAME__";
+const INSTRUCTIONS_TOKEN = "<!-- ozone:instructions -->";
+const SKILL_FILE = new RegExp(`^${APP_SKILLS_PATH}/[^/]+/SKILL\\.md$`);
+const EVAL_NOW = "2026-01-01T12:00:00.000Z";
+const isOzoneTool = (name: string) => ozoneArgs.has(name);
+const decodeManifest = Schema.decodeUnknownEffect(Schema.fromJsonString(OzoneAppManifest));
+const decodePlan = Schema.decodeUnknownSync(Schema.toCodecJson(OzoneBuildPlanInput));
+const decodeProposeArgs = Schema.decodeUnknownSync(Schema.toCodecJson(OzoneDesignProposeInput));
+const encodeFailure = Schema.encodeSync(OrchestratorMcpFailure);
+
+const fileText = (files: ReadonlyArray<TemplateFile>, path: string) => {
+  const file = files.find((entry) => entry.path === path);
+  if (file === undefined) throw new Error(`The template has no ${path}.`);
+  return new TextDecoder().decode(file.bytes);
+};
+const taskGates = (manifest: OzoneAppManifest) =>
+  manifest.gates.filter((gate) => gate.when === "task").map((gate) => gate.id);
+const appBuild = () =>
+  BuildModel.emptyBuild(ThreadId.make(uuid(0)), ProjectId.make(uuid(0)), EVAL_NOW);
+
+/** What Ozone sends a worker for the one task of a plan whose brief is `brief`. */
+const workerPrompt = (
+  worker: NonNullable<OzoneAppSetup["worker"]>,
+  brief: string,
+  manifest: OzoneAppManifest,
+) => {
+  const plan = decodePlan({
+    spec: brief,
+    acceptance: [],
+    tasks: [{ id: "task-1", title: worker.title, brief, acceptance: worker.acceptance ?? [] }],
+  });
+  const decision = BuildModel.applyPlan(appBuild(), plan, EVAL_NOW);
+  if (!decision.ok) throw new Error(decision.problems.join(" "));
+  return workerBrief(decision.build, decision.build.tasks[0]!, taskGates(manifest));
+};
+
+/** Project instructions as each harness loads them: Claude Code through CLAUDE.md's `@AGENTS.md`. */
+const projectInstructions = (
+  { environment, codex }: Pick<Base, "environment" | "codex">,
+  claude: string,
+  agents: string,
+) =>
+  codex !== undefined
+    ? `# AGENTS.md instructions for ${environment.cwd}\n\n<INSTRUCTIONS>\n${agents.trim()}\n</INSTRUCTIONS>`
+    : [
+        "Codebase and user instructions are shown below. Be sure to adhere to these instructions. IMPORTANT: These instructions OVERRIDE any default behavior and you MUST follow them exactly as written.",
+        `Contents of ${environment.cwd}/CLAUDE.md (project instructions, checked into the codebase):`,
+        claude.trim(),
+        `Contents of ${environment.cwd}/AGENTS.md (project instructions, checked into the codebase):`,
+        agents.trim(),
+      ].join("\n\n");
+
+/**
+ * Fills an Ozone app case from this checkout. `world.files` gets the template's AGENTS.md with
+ * Ozone's instructions spliced in as AppScaffolder does, its CLAUDE.md, every skill's SKILL.md, the
+ * files `ozoneApp.files` names and DESIGN.md from `ozoneApp.design`; a file the case's world gives
+ * wins. Those instructions open the context, and a worker's prompt becomes Ozone's whole brief.
+ */
+export const resolveOzoneApp = Effect.fn("evaluateMcpToolUse.resolveOzoneApp")(function* (
+  testCase: McpToolUseCase,
+  base: Pick<Base, "environment" | "codex">,
+) {
+  const app = testCase.setup.ozoneApp;
+  if (app === undefined) return testCase;
+  const files = yield* templateFiles(app.template);
+  const text = (path: string) => fileText(files, path);
+  const agents = text("AGENTS.md");
+  if (!agents.includes(INSTRUCTIONS_TOKEN)) {
+    return yield* Effect.die(
+      new Error(`${app.template}'s AGENTS.md has no ${INSTRUCTIONS_TOKEN}.`),
+    );
+  }
+  const { design } = app;
+  const generated: Record<string, string> = {
+    "AGENTS.md": agents
+      .replaceAll(APP_NAME_TOKEN, safeAppName(app.name ?? "Acme"))
+      .replaceAll(INSTRUCTIONS_TOKEN, OZONE_APP_INSTRUCTIONS),
+    "CLAUDE.md": text("CLAUDE.md"),
+    ...Object.fromEntries(
+      files
+        .filter((file) => SKILL_FILE.test(file.path))
+        .map((file) => [file.path, text(file.path)]),
+    ),
+    ...Object.fromEntries((app.files ?? []).map((path) => [path, text(path)])),
+    ...(design === undefined
+      ? {}
+      : {
+          [DESIGN_FILE]: designFile(design, {
+            skillFile:
+              design.skill !== undefined &&
+              files.some((file) => file.path === `${APP_SKILLS_PATH}/${design.skill}/SKILL.md`),
+          }),
+        }),
+  };
+  const world = testCase.setup.world ?? {};
+  const appFiles: Record<string, unknown> = {
+    ...generated,
+    ...(isRecord(world.files) ? world.files : {}),
+  };
+  const instructions = projectInstructions(
+    base,
+    valueText(appFiles["CLAUDE.md"]),
+    valueText(appFiles["AGENTS.md"]),
+  );
+  const manifest = yield* decodeManifest(text("ozone.json"));
+  return {
+    ...testCase,
+    prompt:
+      app.worker === undefined
+        ? testCase.prompt
+        : workerPrompt(app.worker, testCase.prompt, manifest),
+    setup: {
+      ...testCase.setup,
+      context: [instructions, testCase.setup.context].filter(Boolean).join("\n\n"),
+      world: { ...world, files: appFiles },
+    },
+  };
+});
+
+/** A random source seeded by a string, so every sample of a case gets the same deals. */
+export const seededRandom = (seed: string) => {
+  let state = NodeCrypto.createHash("sha256").update(seed).digest().readUInt32LE(0);
+  // mulberry32
+  return () => {
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
+  };
+};
+
+type OzoneApp = {
+  readonly call: (
+    name: string,
+    input: unknown,
+    prior?: boolean,
+  ) => Effect.Effect<{ readonly text: string; readonly isError: boolean }>;
+  /** The seeds each deal in the sample dealt, in order. Deals in prior turns are left out. */
+  readonly deals: ReadonlyArray<ReadonlyArray<DesignSeed>>;
+};
+
+/**
+ * Ozone's app tools for a case with `setup.ozoneApp`, answered from this checkout: the deal with a
+ * random source seeded by the case id, `NEXT` from briefs.ts, the build rules of BuildModel and the
+ * real web guidance. A build's workers, checks and containers are not run: advance starts the next
+ * task and stays there, and every check passes. Prior calls whose result is "default" run first.
+ */
+export const withOzoneApp = Effect.fn("evaluateMcpToolUse.withOzoneApp")(function* (
+  sample: Sample,
+) {
+  const app = sample.testCase.setup.ozoneApp;
+  if (app === undefined) return;
+  const own = yield* templateFiles(app.template);
+  // A template without pages carries no taste library, and Ozone refuses it a design.
+  const library = PAGE_TEMPLATES.has(app.template)
+    ? yield* decodeLibrary({
+        palettes: fileText(own, LIBRARY_FILES.palettes),
+        types: fileText(own, LIBRARY_FILES.types),
+      })
+    : undefined;
+  const gates = taskGates(yield* decodeManifest(fileText(own, "ozone.json")));
+  const guidance = yield* Effect.provide(
+    Effect.service(WebGuidance.WebGuidance),
+    WebGuidance.layer,
+  );
+  const world = sample.testCase.setup.world;
+  const hasDesign = isRecord(world?.files) && DESIGN_FILE in world.files;
+  const rng = seededRandom(sample.testCase.id);
+  const deals: Array<ReadonlyArray<DesignSeed>> = [];
+  let lastDeal: DealIds | undefined;
+  let proposed = false;
+  let build: OzoneBuild = appBuild();
+
+  const ok = (value: unknown) => ({ text: valueText(value), isError: false });
+  const refused = (message: string) => ({
+    text: valueText(
+      encodeFailure(new OrchestratorMcpFailure({ code: "orchestration_error", message })),
+    ),
+    isError: true,
+  });
+  const nextFor = () => {
+    const running = build.tasks.find((task) => task.status === "running");
+    return build.tasks.length === 0
+      ? NEXT.plan
+      : running === undefined
+        ? NEXT.advance
+        : NEXT.working(running);
+  };
+  const report = (next = nextFor()) => ({
+    status: BuildModel.statusOf(build),
+    tasks: build.tasks.map(({ id, title, status, attempts }) => ({ id, title, status, attempts })),
+    next,
+  });
+  const runtime = {
+    projectId: uuid(0),
+    phase: "running",
+    url: "http://localhost:3000",
+    services: [{ service: "app", state: "running", health: "healthy", data: false }],
+    message: null,
+    migration: null,
+    updatedAt: EVAL_NOW,
+  };
+
+  const call = Effect.fn("evaluateMcpToolUse.ozoneCall")(function* (
+    name: string,
+    input: unknown,
+    prior = false,
+  ) {
+    const args = ozoneArgs.get(name)?.(input);
+    if (args !== undefined && Result.isFailure(args)) {
+      return { text: `MCP error -32602: ${args.failure.message}`, isError: true };
+    }
+    const fields = isRecord(input) ? input : {};
+    switch (name) {
+      case "ozone_design_propose": {
+        const { kind, trade, directions } = decodeProposeArgs(input);
+        if (library === undefined) return refused(NO_PAGES);
+        if (directions !== undefined) {
+          proposed = true;
+          return ok({ next: NEXT.designShown });
+        }
+        const seeds = deal(library, { kind, trade, avoid: lastDeal }, rng);
+        lastDeal = dealtIds(seeds);
+        if (!prior) deals.push(seeds);
+        return ok({ next: NEXT.designDeal(seeds) });
+      }
+      case "ozone_build_plan": {
+        if (app.chooseDesign === true && !hasDesign) {
+          return ok(report(proposed ? NEXT.designWaiting : NEXT.chooseDesign));
+        }
+        const decision = BuildModel.applyPlan(build, decodePlan(input), EVAL_NOW);
+        if (!decision.ok) return refused(decision.problems.join(" "));
+        build = decision.build;
+        return ok(report(build.approval === "pending" ? NEXT.review : NEXT.planned));
+      }
+      case "ozone_build_advance": {
+        const [ready] = BuildModel.nextTasks(build);
+        if (ready !== undefined && !build.tasks.some((task) => task.status === "running")) {
+          build = {
+            ...build,
+            tasks: build.tasks.map((task) =>
+              task.id === ready.id
+                ? { ...task, status: "running" as const, attempts: task.attempts + 1 }
+                : task,
+            ),
+          };
+        }
+        return ok(report());
+      }
+      case "ozone_build_get":
+        return ok(report());
+      case "ozone_build_resolve":
+        return ok(report(NEXT.advance));
+      case "ozone_build_check":
+        return ok({
+          gates: gates.map((id) => ({ id, ok: true, detail: "" })),
+          next: NEXT.checksPass,
+        });
+      case "ozone_app_runtime":
+        return ok({
+          status: runtime,
+          ...(fields.action === "logs" ? { logs: "" } : fields.action === "env" ? { env: [] } : {}),
+        });
+      case "ozone_web_guidance": {
+        const found =
+          fields.action === "retrieve"
+            ? guidance
+                .retrieve(Array.isArray(fields.ids) ? fields.ids.map(valueText) : [])
+                .pipe(Effect.map((guides) => ({ guides })))
+            : guidance
+                .search(valueText(fields.query ?? ""))
+                .pipe(Effect.map((matches) => ({ matches })));
+        return yield* found.pipe(
+          Effect.match({ onFailure: (error) => refused(error.message), onSuccess: ok }),
+        );
+      }
+      default:
+        return ok({ ok: true });
+    }
+  });
+  sample.ozone = { call, deals };
+  for (const priorCall of (sample.testCase.setup.priorTurns ?? []).flatMap(
+    (turn) => turn.toolCalls ?? [],
+  )) {
+    if (priorCall.result !== "default" || !isOzoneTool(priorCall.tool)) continue;
+    const result = yield* call(priorCall.tool, priorCall.input, true);
+    sample.priorResults.set(priorCall, result.text);
+    if (result.isError) sample.priorErrors.add(priorCall);
+  }
+});
+
 // Main's history under every case's world.
 const MAIN_COMMITS = [
   { sha: "9f2c1ab", subject: "feat(web): show the model name in the thread header" },
@@ -1065,7 +1456,9 @@ export const buildMessages = (sample: Sample) => {
         ? "withDevices"
         : call.tool === "t3_background_wait"
           ? "withBackgroundWait"
-          : undefined;
+          : isOzoneTool(call.tool)
+            ? "withOzoneApp"
+            : undefined;
       if (call.result === "default" && builder && !sample.priorResults.has(call)) {
         throw new Error(`${testCase.id}: prior ${call.tool} needs Ozone's result; run ${builder}.`);
       }
@@ -1691,6 +2084,10 @@ export const answerToolCall = Effect.fn("evaluateMcpToolUse.answerToolCall")(fun
     const result = yield* sample.backgroundWait(input);
     return result.isError ? failed(result.text) : toolResult(call.id, result.text);
   }
+  if (sample.ozone && isT3Name(call.name) && isOzoneTool(name) && fromWorld) {
+    const result = yield* sample.ozone.call(name, call.input);
+    return result.isError ? failed(result.text) : toolResult(call.id, result.text);
+  }
   // A pasted secret is saved without a card, so a mocked card outcome does not apply.
   if (mock !== undefined && mock !== "default" && !pastedSecret(name, input)) {
     if (name === "request_secret") savedSecretFile(sample, mock);
@@ -1927,6 +2324,7 @@ export const gradeSample = (
       `shellMust /${p}/`,
       shell.some((c) => test(p, c) || test(p, argvForm(c))),
     );
+  checks.push(...gradeFiles(expect, attempted));
   for (const p of expect.textMust ?? []) add(`textMust /${p}/`, test(p, run.text));
   for (const p of expect.textMustNot ?? []) add(`textMustNot /${p}/`, !test(p, run.text));
   for (const p of expect.finalTextMust ?? [])
@@ -1948,12 +2346,13 @@ export const gradeSample = (
     ),
   );
   checks.push(...gradeSecret(expect.secret, run, pasted));
+  checks.push(...gradeDesign(expect.design, attempted, run.designDeals));
   return checks;
 };
 
 // Checks that can only go from pass to fail as a sample goes on.
 const SETTLED =
-  /^(?:(?:notCalls|callsMustNot|shellMustNot|maxCalls|textMustNot) |secret\.(?:chatAsk|askTools|values|fileUse|noCardDemand|afterDecline) )/;
+  /^(?:(?:notCalls|callsMustNot|shellMustNot|filesMustNot|maxCalls|textMustNot) |secret\.(?:chatAsk|askTools|values|fileUse|noCardDemand|afterDecline) )/;
 /** True once the sample has failed for good, so the rest of it cannot change the result. */
 export const failedEarly = (expect: McpToolUseCase["expect"], run: SampleRun, pasted = "") =>
   gradeSample(
@@ -2194,6 +2593,7 @@ const runSample = Effect.fn("evaluateMcpToolUse.runSample")(function* (
   const sample = { ...makeSample(testCase, base), shellUsage: spent.shellUsage };
   yield* withDevices(sample);
   yield* withBackgroundWait(sample);
+  yield* withOzoneApp(sample);
   const runPromise = Effect.runPromiseWith(yield* Effect.context<HttpClient.HttpClient>());
   const messages = buildMessages(sample);
   const input = base.codex ? codexMessages(messages) : undefined;
@@ -2321,6 +2721,7 @@ const runSample = Effect.fn("evaluateMcpToolUse.runSample")(function* (
     cwd: base.environment.cwd,
     linked: [...sample.linked],
     ...(sample.devices ? { launchers: [...sample.devices.launchers] } : {}),
+    ...(sample.ozone ? { designDeals: sample.ozone.deals } : {}),
     usage,
     shellUsage: sample.shellUsage,
     transcript: input ? transcript : messages.slice(start),
@@ -2521,7 +2922,7 @@ const main = Effect.gen(function* () {
       (setup.harness === undefined || setup.harness === harness),
   );
   if (selectedCases.length === 0) return yield* Effect.die(new Error("No case matches --case."));
-  const selected = yield* Effect.forEach(selectedCases, (testCase) =>
+  const prepared = yield* Effect.forEach(selectedCases, (testCase) =>
     Effect.gen(function* () {
       const priorTurns = yield* Effect.forEach(testCase.setup.priorTurns ?? [], (turn) =>
         Effect.gen(function* () {
@@ -2559,6 +2960,7 @@ const main = Effect.gen(function* () {
     deviceAccess: boolean,
     browserAccess: boolean,
     links: boolean,
+    ozone: boolean,
   ): Effect.Effect<Base, Schema.SchemaError> =>
     codex
       ? decodeCodexCapture(template).pipe(
@@ -2569,6 +2971,7 @@ const main = Effect.gen(function* () {
               effort: flags.effort,
               subagent: role === "delegated-child",
               links,
+              ozone,
               deviceAccess,
               browserAccess,
             }),
@@ -2582,6 +2985,7 @@ const main = Effect.gen(function* () {
               subagent: role === "delegated-child",
               nativeSubagent: role === "native-subagent",
               links,
+              ozone,
               deviceAccess,
               browserAccess,
             });
@@ -2594,27 +2998,44 @@ const main = Effect.gen(function* () {
         );
   // Codex has no native subagents; its cases with that role run as top-level threads.
   const baseKey = ({ setup }: McpToolUseCase) =>
-    `${codex && setup.role === "native-subagent" ? "top" : setup.role}:${setup.world?.deviceAgentAccess !== false}:${setup.world?.browserAgentAccess !== false}:${setup.linkedEnvironments === true}`;
-  const base = yield* buildFor("top", true, true, false);
-  const bases = new Map<string, Base>([["top:true:true:false", base]]);
-  for (const testCase of selected) {
+    `${codex && setup.role === "native-subagent" ? "top" : setup.role}:${setup.world?.deviceAgentAccess !== false}:${setup.world?.browserAgentAccess !== false}:${setup.linkedEnvironments === true}:${setup.ozoneApp !== undefined}`;
+  const base = yield* buildFor("top", true, true, false, false);
+  const bases = new Map<string, Base>([["top:true:true:false:false", base]]);
+  for (const testCase of prepared) {
     const key = baseKey(testCase);
     if (bases.has(key)) continue;
-    const [role = "top", device, browser, links] = key.split(":") as [
+    const [role = "top", device, browser, links, ozone] = key.split(":") as [
       McpToolUseCase["setup"]["role"],
       string,
       string,
       string,
+      string,
     ];
-    bases.set(key, yield* buildFor(role, device === "true", browser === "true", links === "true"));
+    bases.set(
+      key,
+      yield* buildFor(
+        role,
+        device === "true",
+        browser === "true",
+        links === "true",
+        ozone === "true",
+      ),
+    );
   }
   const baseFor = (testCase: McpToolUseCase) => bases.get(baseKey(testCase)) ?? base;
+  const selected = yield* Effect.forEach(prepared, (testCase) =>
+    resolveOzoneApp(testCase, baseFor(testCase)),
+  );
   const effort = flags.effort ?? base.codex?.reasoning.effort ?? "high";
   if (flags["dry-run"]) {
     // One JSON line per case. Without --case this also checks that every case builds.
     for (const testCase of selected) {
       const sample = makeSample(testCase, baseFor(testCase));
-      yield* Effect.scoped(Effect.andThen(withDevices(sample), withBackgroundWait(sample)));
+      yield* Effect.scoped(
+        Effect.andThen(withDevices(sample), withBackgroundWait(sample)).pipe(
+          Effect.andThen(withOzoneApp(sample)),
+        ),
+      );
       const messages = buildMessages(sample);
       const body = sample.base.codex
         ? codexRequest(sample.base, codexMessages(messages))

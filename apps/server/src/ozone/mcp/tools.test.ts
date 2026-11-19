@@ -1,7 +1,14 @@
 import { assert, it } from "@effect/vitest";
+import {
+  OZONE_DESIGN_COMPOSITIONS,
+  OZONE_DESIGN_MATERIALS,
+  OZONE_DESIGN_MOTIONS,
+  OZONE_DESIGN_SKILLS,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
+import { advertisedJsonSchema } from "../../mcp/advertisedJsonSchema.ts";
 import * as McpHttpServer from "../../mcp/McpHttpServer.ts";
 import { PreviewToolkit } from "../../mcp/toolkits/preview/tools.ts";
 import { ProjectToolkit } from "../../mcp/toolkits/project/tools.ts";
@@ -14,6 +21,7 @@ import * as OzoneApps from "../apps/OzoneApps.ts";
 import { NEXT, WAKE } from "../builds/briefs.ts";
 import * as BuildConductor from "../builds/BuildConductor.ts";
 import * as BuildDesign from "../builds/BuildDesign.ts";
+import { skillFits } from "../builds/designVocabulary.ts";
 import { verifierBrief } from "../builds/verification.ts";
 import { OZONE_CHAT_INSTRUCTIONS } from "../chat/chatPersona.ts";
 import * as AppEnv from "../env/AppEnv.ts";
@@ -68,6 +76,30 @@ it("the instructions Ozone writes name only tools that exist", () => {
     OZONE_APP_INSTRUCTIONS,
     OZONE_CHAT_INSTRUCTIONS,
     ...Object.values(NEXT).filter((text) => typeof text === "string"),
+    NEXT.designDeal([
+      {
+        skill: "gpt-taste",
+        palette: {
+          id: "white-link-blue",
+          name: "Sheet and biro",
+          note: "Blue is the colour of links and the one button.",
+          colors: {
+            background: "#ffffff",
+            surface: "#f4f4f4",
+            text: "#111111",
+            muted: "#6b6b6b",
+            accent: "#1a4be0",
+            accentText: "#ffffff",
+          },
+        },
+        type: {
+          id: "geist",
+          display: { family: "Geist", style: "sans" },
+          body: { family: "Geist", style: "sans" },
+        },
+        fits: skillFits("gpt-taste", { dark: false }),
+      },
+    ]),
     WAKE.approved.text,
     WAKE.designPicked("Calm").text,
     WAKE.designLeft.text,
@@ -80,4 +112,28 @@ it("the instructions Ozone writes name only tools that exist", () => {
     [],
   );
   assert.include(named, "t3_thread_launch");
+});
+
+// The lead sends what the schema it reads requires: a direction without these draws as a guess.
+it("the design tool requires each direction's skill, composition, material, motion and copy", () => {
+  const schema = advertisedJsonSchema(OzoneToolkit.tools.ozone_design_propose) as {
+    readonly required: ReadonlyArray<string>;
+    readonly properties: {
+      readonly directions: {
+        readonly items: {
+          readonly required: ReadonlyArray<string>;
+          readonly properties: Readonly<Record<string, { readonly enum?: ReadonlyArray<string> }>>;
+        };
+      };
+    };
+  };
+  assert.deepStrictEqual(schema.required, ["kind"]);
+  const { items } = schema.properties.directions;
+  for (const key of ["skill", "composition", "material", "motion", "copy"]) {
+    assert.include(items.required, key);
+  }
+  assert.deepStrictEqual(items.properties.skill?.enum, OZONE_DESIGN_SKILLS);
+  assert.deepStrictEqual(items.properties.composition?.enum, OZONE_DESIGN_COMPOSITIONS);
+  assert.deepStrictEqual(items.properties.material?.enum, OZONE_DESIGN_MATERIALS);
+  assert.deepStrictEqual(items.properties.motion?.enum, OZONE_DESIGN_MOTIONS);
 });

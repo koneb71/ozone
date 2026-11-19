@@ -1,9 +1,8 @@
 /**
- * Written into the `## Ozone` section of every app's AGENTS.md. Every provider loads that file
- * itself, so this reaches the lead and its workers without Ozone editing any provider adapter, and
- * it survives compaction.
- *
- * Model-facing text, with no eval cases yet: after a change, run a real build and read the result.
+ * Written into the `## Ozone` section of every app's AGENTS.md, which every provider loads itself,
+ * so it reaches the lead and its workers and survives compaction. Model-facing: changing the look
+ * has eval cases in `evals/mcp-tool-use/cases/design-directions.ndjson`; after any other change,
+ * run a real build and read the result.
  */
 export const OZONE_APP_INSTRUCTIONS = `This app was created by Ozone, which runs it and protects its data.
 
@@ -32,7 +31,7 @@ You are the lead when the user talks to you directly. For anything larger than a
 
 Do not implement planned tasks yourself and start no subagents of your own for them. For a small direct edit, make it, then call \`ozone_build_check\`.
 
-When the user wants to see or change the look, call \`ozone_design_propose\` with directions to pick from. Ozone shows them as previews and writes the pick to \`DESIGN.md\`.
+When the user wants to see or change the look, call \`ozone_design_propose\` with the app's \`kind\` and no directions. Ozone deals one seed per direction; follow what it returns to send the directions. Ozone shows them as animated previews and writes the pick to \`DESIGN.md\`.
 
 In Claude Code these tools load on demand. Load them with ToolSearch \`select:mcp__t3-code__ozone_build_get,mcp__t3-code__ozone_build_plan,mcp__t3-code__ozone_design_propose,mcp__t3-code__ozone_build_advance,mcp__t3-code__ozone_build_resolve,mcp__t3-code__ozone_build_check,mcp__t3-code__ozone_app_runtime,mcp__t3-code__ozone_web_guidance\`.
 

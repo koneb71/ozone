@@ -12,7 +12,7 @@ pnpm mcp-tool-use --case review-round-uses-thread-send --samples 1 --out runs/ch
 pnpm mcp-tool-use --model claude-opus-5-5 --out runs/opus
 ```
 
-- `ANTHROPIC_API_KEY` in the repo root `.env` pays for Claude models and the Haiku shell simulator.
+- `ANTHROPIC_API_KEY` in the repo root `.env` pays for Claude models and the Haiku shell simulator. `--model claude-haiku-5-5` is the cheapest agent, for a first pass on new cases.
 - Codex models (`gpt-*` in `MODELS` in `run.ts`) go through a CLIProxyAPI server, set up as the `vibeproxy` model provider in `~/.codex/config.toml`. Keep the proxy under about 12 samples in flight across all runs.
 - `--shell-model` picks the model that plays the shell: `claude-haiku-5-5` by default, or `gpt-6.1-terra` / `gpt-6-luna` through the same proxy, so Codex runs need no Anthropic key. Prefer Terra: Luna often contradicts the case's world (it calls named checkouts missing or files empty). Compare runs only when they used the same shell model.
 - Flags: `--case <ids>`, `--cases <file.ndjson>`, `--samples <n>` (default 2, and a 3rd when the first 2 disagree), `--concurrency <n>` (samples in flight, default 8), `--max-steps <n>`, `--effort <level>`, `--dry-run` (prints request bodies, no model calls), and `--context` (prints the size of Ozone's text and schemas, no key needed).
@@ -28,7 +28,7 @@ Cases are JSON lines in `cases/`, one file per area. The case schema in `run.ts`
 - `experience`: the real mistake, in a sentence. `source`: where it happened.
 - `setup`: the fake thread, its `world` (repo, branch, files, PRs, pages), `priorTurns`, and `mocks` for tool results. With `world.backgroundTasks`, `t3_background_wait` answers from Ozone's own handler and ThreadManagementService, so its result and errors are the checkout's; a prior wait with `"result": "default"` gets that result too.
 - `setup.priorTurns[].toolCalls[].resultFile`: load a repository-relative file as the tool result instead of copying its contents into the case. An empty `prompt` resumes a top-level thread after its last prior tool result without adding a user message. Side-chat and subagent setups require a nonempty prompt.
-- `expect`: the checks, such as `calls`, `callsMustNot`, `maxCalls`, `order`, `shellMust`, `textMust`, `finalTextMust` (the last text, once the turn ended), and `linked`. A call's `args` match partially: `~text` is a case-insensitive substring, `"<=N"` / `">=N"` bound a number, `null` matches a missing key, and keys may be dotted paths. Device cases also use `device` to check every child brief, forbid raw UI commands, bound failed device actions per user turn, and require artifact paths in completed final answers. Secrets cases use `secret` (see [Secrets cases](#secrets-cases)).
+- `expect`: the checks, such as `calls`, `callsMustNot`, `maxCalls`, `order`, `shellMust`, `filesMust`, `textMust`, `finalTextMust` (the last text, once the turn ended), and `linked`. `filesMust` regexes must each match text a successful call wrote into a file: a Write's `content`, an Edit's `new_string`, or the lines a Codex apply_patch adds (not its context or removed lines). `filesMustNot` regexes may match nothing any call tried to write, refused ones included, and end a sample early. Shell redirections are left to `shellMustNot`. A call's `args` match partially: `~text` is a case-insensitive substring, `"<=N"` / `">=N"` bound a number, `null` matches a missing key, and keys may be dotted paths. Device cases also use `device` to check every child brief, forbid raw UI commands, bound failed device actions per user turn, and require artifact paths in completed final answers. Secrets cases use `secret` (see [Secrets cases](#secrets-cases)).
 
 Check that the case builds with `--dry-run --case <id>`. Then run it on the text before your fix, where it must fail, and on the text after, where it must pass.
 
@@ -289,6 +289,42 @@ Passes per case, main's runtime text (3 samples) → this branch's "Link every o
 
 After the change, the first reference to a file is an absolute link. The remaining failures come from two other kinds of span. Some repeat the file later as relative inline code (Sonnet's other-checkout failures). Others quote values rather than cite files, such as `main` set to `src/index.ts` or the import `./ws`. Chat still turns those spans into pills.
 
+## Pick the design cases
+
+`cases/design-directions.ndjson` checks Ozone's app builder text for Pick the design: the lead's deal and directions, and the motion a worker builds. The owner found the directions bland and every built app static. Prompts and worlds are authored data for a made-up bakery and habit tracker.
+
+| Case  | Kind    | What it checks                                                                                                                                                                                                     |
+| ----- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| DD-01 | guard   | Pick the design on: the lead gets a deal with `kind: "place"` and no directions, sends one direction per seed for the bakery, and ends its turn without advancing the build. No `start.mjs`, `gate.mjs` or Python. |
+| DD-02 | guard   | After "none of these", a new deal with `kind` and no directions, then directions from the new seeds. No question tool.                                                                                             |
+| DD-03 | guard   | A built app with a 1.9.0 DESIGN.md: "show me other looks" goes through a deal and directions, with no file edits.                                                                                                  |
+| DD-04 | bad     | A worker whose DESIGN.md names `tilt` writes `perspective`, a rotate and a reduced-motion rule, and adds no GSAP, Framer Motion or Motion: no import, dynamic import, install or `package.json` dependency.        |
+| DC-01 | control | Pick the design off: the lead plans with `ozone_build_plan` and proposes nothing.                                                                                                                                  |
+| DC-02 | control | Pick the design on and no DESIGN.md: a button label change is an edit, with no proposal or plan.                                                                                                                   |
+| DC-03 | control | A worker restyling a page with no DESIGN.md does not read gpt-taste and uses no animation library or picsum.photos images. It runs on both harnesses.                                                              |
+
+`expect.design` grades directions, in `design-grading.ts`. `followsDeal` needs at least one `ozone_design_propose` with directions that Ozone accepted (`design.sent`), and every one of them checked against the deal before it in the sample: the seeds' skills in order (`design.skills`), a composition, material and motion from each seed's lists (`design.fits`), no two sharing a skill, composition, material or motion (`design.distinct`), and copy that is not a placeholder, a "Welcome to" or the direction's name (`design.copy`). `brand` is a case-insensitive regex every sent `copy.brand` must match. Colours and faces are not graded, since a seed's may give way to the request.
+
+Runner support:
+
+- `setup.ozoneApp` makes the thread an Ozone app made from `template`. The model also gets `OzoneToolkit`'s tools, deferred like the others, and a worker (`role: "delegated-child"`) only the ones Ozone lists to subagents.
+- The case is filled from this checkout at run time. `world.files` gets the template's `AGENTS.md`, with `name` and Ozone's app instructions spliced in as AppScaffolder does, its `CLAUDE.md`, every skill's `SKILL.md`, the template files `ozoneApp.files` names, and `DESIGN.md` written by `designFile` from `ozoneApp.design`. A file the case's own world gives wins, `AGENTS.md` included. The instructions open the context as each harness loads them: Claude Code through `CLAUDE.md`'s `@AGENTS.md`, Codex as AGENTS.md instructions.
+- With `ozoneApp.worker`, `prompt` is the task's brief as the lead wrote it, and the model gets `workerBrief` for a one-task plan, with the template's task checks from `ozone.json`.
+- Ozone's tools answer from this checkout. Arguments decode with each tool's own schema, and a call that does not decode fails as `MCP error -32602` with the schema's message, so a proposal with a shared skill, composition or motion fails as it would in Ozone. `ozone_design_propose` refuses a template without pages, as Ozone does. Without directions it runs `deal` on the template's taste library, with a random source seeded by the case id, so every sample of a case gets the same deals, and a re-deal avoids the last one. Its `next` and `ozone_build_plan`'s come from `NEXT` in `briefs.ts`: with `chooseDesign` and no `DESIGN.md`, a plan is held. Plans follow `BuildModel`'s rules. `ozone_web_guidance` searches the real guidance. A prior call with `"result": "default"` gets these results too, as DD-02's earlier deal does.
+- The results row carries `designDeals`, the seeds each deal dealt in the sample, which `design` grades against.
+
+From `evals/`:
+
+```sh
+pnpm mcp-tool-use --cases mcp-tool-use/cases/design-directions.ndjson --model claude-haiku-5-5 --samples 3 --out runs/design-directions
+```
+
+Fidelity limits:
+
+- **No build runs.** `ozone_build_advance` marks the next task running and stays there, `ozone_build_check` passes every check, and `ozone_app_runtime` reports a running app. No worker, picker or wake is simulated, so a case covers one turn: the lead's proposal, or one worker's task.
+- **Skill listings are not modelled.** Claude Code does not list `.agents/skills`, and the four opt-in skills set `disable-model-invocation` and Codex's `allow_implicit_invocation: false`. Agents reach the skills by reading their files.
+- **Regex grading.** `filesMust` reads what the agent wrote, not the page it renders: a `rotate` that never applies still passes, and a library added through a shell heredoc is caught only by `shellMustNot`.
+
 ## Where Ozone's text lives
 
 - `packages/provider-core/src/server/runtimeInstructions.ts`
@@ -296,6 +332,7 @@ After the change, the first reference to a file is an absolute link. The remaini
 - `apps/server/src/provider/CodexDeveloperInstructions.ts`
 - `apps/server/src/mcp/toolkits/*/tools.ts` (tool descriptions)
 - `packages/contracts/src/*Mcp.ts` (parameter descriptions and result text)
+- `apps/server/src/ozone/mcp/tools.ts`, `apps/server/src/ozone/builds/briefs.ts` and `apps/server/src/ozone/apps/appInstructions.ts` (the app builder's tools, `next` text, briefs and app instructions)
 
 ## Templates
 

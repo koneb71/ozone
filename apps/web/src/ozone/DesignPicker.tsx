@@ -1,121 +1,175 @@
-import type {
-  OzoneDesignDirection,
-  OzoneDesignFace,
-  OzoneDesignProposal,
-} from "@t3tools/contracts";
-import { PaletteIcon } from "lucide-react";
-import type { CSSProperties } from "react";
+import type { OzoneDesignProposal } from "@t3tools/contracts";
+import { Maximize2Icon, PaletteIcon } from "lucide-react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FocusEvent,
+  type PointerEvent,
+} from "react";
 
 import type { ComposerBannerStackItem } from "~/components/chat/ComposerBannerStack";
 import { Button } from "~/components/ui/button";
 
-// The faces are never fetched: Ozone sends nothing to a font service. One that is not installed
-// on this device shows in a face of the same kind.
-const FALLBACK: Record<OzoneDesignFace["style"], string> = {
-  serif: "ui-serif, Georgia, serif",
-  sans: "ui-sans-serif, system-ui, sans-serif",
-  mono: "ui-monospace, Menlo, monospace",
-  display: "ui-sans-serif, system-ui, sans-serif",
-  script: "cursive",
-};
+import { createMotionPlayer } from "./design/designMotion";
+import { ensureFaces } from "./design/designFonts";
+import { DesignViewer } from "./design/DesignViewer";
+import {
+  facesOf,
+  SKILL_LABEL,
+  showDirection,
+  type ShownDirection,
+} from "./design/designVocabulary.logic";
+import { DirectionScreen } from "./design/DirectionScreen";
 
-const fontOf = (face: OzoneDesignFace): CSSProperties => ({
-  fontFamily: `"${face.family.replaceAll('"', "")}", ${FALLBACK[face.style]}`,
-});
+/** Proposals whose cards already played their arrival, so folding and unfolding stays still. */
+const arrived = new Set<string>();
 
-const SWATCHES = [
-  ["background", "Background"],
-  ["surface", "Surface"],
-  ["text", "Text"],
-  ["muted", "Muted text"],
-  ["accent", "Accent"],
-  ["accentText", "Text on the accent"],
-] as const;
+const ARRIVAL_STAGGER_MS = 200;
+/** The longest the cards wait for their faces before showing in stand-ins. */
+const FACES_CAP_MS = 700;
 
-/** The direction's first screen, drawn small in its own colours and faces. */
-function FirstScreen({ direction }: { readonly direction: OzoneDesignDirection }) {
-  const { colors } = direction;
+function DirectionCard({
+  shown,
+  arrival,
+  disabled,
+  onOpen,
+  onPick,
+}: {
+  readonly shown: ShownDirection;
+  /** Delay before the card plays its motion once on arrival, or null when it stays still. */
+  readonly arrival: number | null;
+  readonly disabled: boolean;
+  readonly onOpen: () => void;
+  readonly onPick: () => void;
+}) {
+  const screenRef = useRef<HTMLDivElement>(null);
+  const player = useRef(createMotionPlayer());
+  const { direction } = shown;
+
+  // A layout effect, so the first frame is in place before the card first paints; the stagger is a
+  // delay on the animation timeline, which holds that frame meanwhile.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- plays the arrival with the Web Animations API once the faces have loaded
+  useLayoutEffect(() => {
+    if (arrival === null) return;
+    const card = player.current;
+    card.play(screenRef.current, shown.motion, arrival);
+    return () => card.cancel();
+  }, [arrival, shown.motion]);
+
+  const play = () => player.current.play(screenRef.current, shown.motion);
+  const onPointerEnter = (event: PointerEvent) => {
+    if (event.pointerType === "mouse") play();
+  };
+  const onFocus = (event: FocusEvent<HTMLButtonElement>) => {
+    if (event.currentTarget.matches(":focus-visible")) play();
+  };
+
   return (
-    <div
-      aria-hidden="true"
-      className="flex aspect-[16/10] flex-col overflow-hidden rounded-md border border-border/60 p-3"
-      style={{ background: colors.background, color: colors.text }}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1">
-          <span className="size-2 rounded-sm" style={{ background: colors.accent }} />
-          <span className="h-1 w-6 rounded-full" style={{ background: colors.text }} />
+    <li aria-label={direction.name} className="flex min-w-0 snap-start flex-col gap-1.5">
+      <button
+        type="button"
+        aria-label={`See ${direction.name} large`}
+        className="group relative block overflow-hidden rounded-lg outline-none ring-1 ring-border/70 transition-shadow hover:ring-foreground/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        onClick={onOpen}
+        onFocus={onFocus}
+        onPointerEnter={onPointerEnter}
+      >
+        <DirectionScreen shown={shown} rootRef={screenRef} />
+        <span className="pointer-events-none absolute right-1.5 bottom-1.5 rounded-md bg-black/60 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+          <Maximize2Icon className="size-3" />
         </span>
-        <span className="flex shrink-0 gap-1">
-          <span className="h-1 w-4 rounded-full" style={{ background: colors.muted }} />
-          <span className="h-1 w-4 rounded-full" style={{ background: colors.muted }} />
-        </span>
-      </div>
-      <div className="mt-auto flex min-w-0 flex-col gap-1.5">
-        <span className="line-clamp-2 text-lg leading-tight" style={fontOf(direction.display)}>
-          {direction.name}
-        </span>
-        <span
-          className="line-clamp-2 text-3xs leading-snug"
-          style={{ ...fontOf(direction.body), color: colors.muted }}
+      </button>
+      <div className="flex min-w-0 items-center justify-between gap-2 px-0.5">
+        <div className="min-w-0">
+          <p className="m-0 truncate font-medium text-foreground text-xs">{direction.name}</p>
+          <p className="m-0 truncate text-muted-foreground text-xs">
+            {direction.skill === undefined
+              ? direction.mood
+              : `${SKILL_LABEL[direction.skill]} · ${direction.mood}`}
+          </p>
+        </div>
+        <Button
+          aria-label={`Use ${direction.name}`}
+          disabled={disabled}
+          size="xs"
+          variant="outline"
+          onClick={onPick}
         >
-          {direction.idea}
-        </span>
-        <span className="flex items-center gap-1.5" style={fontOf(direction.body)}>
-          <span
-            className="rounded px-2 py-0.5 font-medium text-4xs"
-            style={{ background: colors.accent, color: colors.accentText }}
-          >
-            Get started
-          </span>
-          <span
-            className="rounded px-2 py-0.5 text-4xs"
-            style={{ background: colors.surface, color: colors.text }}
-          >
-            Learn more
-          </span>
-        </span>
+          Use
+        </Button>
       </div>
-    </div>
+    </li>
   );
 }
 
-function Direction({
-  direction,
-  disabled,
-  onPick,
+function DesignDirections({
+  proposal,
+  answering,
+  onAnswer,
 }: {
-  readonly direction: OzoneDesignDirection;
-  readonly disabled: boolean;
-  readonly onPick: () => void;
+  readonly proposal: OzoneDesignProposal;
+  readonly answering: boolean;
+  readonly onAnswer: (pick: number | null) => void;
 }) {
+  const directions = proposal.directions.map(showDirection);
+  const [viewing, setViewing] = useState<number | null>(null);
+  const [facesReady, setFacesReady] = useState<string | null>(null);
+  const firstShowing = !arrived.has(proposal.proposedAt);
+
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- loads the bundled faces into document.fonts before the cards show, or gives up waiting
+  useEffect(() => {
+    let live = true;
+    const show = () => {
+      if (live) setFacesReady(proposal.proposedAt);
+    };
+    const cap = window.setTimeout(show, FACES_CAP_MS);
+    void ensureFaces(proposal.directions.flatMap(facesOf)).then(show);
+    return () => {
+      live = false;
+      window.clearTimeout(cap);
+    };
+  }, [proposal]);
+
+  const ready = facesReady === proposal.proposedAt;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- records outside React that this proposal's arrival has played
+  useEffect(() => {
+    if (ready) arrived.add(proposal.proposedAt);
+  }, [ready, proposal.proposedAt]);
+
   return (
-    <li
-      aria-label={direction.name}
-      className="flex min-w-0 flex-col gap-2 rounded-lg border border-border/70 bg-card/60 p-2"
-    >
-      <FirstScreen direction={direction} />
-      <div className="flex min-w-0 flex-col gap-1 px-0.5">
-        <p className="m-0 truncate text-foreground text-xs">{direction.mood}</p>
-        <ul aria-label="Colours" className="m-0 flex list-none gap-1 p-0">
-          {SWATCHES.map(([role, label]) => (
-            <li
-              key={role}
-              aria-label={`${label} ${direction.colors[role]}`}
-              className="size-4 rounded-full border border-border/70"
-              style={{ background: direction.colors[role] }}
-            />
-          ))}
-        </ul>
-        <p className="m-0 truncate text-muted-foreground text-xs">
-          {direction.display.family} · {direction.body.family}
-        </p>
-        <p className="m-0 line-clamp-2 text-muted-foreground text-xs">{direction.layout}</p>
-      </div>
-      <Button className="mt-auto" disabled={disabled} size="xs" variant="outline" onClick={onPick}>
-        Use {direction.name}
-      </Button>
-    </li>
+    <>
+      <ul
+        aria-label="Design directions"
+        className="m-0 grid list-none auto-cols-[minmax(15rem,1fr)] grid-flow-col gap-3 overflow-x-auto overscroll-x-contain p-0 pb-1 snap-x snap-mandatory [@media(max-height:40rem)]:auto-cols-[minmax(11rem,1fr)]"
+        style={{ visibility: ready ? "visible" : "hidden" }}
+      >
+        {directions.map((shown, index) => (
+          <DirectionCard
+            key={`${shown.direction.name}:${shown.direction.colors.background}:${shown.direction.colors.accent}`}
+            shown={shown}
+            arrival={ready && firstShowing ? index * ARRIVAL_STAGGER_MS : null}
+            disabled={answering}
+            onOpen={() => setViewing(index)}
+            onPick={() => onAnswer(index)}
+          />
+        ))}
+      </ul>
+      {viewing === null ? null : (
+        <DesignViewer
+          key={proposal.proposedAt}
+          directions={directions}
+          start={viewing}
+          answering={answering}
+          onPick={(pick) => {
+            setViewing(null);
+            onAnswer(pick);
+          }}
+          onClose={() => setViewing(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -132,27 +186,13 @@ export function designBannerItem(
     group: "attention",
     icon: <PaletteIcon />,
     title: "Pick a design",
-    description: "The lead plans from your pick. For other directions, say what you want.",
+    description: "One per design skill. Open one to see it large and moving.",
     actions: (
       <Button disabled={answering} size="xs" variant="ghost" onClick={() => onAnswer(null)}>
         Let the lead choose
       </Button>
     ),
-    children: (
-      <ul
-        aria-label="Design directions"
-        className="m-0 grid list-none auto-cols-[minmax(13rem,1fr)] grid-flow-col gap-2 overflow-x-auto p-0 pb-1"
-      >
-        {proposal.directions.map((direction, index) => (
-          <Direction
-            key={`${direction.name}:${direction.colors.background}:${direction.colors.accent}`}
-            direction={direction}
-            disabled={answering}
-            onPick={() => onAnswer(index)}
-          />
-        ))}
-      </ul>
-    ),
+    children: <DesignDirections proposal={proposal} answering={answering} onAnswer={onAnswer} />,
     collapsible: { defaultOpen: true, what: "directions" },
   };
 }

@@ -6,10 +6,13 @@ import {
   NodeId,
   ProjectId,
   ProviderInstanceId,
+  OzoneBuildSnapshot,
   ThreadId,
   type OzoneAppSettings,
   type OzoneBuildPlanInput,
   type OzoneDesignDirection,
+  type OzoneDesignDirectionInput,
+  type OzoneDesignSkill,
   type OzoneGateResult,
   type OzoneWorkerModel,
 } from "@t3tools/contracts";
@@ -22,6 +25,8 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
+import * as Schema from "effect/Schema";
+import * as SqlClient from "effect/sql/SqlClient";
 import * as TestClock from "effect/testing/TestClock";
 
 import type { McpInvocationScope } from "../../mcp/McpInvocationContext.ts";
@@ -31,7 +36,7 @@ import * as AppRegistry from "../apps/AppRegistry.ts";
 import * as AppData from "../data/AppData.ts";
 import * as AppRuntime from "../runtime/AppRuntime.ts";
 import { testApp, testManifest } from "../ozone.testkit.ts";
-import { DESIGN_FILE, NEXT, WAKE } from "./briefs.ts";
+import { DESIGN_FILE, NEXT, NO_PAGES, WAKE } from "./briefs.ts";
 import * as BuildChecks from "./BuildChecks.ts";
 import * as BuildConductor from "./BuildConductor.ts";
 import * as BuildGates from "./BuildGates.ts";
@@ -41,6 +46,7 @@ import * as BuildReview from "./BuildReview.ts";
 import * as BuildStore from "./BuildStore.ts";
 import * as BuildWake from "./BuildWake.ts";
 import * as BuildWorkers from "./BuildWorkers.ts";
+import { COMPOSITION_RECIPE, MOTION_RECIPE } from "./designVocabulary.ts";
 
 const threadId = ThreadId.make("lead-thread");
 const projectId = ProjectId.make("project-habits");
@@ -77,7 +83,10 @@ const plan = (...tasks: ReadonlyArray<TaskPlan>): OzoneBuildPlanInput => ({
   tasks,
 });
 
-const direction = (name: string): OzoneDesignDirection => ({
+const decodeSnapshot = Schema.decodeEffect(OzoneBuildSnapshot);
+
+// A direction as 1.9.0 stored it.
+const directionBefore = (name: string): OzoneDesignDirection => ({
   name,
   idea: `${name}, done well.`,
   colors: {
@@ -92,6 +101,23 @@ const direction = (name: string): OzoneDesignDirection => ({
   body: { family: "Work Sans", style: "sans" },
   layout: "A full-width hero with one button.",
   mood: "warm",
+});
+
+const direction = (
+  name: string,
+  skill: OzoneDesignSkill = "minimalist-ui",
+): OzoneDesignDirectionInput => ({
+  ...directionBefore(name),
+  skill,
+  composition: "split",
+  material: "paper",
+  motion: "tilt",
+  copy: {
+    brand: "Habits",
+    headline: "Keep the habits you mean to keep",
+    lede: "One tap a day, and a week that shows what stuck.",
+    cta: "Start a habit",
+  },
 });
 
 const PASS: ReadonlyArray<OzoneGateResult> = [
@@ -119,7 +145,7 @@ interface Script {
 }
 
 // The tester is off unless a test turns it on, so each test reads only the steps it is about.
-const makeHarness = (settings: Partial<OzoneAppSettings> = {}) =>
+const makeHarness = (settings: Partial<OzoneAppSettings> = {}, templateId = "web-app") =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -272,6 +298,7 @@ const makeHarness = (settings: Partial<OzoneAppSettings> = {}) =>
         projectId,
         slug: "habits-a1b2c3",
         name: "Habits",
+        templateId,
         settings: { ...DEFAULT_OZONE_APP_SETTINGS, verifyBuilds: false, ...settings },
       }),
       workspaceRoot,
@@ -302,6 +329,7 @@ const makeHarness = (settings: Partial<OzoneAppSettings> = {}) =>
       store: Context.get(context, BuildStore.BuildStore),
       review: Context.get(context, BuildReview.BuildReview),
       design: Context.get(context, BuildDesign.BuildDesign),
+      sql: Context.get(context, SqlClient.SqlClient),
     };
     /** What a server restart does to the checks: a new instance, which looks for cut-short work. */
     const restart = Layer.build(
@@ -904,7 +932,21 @@ describe("BuildConductor", () => {
       const written = yield* fs.readFileString(designFile);
       assert.include(written, "# Design: Loud");
       assert.include(written, "| Accent: buttons and links | `#d98e3b` |");
-      assert.include(written, "- Display: Fraunces (serif)");
+      assert.include(written, "- Display: Fraunces (serif), from `@fontsource-variable/fraunces`");
+      assert.include(written, COMPOSITION_RECIPE.split);
+      assert.include(written, "- Headline: Keep the habits you mean to keep");
+      assert.include(written, `\`tilt\`: ${MOTION_RECIPE.tilt.build}`);
+      assert.include(written, `Reduced-motion fallback: ${MOTION_RECIPE.tilt.reduced}`);
+      assert.include(
+        written,
+        "Screens behind sign-in, if the app has any, keep only the hover and focus part",
+      );
+      assert.include(
+        written,
+        "this section overrides `.agents/skills/design-taste-frontend/SKILL.md` house rules 5 and 8",
+      );
+      // This workspace has no copy of the skill to follow.
+      assert.notInclude(written, "## Follow");
       // A second window's answer finds nothing waiting.
       yield* design.answer(lead.threadId, 0);
       assert.strictEqual(yield* Queue.size(wakes), 0);
@@ -915,6 +957,127 @@ describe("BuildConductor", () => {
         `wake ${WAKE.designLeft.summary}`,
         `wake ${WAKE.designPicked("Loud").summary}`,
       ]);
+    }).pipe(Effect.provide(layerTest)),
+  );
+
+  it.effect("writes the design of a 1.9.0 proposal as before, and a dealt one with its skill", () =>
+    Effect.gen(function* () {
+      const { design, sql, lead, fs, path, workspaceRoot } = yield* makeHarness({
+        chooseDesign: true,
+      });
+      const designFile = path.join(workspaceRoot, DESIGN_FILE);
+      const old = directionBefore("Ledger");
+      const raw = {
+        directions: [
+          old,
+          {
+            ...old,
+            name: "Newer",
+            motion: "spin",
+            composition: "bento",
+            copy: { brand: "Ledger" },
+          },
+        ],
+        proposedAt: "2026-01-01T00:00:00.000Z",
+      };
+      const proposal = JSON.stringify(raw);
+      yield* sql`INSERT INTO ozone_design_proposals (thread_id, proposal_json, updated_at)
+        VALUES (${lead.threadId}, ${proposal}, '2026-01-01T00:00:00.000Z')`;
+      const stored = yield* design.pending(lead.threadId);
+      assert.strictEqual(stored?.directions[1]?.motion, undefined);
+      assert.strictEqual(stored?.directions[1]?.copy, undefined);
+      assert.strictEqual(stored?.directions[1]?.composition, "bento");
+      // A client reads the same row inside the build snapshot, and keeps the build.
+      const snapshot = yield* decodeSnapshot({
+        build: null,
+        status: "planning",
+        design: raw,
+      });
+      assert.strictEqual(snapshot.design?.directions[1]?.motion, undefined);
+      assert.strictEqual(snapshot.design?.directions[1]?.copy, undefined);
+      assert.strictEqual(snapshot.design?.directions[1]?.composition, "bento");
+      yield* design.answer(lead.threadId, 0);
+      assert.strictEqual(
+        yield* fs.readFileString(designFile),
+        [
+          "# Design: Ledger",
+          "",
+          "Ledger, done well.",
+          "",
+          "The user picked this look in Ozone. Every page follows it.",
+          "",
+          "## Colours",
+          "",
+          "| Role | Hex |",
+          "| --- | --- |",
+          "| Background | `#14110f` |",
+          "| Surface: cards, inputs, raised areas | `#3a2a20` |",
+          "| Text | `#efe6d8` |",
+          "| Muted text | `#8a7f74` |",
+          "| Accent: buttons and links | `#d98e3b` |",
+          "| Text on the accent | `#14110f` |",
+          "",
+          "These are the main theme. Make the other theme from the same colours, and keep the accent readable on both.",
+          "",
+          "## Type",
+          "",
+          "- Display: Fraunces (serif)",
+          "- Body: Work Sans (sans)",
+          "",
+          "Load both from `@fontsource` packages.",
+          "",
+          "## First screen",
+          "",
+          "A full-width hero with one button.",
+          "",
+          "## Mood",
+          "",
+          "warm",
+          "",
+        ].join("\n"),
+      );
+
+      // The deal stores nothing, and puts every dealt skill in the app for the lead to read. This
+      // workspace has no skills, as an app from before 1.9.0, whose lint gate checks everything.
+      const seeds = yield* design.deal(lead.threadId, { kind: "place", trade: "cafe" });
+      assert.isNull(yield* design.pending(lead.threadId));
+      for (const seed of seeds) {
+        const folder = path.join(workspaceRoot, ".agents", "skills", seed.skill);
+        assert.isTrue(yield* fs.exists(path.join(folder, "SKILL.md")), seed.skill);
+        assert.isTrue(yield* fs.exists(path.join(folder, "LICENSE")), seed.skill);
+      }
+      const agents = path.join(workspaceRoot, ".agents");
+      for (const entry of yield* fs.readDirectory(agents, { recursive: true })) {
+        if ((yield* fs.stat(path.join(agents, entry))).type !== "File") continue;
+        assert.match(
+          entry.split(path.sep).join("/"),
+          /\/(?:SKILL\.md|LICENSE|agents\/openai\.yaml)$/,
+        );
+      }
+      yield* design.propose(
+        lead.threadId,
+        seeds.map((seed, index) => direction(`Dealt ${index + 1}`, seed.skill)),
+      );
+      yield* design.answer(lead.threadId, 1);
+      const written = yield* fs.readFileString(designFile);
+      assert.include(written, "## Follow");
+      assert.include(written, `\`.agents/skills/${seeds[1]?.skill}/SKILL.md\` for layout`);
+      assert.include(written, `rules of \`${seeds[1]?.skill}\` do not apply`);
+
+      // An API has no pages: no deal, no directions, and no skills copied into it.
+      const api = yield* makeHarness({ chooseDesign: true }, "api-service");
+      const notDealt = yield* Effect.flip(api.design.deal(api.lead.threadId, { kind: "software" }));
+      assert.strictEqual(notDealt.message, NO_PAGES);
+      const notShown = yield* Effect.flip(
+        api.design.propose(api.lead.threadId, [direction("Calm"), direction("Loud", "gpt-taste")]),
+      );
+      assert.strictEqual(notShown.message, NO_PAGES);
+      assert.isFalse(yield* api.fs.exists(api.path.join(api.workspaceRoot, ".agents")));
+      // So the setting, if it was turned on anyway, never holds the API's plan back.
+      assert.strictEqual(
+        (yield* api.conductor.plan(api.lead, plan(task("route")))).next,
+        NEXT.planned,
+      );
     }).pipe(Effect.provide(layerTest)),
   );
 

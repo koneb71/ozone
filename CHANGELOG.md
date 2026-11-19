@@ -5,6 +5,18 @@ What changed in each release of Ozone, newest first. Downloads are on the
 
 ## Unreleased
 
+### Added
+
+- New web apps and landing pages get four more design skills, so Pick the design can offer looks
+  from editorial calm to hard brutalist.
+
+### Changed
+
+- Pick the design offers three directions that each come from a different design skill and show
+  your app's first screen in its real fonts, layout and 3D motion. Open one to see it large and step
+  through them with the arrow keys. The motion you pick is built into the app, with a still version
+  for reduced motion.
+
 ## 1.9.0 - 2026-11-19
 
 ### Added
