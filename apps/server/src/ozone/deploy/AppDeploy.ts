@@ -1,12 +1,20 @@
 import {
   OZONE_DEPLOY_WEBHOOK_PATH,
+  OZONE_MANIFEST_FILE_NAME,
   OzoneAppError,
   OzoneDeployTarget,
   OzoneDeployment,
+  OzoneRemovedDeployment,
   type OzoneDataRestoreInput,
   type OzoneDataRestoreResult,
   type OzoneDataSnapshotInput,
   type OzoneDeployHistoryResult,
+  type OzoneDeployPlace,
+  type OzoneDeploymentRemoveInput,
+  type OzoneDeploymentRemoveResult,
+  type OzoneDeploymentRow,
+  type OzoneDeploymentsListInput,
+  type OzoneDeploymentsListResult,
   type OzoneDeployLogsInput,
   type OzoneDeployMetrics,
   type OzoneDeployRollbackInput,
@@ -28,6 +36,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
@@ -35,6 +44,7 @@ import * as Scope from "effect/Scope";
 import * as ServerConfig from "../../config.ts";
 import type { ResolvedApp } from "../apps/AppRegistry.ts";
 import * as AppRegistry from "../apps/AppRegistry.ts";
+import { DELETED_RECORD_FILE, decodeDeletedRecord } from "../apps/deletedApp.ts";
 import * as BuildRepo from "../builds/BuildRepo.ts";
 import * as AppData from "../data/AppData.ts";
 import {
@@ -55,15 +65,26 @@ import { failed } from "../errors.ts";
 import * as AppServers from "./AppServers.ts";
 import * as DokployDeploy from "./DokployDeploy.ts";
 import * as HostedDeploy from "./HostedDeploy.ts";
-import { historyEntries, withDeployment } from "./deployments.ts";
+import {
+  coveredVolumes,
+  HISTORY_LIMIT,
+  HOST_DASHBOARD,
+  historyEntries,
+  parseProbe,
+  type ProdFound,
+  probeArgs,
+  stateOf,
+  withDeployment,
+} from "./deployments.ts";
 import { containerMetrics, parseComposePs } from "./metrics.ts";
 import * as Notifier from "./Notifier.ts";
+import * as SavedServers from "./SavedServers.ts";
 import { proxyNetworkDeclaration, routeOverride } from "./proxy.ts";
 
 /**
  * Runs an app's production image where people can reach it: on this machine, or on a Docker host
  * over SSH. It is a Compose project of its own, with a database of its own, so development data
- * is never touched and nothing here removes a volume.
+ * is never touched. Only a person's Delete deployment removes its volume, after a snapshot.
  */
 export class AppDeploy extends Context.Service<
   AppDeploy,
@@ -120,6 +141,20 @@ export class AppDeploy extends Context.Service<
     /** The production containers' logs. */
     readonly logs: (input: OzoneDeployLogsInput) => Effect.Effect<string, OzoneAppError>;
     readonly metrics: (projectId: ProjectId) => Effect.Effect<OzoneDeployMetrics, OzoneAppError>;
+    /**
+     * Every deployment on record, of registered and deleted apps, where they run now and where they
+     * ran before, with what each place holds now. Servers are not searched for anything else.
+     */
+    readonly deployments: (
+      input: OzoneDeploymentsListInput,
+    ) => Effect.Effect<OzoneDeploymentsListResult, OzoneAppError>;
+    /**
+     * Deletes a deployment Ozone runs: a snapshot of its data kept on this machine first, then its
+     * containers, images and the volumes that snapshot holds. Runs to its end, whoever was waiting.
+     */
+    readonly removeDeployment: (
+      input: OzoneDeploymentRemoveInput,
+    ) => Effect.Effect<OzoneDeploymentRemoveResult, OzoneAppError>;
   }
 >()("t3/ozone/deploy/AppDeploy") {}
 
@@ -143,13 +178,20 @@ const DeployFile = Schema.fromJsonString(
   Schema.Struct({
     secrets: Schema.Struct({ authSecret: Schema.String, dbPassword: Schema.String }),
     last: Schema.NullOr(DeployRecord),
-    /** Where the app was deployed before, one record per place. Their volumes are still there. */
+    /**
+     * Where the app was deployed before, one record per place. Their volumes are there until a
+     * person deletes that deployment.
+     */
     previous: Schema.Array(DeployRecord).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
     /** Oldest first. */
     history: Schema.Array(OzoneDeployment).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
     /** The secret part of the URL that redeploys the app. Null: no such URL. */
     webhookToken: Schema.NullOr(Schema.String).pipe(
       Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    ),
+    /** Deployments a person deleted, oldest first. */
+    removed: Schema.Array(OzoneRemovedDeployment).pipe(
+      Schema.withDecodingDefaultKey(Effect.succeed([])),
     ),
   }),
 );
@@ -258,7 +300,7 @@ const prodOverride = (input: {
 /** The host without its user and port: `deploy@example.com:2222` is reached at `example.com`. */
 const hostName = (host: string) => host.replace(/^[^@]*@/, "").replace(/:\d+$/, "");
 /** Whether two targets are the same place, whose volumes are the same data. */
-const samePlace = (left: OzoneDeployTarget, right: OzoneDeployTarget) =>
+const samePlace = (left: OzoneDeployPlace, right: OzoneDeployPlace) =>
   left.host === right.host && left.dokploy === right.dokploy && left.hosted === right.hosted;
 /** What Ozone cannot do for an app Dokploy runs. */
 const onDokploy = (what: string) =>
@@ -284,6 +326,7 @@ const make = Effect.gen(function* () {
   const config = yield* ServerConfig.ServerConfig;
   const random = yield* SecureRandom.SecureRandom;
   const hostEnvironment = yield* HostProcess.Environment;
+  const saved = yield* SavedServers.SavedServers;
 
   const variablesOn = Effect.fn("AppDeploy.variablesOn")(function* (
     app: ResolvedApp,
@@ -299,10 +342,13 @@ const make = Effect.gen(function* () {
   const failures = new Map<ProjectId, string>();
   /** What the last deploy's migrate step held back, until a deploy runs it. */
   const heldBack = new Map<ProjectId, MigrationReport>();
+  /** Deployments being deleted, by app slug: nothing else touches that app's production meanwhile. */
+  const removing = new Map<string, string>();
 
-  const directoryOf = (app: ResolvedApp) =>
-    path.join(config.stateDir, "ozone", "apps", app.app.slug);
-  const fileOf = (app: ResolvedApp) => path.join(directoryOf(app), "deploy.json");
+  const appsDirectory = path.join(config.stateDir, "ozone", "apps");
+  const directoryOfSlug = (slug: string) => path.join(appsDirectory, slug);
+  const fileOfSlug = (slug: string) => path.join(directoryOfSlug(slug), "deploy.json");
+  const directoryOf = (app: ResolvedApp) => directoryOfSlug(app.app.slug);
   const outputOf = (app: ResolvedApp, deploymentId: string) =>
     path.join(directoryOf(app), "deploys", `${deploymentId.replace(/[^\w-]/g, "")}.log`);
   const portOf = (app: ResolvedApp) => app.app.port + PROD_PORT_OFFSET;
@@ -316,37 +362,41 @@ const make = Effect.gen(function* () {
    * The saved settings, or null before the first deploy. A file that exists but cannot be read
    * stops everything: it holds the password the production database was created with.
    */
-  const readRecord = (app: ResolvedApp) =>
-    fs.readFileString(fileOf(app)).pipe(
+  const readRecordOf = (slug: string) =>
+    fs.readFileString(fileOfSlug(slug)).pipe(
       Effect.map((json): string | null => json),
       Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(null)),
       Effect.flatMap((json) => (json === null ? Effect.succeed(null) : decodeDeployFile(json))),
       Effect.mapError(() =>
         failed(
-          `Ozone could not read ${fileOf(app)}, which holds the production database's password. Restore that file before deploying again.`,
+          `Ozone could not read ${fileOfSlug(slug)}, which holds the production database's password. Restore that file before deploying again.`,
         ),
       ),
     );
-  const writeRecord = Effect.fn("AppDeploy.writeRecord")(
-    function* (app: ResolvedApp, file: DeployFile) {
+  const readRecord = (app: ResolvedApp) => readRecordOf(app.app.slug);
+  const writeRecordOf = Effect.fn("AppDeploy.writeRecord")(
+    function* (slug: string, file: DeployFile) {
       const json = yield* encodeDeployFile(file);
-      const temporary = `${fileOf(app)}.tmp`;
-      yield* fs.makeDirectory(directoryOf(app), { recursive: true });
+      const temporary = `${fileOfSlug(slug)}.tmp`;
+      yield* fs.makeDirectory(directoryOfSlug(slug), { recursive: true });
       // Written whole and then renamed, so a crash never leaves half a password file.
       yield* fs.writeFileString(temporary, json, { mode: ENV_FILE_MODE });
       yield* fs.chmod(temporary, ENV_FILE_MODE);
-      yield* fs.rename(temporary, fileOf(app));
+      yield* fs.rename(temporary, fileOfSlug(slug));
     },
     Effect.mapError(() => failed("Ozone could not save the deploy's settings.")),
   );
+  const writeRecord = (app: ResolvedApp, file: DeployFile) => writeRecordOf(app.app.slug, file);
   /** Changes the saved settings of an app that has them. */
-  const updateRecord = Effect.fn("AppDeploy.updateRecord")(function* (
-    app: ResolvedApp,
+  const updateRecordOf = Effect.fn("AppDeploy.updateRecord")(function* (
+    slug: string,
     change: (file: DeployFile) => DeployFile,
   ) {
-    const stored = yield* readRecord(app);
-    if (stored !== null) yield* writeRecord(app, change(stored));
+    const stored = yield* readRecordOf(slug);
+    if (stored !== null) yield* writeRecordOf(slug, change(stored));
   });
+  const updateRecord = (app: ResolvedApp, change: (file: DeployFile) => DeployFile) =>
+    updateRecordOf(app.app.slug, change);
   const newSecret = Effect.map(Effect.all([random.uuidV4(), random.uuidV4()]), (parts) =>
     parts.join("").replaceAll("-", ""),
   );
@@ -732,6 +782,7 @@ const make = Effect.gen(function* () {
       previous: stored?.previous ?? [],
       history,
       webhookToken: stored?.webhookToken ?? null,
+      removed: stored?.removed ?? [],
     });
     yield* dropOldOutput(app, history);
     yield* options.note(
@@ -952,7 +1003,8 @@ const make = Effect.gen(function* () {
     yield* startApp(app, prod);
     yield* succeeded(url, snapshotId);
     if (from !== null) {
-      // Two live copies of the same data would drift apart. The old volume stays where it is.
+      // Two live copies of the same data would drift apart. The old volume stays there until a
+      // person deletes that deployment.
       yield* step(`Stopping the deploy on ${placeOf(from.target)}.`);
       yield* withDeployed(app, from, (old) => old.compose(["stop"])).pipe(Effect.ignore);
     }
@@ -981,6 +1033,7 @@ const make = Effect.gen(function* () {
     const app = yield* registry.resolve(input.projectId);
     if (inFlight.has(input.projectId))
       return yield* failed("A deploy of this app is already running.");
+    if (removing.has(app.app.slug)) return yield* failed(removing.get(app.app.slug) ?? "");
     const hasProdFile = yield* fs
       .exists(path.join(app.workspaceRoot, PROD_COMPOSE_FILE))
       .pipe(Effect.orElseSucceed(() => false));
@@ -1059,6 +1112,8 @@ const make = Effect.gen(function* () {
     });
   const deployed = Effect.fn("AppDeploy.deployed")(function* (projectId: ProjectId) {
     const app = yield* registry.resolve(projectId);
+    const deleting = removing.get(app.app.slug);
+    if (deleting !== undefined) return yield* failed(deleting);
     const record = yield* readRecord(app);
     const last = record?.last ?? null;
     if (record === null || last === null) return yield* failed("This app has not been deployed.");
@@ -1076,6 +1131,363 @@ const make = Effect.gen(function* () {
     return yield* deploy(
       { projectId, target: last.target, ...(acceptMigrations ? { acceptMigrations } : {}) },
       { trigger },
+    );
+  });
+
+  /** What is left of a deleted app beside its snapshots, or null. */
+  const deletedRecordOf = (slug: string) =>
+    fs
+      .readFileString(
+        path.join(AppData.backupFolder(path, config.stateDir, slug), DELETED_RECORD_FILE),
+      )
+      .pipe(
+        Effect.flatMap(decodeDeletedRecord),
+        Effect.orElseSucceed(() => null),
+      );
+
+  /** The app a deployment on record belongs to: registered, or deleted with its folder kept. */
+  const appOfSlug = Effect.fn("AppDeploy.appOfSlug")(function* (slug: string) {
+    const registered = (yield* registry.list).find((app) => app.slug === slug);
+    if (registered !== undefined) return yield* registry.resolve(registered.projectId);
+    const deleted = yield* deletedRecordOf(slug);
+    if (deleted === null) {
+      return yield* failed(
+        "Ozone no longer knows where this app's folder is. Bring the app back from Home first.",
+      );
+    }
+    const manifest = yield* AppRegistry.readAppManifest(deleted.workspaceRoot).pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(Path.Path, path),
+      Effect.mapError(() =>
+        failed(
+          `The app's folder at ${deleted.workspaceRoot} is gone, so Ozone cannot save its data first. Nothing was removed.`,
+        ),
+      ),
+    );
+    return { app: deleted.app, workspaceRoot: deleted.workspaceRoot, manifest } as ResolvedApp;
+  });
+
+  /** The part of a failed Docker call a person can act on: SSH's own words when it failed. */
+  const machineProblem = (output: { readonly stdout: string; readonly stderr: string }) => {
+    const said = output.stderr.trim() || output.stdout.trim();
+    const fromSsh = /stderr=(.+)$/s.exec(said)?.[1]?.trim();
+    return (fromSsh ?? said).slice(-300);
+  };
+  /** What one machine holds of each app's production project, or why it did not answer. */
+  const probe = Effect.fn("AppDeploy.probe")(function* (
+    host: string | null,
+    slugs: ReadonlyArray<string>,
+  ) {
+    const args = probeArgs(host === null ? [] : ["-H", `ssh://${host}`], slugs);
+    const ask = (argv: ReadonlyArray<string>) =>
+      docker.run({ args: argv, timeout: Duration.seconds(20) }).pipe(
+        Effect.mapError((error) => error.detail),
+        Effect.flatMap((output) =>
+          output.code === 0 && !output.timedOut
+            ? Effect.succeed(output.stdout)
+            : Effect.fail(output.timedOut ? "It did not answer in time." : machineProblem(output)),
+        ),
+      );
+    const [containers, volumes] = yield* Effect.all([ask(args.containers), ask(args.volumes)]);
+    return parseProbe(slugs, { containers, volumes });
+  });
+
+  /** The files production was started from, or the app's own when that commit cannot be read. */
+  const filesFor = Effect.fn("AppDeploy.filesFor")(function* (
+    app: ResolvedApp,
+    record: DeployRecord,
+  ) {
+    if (record.commitSha !== null) {
+      const exported = yield* exportCommit(app, record.commitSha).pipe(Effect.option);
+      if (Option.isSome(exported)) return exported.value;
+    }
+    const hasProdFile = yield* fs
+      .exists(path.join(app.workspaceRoot, PROD_COMPOSE_FILE))
+      .pipe(Effect.orElseSucceed(() => false));
+    if (!hasProdFile) {
+      return yield* failed(
+        `Ozone could not find the app's ${PROD_COMPOSE_FILE}, so it cannot save its data first. Nothing was removed.`,
+      );
+    }
+    return app.workspaceRoot;
+  });
+
+  const deploymentsOf = Effect.fn("AppDeploy.deployments")(function* (
+    input: OzoneDeploymentsListInput,
+  ) {
+    const registered = yield* registry.list;
+    const bySlug = new Map(registered.map((app) => [app.slug, app]));
+    const only =
+      input.projectId === undefined
+        ? undefined
+        : registered.find((app) => app.projectId === input.projectId)?.slug;
+    if (input.projectId !== undefined && only === undefined) return { deployments: [] };
+    const slugs =
+      only === undefined
+        ? yield* fs.readDirectory(appsDirectory).pipe(Effect.orElseSucceed(() => []))
+        : [only];
+    const savedServers = (yield* saved.list.pipe(Effect.orElseSucceed(() => ({ servers: [] }))))
+      .servers;
+
+    const known = yield* Effect.forEach(slugs, (slug) =>
+      readRecordOf(slug).pipe(
+        Effect.catch((error) =>
+          Effect.logWarning(`Ozone skipped a deploy record: ${error.message}`).pipe(
+            Effect.as(null),
+          ),
+        ),
+        Effect.flatMap((file) =>
+          file === null || (file.last === null && file.previous.length === 0)
+            ? Effect.succeed([])
+            : Effect.gen(function* () {
+                const app = bySlug.get(slug);
+                const deleted = app === undefined ? yield* deletedRecordOf(slug) : null;
+                const folderKept =
+                  deleted !== null &&
+                  (yield* fs
+                    .exists(path.join(deleted.workspaceRoot, OZONE_MANIFEST_FILE_NAME))
+                    .pipe(Effect.orElseSucceed(() => false)));
+                const owner = {
+                  slug,
+                  appName: app?.name ?? deleted?.app.name ?? slug,
+                  projectId: app?.projectId ?? null,
+                  // Why it cannot be deleted from here whatever runs there, or null.
+                  blocked:
+                    app !== undefined || folderKept
+                      ? null
+                      : deleted === null
+                        ? "Ozone no longer knows where this app's folder is. Bring the app back from Home first."
+                        : "The app's folder is gone, so Ozone cannot save its data first.",
+                };
+                return [
+                  ...(file.last === null ? [] : [{ ...owner, record: file.last, current: true }]),
+                  ...file.previous.map((record) => ({ ...owner, record, current: false })),
+                ];
+              }),
+        ),
+      ),
+    ).pipe(Effect.map((groups) => groups.flat()));
+
+    // Each machine is asked once, for all its apps, and one that does not answer marks only its own.
+    const machines = [
+      ...new Set(
+        known
+          .filter((entry) => !runsElsewhere(entry.record.target))
+          .map((entry) => entry.record.target.host),
+      ),
+    ];
+    interface Probed {
+      readonly found: ReadonlyMap<string, ProdFound> | null;
+      readonly problem: string | null;
+    }
+    const probed = new Map<string | null, Probed>(
+      yield* Effect.forEach(
+        machines,
+        (host) =>
+          probe(
+            host,
+            known
+              .filter(
+                (entry) => !runsElsewhere(entry.record.target) && entry.record.target.host === host,
+              )
+              .map((entry) => entry.slug),
+          ).pipe(
+            Effect.map((found): readonly [string | null, Probed] => [
+              host,
+              { found, problem: null },
+            ]),
+            Effect.catch((problem) =>
+              Effect.succeed<readonly [string | null, Probed]>([
+                host,
+                { found: null, problem: String(problem) },
+              ]),
+            ),
+          ),
+        { concurrency: 4 },
+      ),
+    );
+
+    const deployments = known.map(({ record, current, blocked, ...owner }): OzoneDeploymentRow => {
+      const { target } = record;
+      const dokployServer =
+        target.dokploy === null
+          ? undefined
+          : savedServers.find((server) => server.id === target.dokploy);
+      const hostServer =
+        target.hosted === null
+          ? undefined
+          : savedServers.find((server) => server.id === target.hosted);
+      const sshServer =
+        target.host === null
+          ? undefined
+          : savedServers.find((server) => server.kind === "ssh" && server.host === target.host);
+      const placeLabel =
+        target.dokploy !== null
+          ? (dokployServer?.name ?? "Dokploy")
+          : target.hosted !== null
+            ? (hostServer?.name ?? "A hosting platform")
+            : target.host === null
+              ? "This computer"
+              : (sshServer?.name ?? hostName(target.host));
+      const base = {
+        ...owner,
+        place: { host: target.host, dokploy: target.dokploy, hosted: target.hosted },
+        placeLabel,
+        serverId: target.dokploy ?? target.hosted ?? sshServer?.id ?? null,
+        current,
+        url: record.url,
+        domain: target.domain,
+        commitSha: record.commitSha,
+        deployedAt: record.deployedAt,
+        manageUrl:
+          dokployServer?.kind === "dokploy"
+            ? dokployServer.url
+            : hostServer?.kind === "host"
+              ? HOST_DASHBOARD[hostServer.provider]
+              : null,
+      };
+      if (runsElsewhere(target)) {
+        return {
+          ...base,
+          state: "elsewhere",
+          detail: null,
+          removable: false,
+          whyNot: `Ozone does not delete what ${target.dokploy !== null ? "Dokploy" : "a hosting platform"} runs. Delete it there.`,
+        };
+      }
+      const busy =
+        removing.get(owner.slug) ??
+        (owner.projectId === null ? undefined : inFlight.get(owner.projectId));
+      if (busy !== undefined) {
+        return { ...base, state: "busy", detail: busy, removable: false, whyNot: busy };
+      }
+      const machine = probed.get(target.host);
+      if (machine === undefined || machine.found === null) {
+        const detail = `Ozone could not reach ${placeLabel}: ${machine?.problem ?? "no answer"}`;
+        return { ...base, state: "unreachable", detail, removable: false, whyNot: detail };
+      }
+      const state = stateOf(machine.found.get(owner.slug) ?? { containerStates: [], volumes: [] });
+      return { ...base, state, detail: null, removable: blocked === null, whyNot: blocked };
+    });
+    return {
+      deployments: deployments.toSorted(
+        (left, right) =>
+          left.appName.localeCompare(right.appName) || Number(right.current) - Number(left.current),
+      ),
+    };
+  });
+
+  const removeDeployment = Effect.fn("AppDeploy.removeDeployment")(function* (
+    input: OzoneDeploymentRemoveInput,
+  ) {
+    const { slug } = input;
+    const record = yield* readRecordOf(slug);
+    const entry = [
+      ...(record?.last === null || record === null ? [] : [record.last]),
+      ...(record?.previous ?? []),
+    ].find((known) => samePlace(known.target, input.place));
+    if (entry === undefined) return yield* failed("Ozone has no deployment of this app there.");
+    if (entry.target.dokploy !== null) {
+      return yield* failed("Ozone does not delete what Dokploy runs. Delete it in Dokploy.");
+    }
+    if (entry.target.hosted !== null) {
+      return yield* failed(
+        "Ozone does not delete what a hosting platform runs. Delete it on the host.",
+      );
+    }
+    const app = yield* appOfSlug(slug);
+    const where = placeOf(entry.target);
+    const doing = `Deleting the deployment on ${where}.`;
+    const isRegistered = (yield* registry.list).some(
+      (known) => known.projectId === app.app.projectId,
+    );
+
+    const work = Effect.gen(function* () {
+      const found = yield* probe(entry.target.host, [slug]).pipe(
+        Effect.mapError((problem) =>
+          failed(`Ozone could not reach ${where}, so nothing was removed. ${problem}`),
+        ),
+      );
+      const here = found.get(slug) ?? { containerStates: [], volumes: [] };
+      const covered = coveredVolumes(slug, app.manifest.data.services, here.volumes);
+      const snapshot = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const prod = yield* production(app, entry.target, yield* filesFor(app, entry));
+          const kept =
+            covered.length === 0
+              ? null
+              : yield* data.snapshotOf(prod.dataTarget(entry.commitSha), {
+                  reason: "before-delete",
+                  label: `Before deleting the deployment on ${where}`,
+                });
+          yield* prod
+            .run(
+              "Docker could not remove the containers",
+              ["down", "--remove-orphans", "--rmi", "local"],
+              STEP_TIMEOUT,
+            )
+            .pipe(
+              Effect.mapError((error) =>
+                kept === null
+                  ? error
+                  : failed(`The data is saved as snapshot ${kept.id}, but ${error.message}`),
+              ),
+            );
+          return kept;
+        }),
+      );
+      if (covered.length > 0) {
+        const output = yield* docker
+          .run({
+            args: [...hostArgsOf(entry.target), "volume", "rm", ...covered],
+            allowDataRemoval: true,
+            timeout: STEP_TIMEOUT,
+          })
+          .pipe(Effect.mapError((error) => failed(error.detail)));
+        if (output.code !== 0 || output.timedOut) {
+          return yield* failed(
+            `The data is saved as snapshot ${snapshot?.id ?? ""}, but Docker could not remove its volume: ${(output.stderr.trim() || output.stdout.trim()).slice(-OUTPUT_TAIL)}`,
+          );
+        }
+      }
+      const removedAt = DateTime.formatIso(yield* DateTime.now);
+      const clearsLast = record?.last != null && samePlace(record.last.target, entry.target);
+      yield* updateRecordOf(slug, (file) => ({
+        ...file,
+        last: clearsLast ? null : file.last,
+        previous: file.previous.filter((known) => !samePlace(known.target, entry.target)),
+        webhookToken: clearsLast ? null : file.webhookToken,
+        removed: [
+          ...file.removed,
+          { target: entry.target, removedAt, snapshotId: snapshot?.id ?? null },
+        ].slice(-HISTORY_LIMIT),
+      }));
+      if (clearsLast) {
+        failures.delete(app.app.projectId);
+        heldBack.delete(app.app.projectId);
+      }
+      // It holds a copy of production's secrets, and nothing Ozone runs reads it any more.
+      const after = yield* readRecordOf(slug);
+      const ozoneRunsMore = [after?.last ?? null, ...(after?.previous ?? [])].some(
+        (known) => known !== null && !runsElsewhere(known.target),
+      );
+      if (!ozoneRunsMore) yield* fs.remove(overridePathOf(app)).pipe(Effect.ignore);
+      return {
+        snapshot,
+        keptVolumes: here.volumes.filter((name) => !covered.includes(name)),
+      };
+    });
+
+    return yield* toTheEnd(
+      Effect.suspend(() => {
+        if (removing.has(slug)) {
+          return Effect.fail(failed("This deployment is already being deleted."));
+        }
+        removing.set(slug, doing);
+        return (isRegistered ? claim(app.app.projectId, doing, work) : work).pipe(
+          Effect.ensuring(Effect.sync(() => removing.delete(slug))),
+        );
+      }),
     );
   });
 
@@ -1157,7 +1569,7 @@ const make = Effect.gen(function* () {
     history: Effect.fn("AppDeploy.history")(function* (projectId) {
       const app = yield* registry.resolve(projectId);
       const record = yield* readRecord(app);
-      if (record === null) return { deployments: [] };
+      if (record === null) return { deployments: [], removed: [] };
       const snapshots = yield* data.listOf({
         projectId,
         folder: path.join(app.app.slug, "production"),
@@ -1169,6 +1581,7 @@ const make = Effect.gen(function* () {
           snapshotIds: new Set(snapshots.map((snapshot) => snapshot.id)),
           inFlight: inFlight.has(projectId),
         }),
+        removed: record.removed.toReversed(),
       };
     }),
     output: Effect.fn("AppDeploy.output")(function* (projectId, deploymentId) {
@@ -1224,7 +1637,7 @@ const make = Effect.gen(function* () {
         if (resolved._tag === "None") continue;
         const record = yield* readRecord(resolved.value).pipe(Effect.orElseSucceed(() => null));
         if (record?.webhookToken !== token || record.last === null) continue;
-        if (inFlight.has(app.projectId)) return "busy" as const;
+        if (inFlight.has(app.projectId) || removing.has(app.slug)) return "busy" as const;
         yield* Effect.forkIn(redeploy(app.projectId, "webhook").pipe(Effect.ignore), scope);
         return "started" as const;
       }
@@ -1274,6 +1687,8 @@ const make = Effect.gen(function* () {
         .pipe(Effect.mapError((error) => failed(error.detail)));
       return `${output.stdout}${output.stderr}`;
     }),
+    deployments: deploymentsOf,
+    removeDeployment,
     metrics: Effect.fn("AppDeploy.metrics")(function* (projectId) {
       const { app, last } = yield* deployed(projectId);
       if (last.target.dokploy !== null) return yield* onDokploy("Monitoring");

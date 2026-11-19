@@ -56,6 +56,8 @@ it as read, and see how many are left to read." This is the app it built:
     each new version takes over without the app going down.
   - **Deployments** lists every deploy with its output, and rolls back to any of them, with the
     data from then if you ask.
+  - **Servers** lists every app Ozone deployed, deleted apps included, and whether it still runs.
+    **Delete deployment** removes one from this computer or a server, after saving its data here.
   - **Monitoring** shows each container's CPU, memory and network, and its logs. **Set up** checks
     a server, installs Docker there if it has none, and starts the proxy.
   - A **Dokploy** server, or a **Railway**, **Render**, **Koyeb** or **Vercel** account, can run the

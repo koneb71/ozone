@@ -339,10 +339,10 @@ it.effect("OzoneApps deletes an app behind a snapshot, and can bring it back", (
     assert.deepStrictEqual(yield* Ref.get(removal), []);
     yield* Ref.set(backupFails, false);
 
-    // Deleted, Ozone could no longer reach its production: that is stopped first.
+    // A running deployment is stopped or deleted first.
     yield* Ref.set(deployedState, "running");
     const deployed = yield* Effect.flip(apps.remove({ projectId }));
-    assert.include(deployed.message, "Stop it under Deploy first");
+    assert.include(deployed.message, "Stop it or delete the deployment under Deploy first");
     assert.deepStrictEqual(yield* Ref.get(removal), []);
     yield* Ref.set(deployedState, "none");
 

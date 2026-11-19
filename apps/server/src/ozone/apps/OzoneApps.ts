@@ -43,6 +43,12 @@ import * as AppRuntime from "../runtime/AppRuntime.ts";
 import { failed } from "../errors.ts";
 import * as AppRegistry from "./AppRegistry.ts";
 import { appSlug, safeAppName, scaffold } from "./AppScaffolder.ts";
+import {
+  DELETED_RECORD_FILE,
+  type DeletedRecord,
+  decodeDeletedRecord,
+  encodeDeletedRecord,
+} from "./deletedApp.ts";
 import { DEFAULT_TEMPLATE_ID, TEMPLATES, findTemplate, templateFiles } from "./templates.ts";
 
 export class OzoneApps extends Context.Service<
@@ -75,17 +81,6 @@ export class OzoneApps extends Context.Service<
 const APP_PORT_RANGE = { first: 41_000, last: 41_999 } as const;
 const FALLBACK_USER_ID = 1_000;
 
-/** Kept beside a deleted app's snapshots: what it takes to register it again. */
-const DELETED_RECORD_FILE = "app.json";
-const DeletedRecord = Schema.Struct({
-  app: OzoneApp,
-  workspaceRoot: Schema.String,
-  deletedAt: Schema.NullOr(Schema.String),
-});
-type DeletedRecord = typeof DeletedRecord.Type;
-const DeletedRecordJson = Schema.fromJsonString(DeletedRecord);
-const decodeDeletedRecord = Schema.decodeUnknownEffect(DeletedRecordJson);
-const encodeDeletedRecord = Schema.encodeEffect(DeletedRecordJson);
 /** Whose data a snapshot holds, which is all an app deleted without a record left of itself. */
 const decodeSnapshotOwner = Schema.decodeUnknownEffect(
   Schema.fromJsonString(Schema.Struct({ snapshot: Schema.Struct({ projectId: ProjectId }) })),
@@ -393,11 +388,12 @@ export const make = Effect.gen(function* () {
 
   const remove = Effect.fn("OzoneApps.removeApp")(function* (projectId: ProjectId) {
     const { app, workspaceRoot } = yield* registry.resolve(projectId);
-    // Deleted, Ozone could no longer reach what it deployed. Stopped, production waits unharmed.
+    // A running deployment is the person's to stop or delete first. One left stopped keeps its data,
+    // and stays listed with the deleted app in Settings, Servers, where it can be deleted later.
     const production = yield* deploys.status(projectId);
     if (production.state === "running" || production.state === "deploying") {
       return yield* failed(
-        `${app.name} is deployed and running. Stop it under Deploy first; its production data stays where it is.`,
+        `${app.name} is deployed and running. Stop it or delete the deployment under Deploy first.`,
       );
     }
     const { snapshot } = yield* data.remove(projectId);

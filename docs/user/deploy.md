@@ -101,6 +101,25 @@ GitHub under **Settings**, **Source control** first.
   to any of them, with the data from then if you ask.
 - **Monitoring** shows each container's CPU, memory, network and logs when Ozone runs them.
 - **Stop production** takes the app offline and keeps its data for the next deploy.
+- **Delete deployment**, in the menu beside it, removes production from where it runs. See below.
 - **Deploy from a script** gives the app a URL that redeploys it when called.
 - **Notifications** tells Slack, Discord, Telegram or any webhook how each deploy went.
 - **Build** can deploy by itself whenever a build completes.
+
+## See and delete deployments
+
+**Settings**, **Servers** lists every app Ozone deployed: where it runs now, where it ran before,
+and apps you deleted from Ozone whose deployment is still out there. Each one shows whether it is
+running, stopped, or only has its data left. **Check again** asks each machine once more.
+
+To take one down for good, open its menu and choose **Delete deployment**. Ozone first saves a
+snapshot of its production data to this computer, then removes its containers, its images and its
+database there. The snapshot is kept: deploy to that place again and restore it under **Data** to
+bring the app back as it was. An app's Deploy page offers the same for where it runs and where it
+ran before.
+
+- Ozone deletes only what it runs itself, on this computer or a server. A deployment on Dokploy or
+  a hosting platform is listed with a link to the host, where you delete it.
+- A server that does not answer is shown as such, and nothing is deleted there until it does.
+- Remove a server only after deleting the deployments you no longer want on it: without its key,
+  Ozone cannot reach them.

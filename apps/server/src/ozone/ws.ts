@@ -14,6 +14,8 @@ import {
   type OzoneDeployRunInput,
   type OzoneRedeployInput,
   type OzoneDeployWebhookInput,
+  type OzoneDeploymentRemoveInput,
+  type OzoneDeploymentsListInput,
   type OzoneDesignAnswerInput,
   type OzoneDesignProposal,
   type OzoneNotifyChannel,
@@ -143,6 +145,10 @@ const make = Effect.gen(function* () {
     [OZONE_WS_METHODS.deployMetrics]: (input: { readonly projectId: ProjectId }) =>
       deploys.metrics(input.projectId),
     [OZONE_WS_METHODS.deployWebhook]: (input: OzoneDeployWebhookInput) => deploys.webhook(input),
+    [OZONE_WS_METHODS.deploymentsList]: (input: OzoneDeploymentsListInput) =>
+      deploys.deployments(input),
+    [OZONE_WS_METHODS.deploymentsRemove]: (input: OzoneDeploymentRemoveInput) =>
+      deploys.removeDeployment(input),
     [OZONE_WS_METHODS.serverCheck]: (input: OzoneServerInput) => servers.check(input.host),
     [OZONE_WS_METHODS.serverSetup]: (input: OzoneServerSetupInput) => servers.setup(input),
     [OZONE_WS_METHODS.serversList]: () => saved.list,
@@ -202,6 +208,8 @@ export class OzoneWsHandlers extends Context.Reference<Effect.Success<typeof mak
       [OZONE_WS_METHODS.deployLogs]: () => notProvided,
       [OZONE_WS_METHODS.deployMetrics]: () => notProvided,
       [OZONE_WS_METHODS.deployWebhook]: () => notProvided,
+      [OZONE_WS_METHODS.deploymentsList]: () => notProvided,
+      [OZONE_WS_METHODS.deploymentsRemove]: () => notProvided,
       [OZONE_WS_METHODS.serverCheck]: () => notProvided,
       [OZONE_WS_METHODS.serverSetup]: () => notProvided,
       [OZONE_WS_METHODS.serversList]: () => notProvided,

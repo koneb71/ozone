@@ -1,27 +1,36 @@
 # Data safety
 
 Ozone must never lose an app's data. This page is the contract and the reasons behind the code
-that keeps it. Read it before changing `apps/server/src/ozone/runtime` or `apps/server/src/ozone/data`.
+that keeps it. Read it before changing `apps/server/src/ozone/runtime`, `apps/server/src/ozone/data`
+or `apps/server/src/ozone/deploy`.
 
 ## The contract
 
 1. **Data lives in named volumes.** A template's stateful service keeps its data in a named Docker
    volume labelled `ozone.data`. Nothing stateful lives in a container layer or an anonymous volume,
    so removing and recreating containers loses nothing.
-2. **One code path removes a volume, and a person starts it.** Every Docker command goes through
-   [`DockerCli`](../../apps/server/src/ozone/runtime/DockerCli.ts), which refuses `volume rm`,
-   `volume prune`, `system prune --volumes` and `compose down|rm` with `-v`. A refusal is a defect,
-   not an error to handle: reaching it means new code asked for something Ozone must not do.
-   Start, stop, restart and rebuild therefore keep the data by construction. The exception is
-   **Delete app**: `AppData.remove` takes a snapshot, removes the containers, and only then asks
-   the guard to let go of the volumes that snapshot holds. A test checks it is the only asker. The
-   Compose project is named after the app's slug, never read from its compose file: agents can edit
-   that file, and Delete app must not reach another project, such as the app's production one.
+2. **Two code paths remove a volume, and a person starts each.** Every Docker command goes
+   through [`DockerCli`](../../apps/server/src/ozone/runtime/DockerCli.ts), which refuses
+   `volume rm`, `volume prune`, `system prune --volumes` and `compose down|rm` with `-v`, on this
+   machine or a server. A refusal is a defect, not an error to handle: reaching it means new code
+   asked for something Ozone must not do. Start, stop, restart, rebuild and deploy therefore keep
+   the data by construction. The two exceptions each take a snapshot, remove the containers, and
+   only then ask the guard to let go of the volumes that snapshot holds:
+   - **Delete app**: `AppData.remove`, for development's volumes on this machine.
+   - **Delete deployment**: `AppDeploy.removeDeployment`, for one production place, on this
+     machine or a server.
+
+   A test scans the server for the flag and finds exactly those two. Each Compose project is named
+   from the app's slug (`<slug>`, `<slug>-prod`), never read from a compose file: agents can edit
+   that file, and neither path may reach another project, such as Delete app reaching the app's
+   production one.
+
 3. **Snapshots live outside the app.** [`AppData`](../../apps/server/src/ozone/data/AppData.ts)
    writes them under the server's state directory, in `ozone/backups/<app slug>/<snapshot id>/`.
    They survive the app's containers, its volume, its checkout and the app's own deletion.
 4. **Restoring and deleting are a person's decisions.** They are offered on the app's page and in
-   its menus, and nowhere else. No MCP tool restores or deletes data. A restore first snapshots the data it is
+   its menus, and a deployment's delete also in Settings, Servers. No MCP tool restores or deletes
+   data. A restore first snapshots the data it is
    about to replace, so it can be undone. A deleted app leaves its last snapshot, its folder and
    a record beside the snapshot, and Home brings it back from those: a project for the folder,
    the same slug, and the snapshot loaded before the app first starts. Volumes still in Docker
@@ -68,7 +77,19 @@ version's migrations afterwards, because that version expects its own schema wha
 had. A first deploy to a new place can start from the data of the place before: that data is
 saved, loaded into the new database before the app starts, and the old deploy is stopped with its
 volume left in place. Each command runs against an export of the commit that is deployed, never the
-working tree. An app whose production is running cannot be deleted: Ozone could no longer reach it.
+working tree. An app whose production is running cannot be deleted until a person stops it or
+deletes that deployment.
+
+Settings, Servers lists every deployment on record (`ozone/apps/<slug>/deploy.json`): where each
+app runs and where it ran before, deleted apps included, with what each machine holds now. Servers
+are only asked about those projects, never searched. **Delete deployment** works where Ozone runs
+the containers. It asks the machine what is there, refuses with nothing removed when the machine
+does not answer, saves the data to `backups/<slug>/production/` (a `before-delete` snapshot, never
+pruned), runs `compose down --remove-orphans --rmi local`, and only then removes the database
+volumes that snapshot holds. A deleted app's deployment is reached through the folder its
+`app.json` names, so a folder deleted by hand makes it undeletable from Ozone. The record forgets
+the place only after all of that succeeded, so a restore from Home does not bring the deployment
+back, and a delete cut short is finished by asking again.
 
 A rollback deploys an earlier commit and keeps today's data unless asked for the data from then.
 That data is the snapshot the next successful deploy on the same host took just before replacing
@@ -98,9 +119,12 @@ is taken after every task that passes its checks.
 - Deleting an app's project from the project menu, instead of **Delete app**, leaves its
   containers and volumes in Docker until someone removes them by hand.
 - A deleted app comes back without its threads: they are deleted with the project.
-- A deployed app's data lives in a volume of its own (`<slug>-prod_pgdata`) that nothing in Ozone
-  removes. Its snapshots are kept apart, in `backups/<slug>/production/`, on this machine even when
-  the app runs on a server. Checking a server and starting its proxy were tried over real SSH; a
+- A deployed app's data lives in a volume of its own (`<slug>-prod_pgdata`) that only Delete
+  deployment removes. Its snapshots are kept apart, in `backups/<slug>/production/`, on this
+  machine even when the app runs on a server. A volume no snapshot holds, such as a `volume`
+  service's, stays when a deployment is deleted, and the person is told which.
+- Deployments Ozone has no record of, such as ones made from another computer, are not listed. A
+  server that no longer answers keeps its rows until it does. Checking a server and starting its proxy were tried over real SSH; a
   deploy to a server, and moving to one, with scripted Docker only.
 - An app deployed through Dokploy keeps its data in volumes Dokploy owns, out of Ozone's reach:
   Ozone takes no snapshot there, never deletes the Dokploy service, and does not run a migration

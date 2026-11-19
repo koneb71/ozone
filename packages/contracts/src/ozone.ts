@@ -32,6 +32,9 @@ import {
   OzoneNotifyListResult,
   OzoneNotifyRemoveInput,
   OzoneDeployPlace,
+  OzoneDeploymentRemoveInput,
+  OzoneDeploymentsListInput,
+  OzoneDeploymentsListResult,
   OzoneServerAddInput,
   OzoneServerInput,
   OzoneServerKeyResult,
@@ -320,6 +323,15 @@ export const OzoneAppDeleteResult = Schema.Struct({
 });
 export type OzoneAppDeleteResult = typeof OzoneAppDeleteResult.Type;
 
+/** What a deleted deployment leaves: the snapshot of its data, and any volume no snapshot holds. */
+export const OzoneDeploymentRemoveResult = Schema.Struct({
+  /** Null when the place held no data to save. */
+  snapshot: Schema.NullOr(OzoneSnapshot),
+  /** Volumes left in place because no snapshot holds them, such as a cache. */
+  keptVolumes: Schema.Array(Schema.String),
+});
+export type OzoneDeploymentRemoveResult = typeof OzoneDeploymentRemoveResult.Type;
+
 /** Set on the data methods to mean the deployed app's data, which is kept apart. */
 const Production = Schema.optionalKey(Schema.Boolean);
 
@@ -462,6 +474,8 @@ export const OZONE_WS_METHODS = {
   deployLogs: "ozone.deploy.logs",
   deployMetrics: "ozone.deploy.metrics",
   deployWebhook: "ozone.deploy.webhook",
+  deploymentsList: "ozone.deployments.list",
+  deploymentsRemove: "ozone.deployments.remove",
   serverCheck: "ozone.server.check",
   serverSetup: "ozone.server.setup",
   serversList: "ozone.servers.list",
@@ -510,6 +524,8 @@ export const OZONE_OPERATE_RPC_SCOPES = {
   [OZONE_WS_METHODS.deployRedeploy]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.deployStop]: AuthOrchestrationOperateScope,
   [OZONE_WS_METHODS.deployRollback]: AuthOrchestrationOperateScope,
+  // Removes a deployment's containers, images and database volume, behind a snapshot kept here.
+  [OZONE_WS_METHODS.deploymentsRemove]: AuthOrchestrationOperateScope,
   // The URL it shows is a credential: anyone with it can deploy the app.
   [OZONE_WS_METHODS.deployWebhook]: AuthOrchestrationOperateScope,
   // Both reach a server with this machine's SSH keys; setup can install Docker there.
@@ -545,6 +561,8 @@ export const OZONE_RPC_SCOPES = {
   [OZONE_WS_METHODS.deployOutput]: AuthOrchestrationReadScope,
   [OZONE_WS_METHODS.deployLogs]: AuthOrchestrationReadScope,
   [OZONE_WS_METHODS.deployMetrics]: AuthOrchestrationReadScope,
+  // Looks at each place's containers, like deploy status does.
+  [OZONE_WS_METHODS.deploymentsList]: AuthOrchestrationReadScope,
   // Channels' secrets are never in the list.
   [OZONE_WS_METHODS.notifyList]: AuthOrchestrationReadScope,
   // API keys are never in the list.
@@ -707,6 +725,16 @@ export const OzoneWsRpcs = [
   Rpc.make(OZONE_WS_METHODS.deployWebhook, {
     payload: OzoneDeployWebhookInput,
     success: OzoneDeployWebhookResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.deploymentsList, {
+    payload: OzoneDeploymentsListInput,
+    success: OzoneDeploymentsListResult,
+    error: OzoneRpcError,
+  }),
+  Rpc.make(OZONE_WS_METHODS.deploymentsRemove, {
+    payload: OzoneDeploymentRemoveInput,
+    success: OzoneDeploymentRemoveResult,
     error: OzoneRpcError,
   }),
   Rpc.make(OZONE_WS_METHODS.serverCheck, {

@@ -72,6 +72,22 @@ const notAnApp = new OzoneAppError({
   message: "This project is not an Ozone app.",
 });
 
+/** The manifest in an app's folder, which also says where its data lives. */
+export const readAppManifest = Effect.fn("AppRegistry.readAppManifest")(function* (
+  workspaceRoot: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const invalid = (message: string) => () =>
+    new OzoneAppError({ reason: "invalid_manifest", message });
+  const text = yield* fs
+    .readFileString(path.join(workspaceRoot, OZONE_MANIFEST_FILE_NAME))
+    .pipe(Effect.mapError(invalid(`This app has no ${OZONE_MANIFEST_FILE_NAME}.`)));
+  return yield* decodeManifest(text).pipe(
+    Effect.mapError(invalid(`${OZONE_MANIFEST_FILE_NAME} is not a valid Ozone manifest.`)),
+  );
+});
+
 export const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const projects = yield* ProjectService.ProjectService;
@@ -103,16 +119,11 @@ export const make = Effect.gen(function* () {
     execute: (projectId) => sql`SELECT ${columns} FROM ozone_apps WHERE project_id = ${projectId}`,
   });
 
-  const readManifest = Effect.fn("AppRegistry.readManifest")(function* (workspaceRoot: string) {
-    const invalid = (message: string) => () =>
-      new OzoneAppError({ reason: "invalid_manifest", message });
-    const text = yield* fs
-      .readFileString(path.join(workspaceRoot, OZONE_MANIFEST_FILE_NAME))
-      .pipe(Effect.mapError(invalid(`This app has no ${OZONE_MANIFEST_FILE_NAME}.`)));
-    return yield* decodeManifest(text).pipe(
-      Effect.mapError(invalid(`${OZONE_MANIFEST_FILE_NAME} is not a valid Ozone manifest.`)),
+  const readManifest = (workspaceRoot: string) =>
+    readAppManifest(workspaceRoot).pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(Path.Path, path),
     );
-  });
 
   return AppRegistry.of({
     list: selectApps(undefined).pipe(Effect.mapError(storageFailed("list its apps"))),

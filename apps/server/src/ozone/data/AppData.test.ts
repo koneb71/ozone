@@ -268,7 +268,7 @@ describe("AppData", () => {
         (yield* Ref.get(dockerCalls)).join(" | "),
         "label=com.docker.compose.project=habits-a1b2c3",
       );
-      // The one place in Ozone that asks Docker's guard to let a volume go.
+      // Development's volume goes; production's is left to Delete deployment.
       assert.deepStrictEqual(yield* Ref.get(removals), ["volume rm habits-a1b2c3_pgdata"]);
       assert.deepStrictEqual(yield* data.list(projectId), [snapshot]);
 

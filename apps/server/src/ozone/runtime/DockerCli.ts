@@ -14,7 +14,7 @@ export interface DockerRunInput {
   readonly stdin?: string;
   readonly timeout?: Duration.Input;
   readonly maxOutputBytes?: number;
-  /** Set only by the user-confirmed "Delete app data" flow. */
+  /** Set only by the flows a person confirms, each after a snapshot: Delete app and Delete deployment. */
   readonly allowDataRemoval?: true;
 }
 

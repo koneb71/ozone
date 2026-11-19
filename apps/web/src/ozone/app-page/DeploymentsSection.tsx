@@ -158,6 +158,27 @@ export function DeploymentsSection(props: {
         </SectionRows>
       </SettingsSection>
 
+      {(history.data?.removed.length ?? 0) === 0 ? null : (
+        <SettingsSection title="Deleted deployments">
+          {history.data?.removed.map((entry) => (
+            <SettingsRow
+              key={entry.removedAt}
+              title={`Deleted from ${
+                entry.target.host === null
+                  ? "this computer"
+                  : entry.target.host.replace(/^[^@]*@/, "")
+              }`}
+              description={metaLine([
+                formatRelativeTimeLabel(entry.removedAt),
+                entry.snapshotId === null
+                  ? "It held no data to save"
+                  : `Its data is kept as snapshot ${entry.snapshotId}`,
+              ])}
+            />
+          ))}
+        </SettingsSection>
+      )}
+
       {output === null ? null : (
         <DeployOutputDialog
           app={props.app}

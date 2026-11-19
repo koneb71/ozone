@@ -201,6 +201,7 @@ describe("command permissions", () => {
     WS_METHODS.scheduledTasksDelete,
     ORCHESTRATION_V2_WS_METHODS.stopWorkflow,
     OZONE_WS_METHODS.runtimeAct,
+    OZONE_WS_METHODS.deploymentsRemove,
   ])("uses the target grant for both availability and execution of %s", (method) =>
     Effect.gen(function* () {
       const registry = yield* setup;

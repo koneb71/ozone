@@ -14,6 +14,7 @@ import {
   AuthSourceControlWriteScope,
   AuthTerminalReadScope,
   AuthTerminalOperateScope,
+  OZONE_WS_METHODS,
   WS_METHODS,
   WsRpcGroup,
 } from "@t3tools/contracts";
@@ -43,6 +44,15 @@ describe("RPC authorization scopes", () => {
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationOperateScope);
     }
+  });
+
+  it("lets readers see deployments, and only operators delete one and its data", () => {
+    expect(requiredScopeForRpcMethod(OZONE_WS_METHODS.deploymentsList)).toBe(
+      AuthOrchestrationReadScope,
+    );
+    expect(requiredScopeForRpcMethod(OZONE_WS_METHODS.deploymentsRemove)).toBe(
+      AuthOrchestrationOperateScope,
+    );
   });
 
   it("separates passive terminal observation from operations that can change a shell", () => {

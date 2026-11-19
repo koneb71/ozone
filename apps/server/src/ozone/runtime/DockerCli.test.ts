@@ -1,7 +1,10 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 
 import * as ProcessRunner from "../../processRunner.ts";
@@ -20,6 +23,8 @@ describe("DockerCli", () => {
     [[...APP, "down", "-v"], true],
     [[...APP, "rm", "-fsv"], true],
     [[...APP, "down"], false],
+    [[...APP, "down", "--remove-orphans", "--rmi", "local"], false],
+    [["-H", "ssh://deploy@example.com", "volume", "rm", "notes-prod_pgdata"], true],
     [[...APP, "stop"], false],
     [[...APP, "up", "--detach", "--build", "--force-recreate"], false],
     [["system", "prune"], false],
@@ -62,5 +67,23 @@ describe("DockerCli", () => {
       yield* docker.run({ args: ["volume", "rm", "habits_pgdata"], allowDataRemoval: true });
       assert.deepStrictEqual(yield* Ref.get(ran), [["volume", "rm", "habits_pgdata"]]);
     }),
+  );
+
+  // docs/ozone/data-safety.md: a volume goes only after a person confirms Delete app or Delete
+  // deployment, each behind a snapshot. A third asker is a change to that contract.
+  it.effect("is let past by exactly the two flows a person confirms", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const ozone = path.join(import.meta.dirname, "..");
+      const askers: Array<string> = [];
+      for (const file of yield* fs.readDirectory(ozone, { recursive: true })) {
+        if (!file.endsWith(".ts") || file.endsWith(".test.ts")) continue;
+        const text = yield* fs.readFileString(path.join(ozone, file));
+        const count = text.split("allowDataRemoval: true").length - 1;
+        for (let index = 0; index < count; index += 1) askers.push(file.split(path.sep).join("/"));
+      }
+      assert.deepStrictEqual(askers.toSorted(), ["data/AppData.ts", "deploy/AppDeploy.ts"]);
+    }).pipe(Effect.provide(NodeServices.layer)),
   );
 });

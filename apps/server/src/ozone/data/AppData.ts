@@ -81,7 +81,8 @@ export class AppData extends Context.Service<
     ) => Effect.Effect<OzoneDataRestoreResult, OzoneAppError>;
     /**
      * Removes the app's containers, and the volumes its snapshot holds, after that snapshot is
-     * kept. The only caller is the "Delete app" flow a person confirmed.
+     * kept. The only caller is the "Delete app" flow a person confirmed; production's volumes are
+     * Delete deployment's, in `AppDeploy`.
      */
     readonly remove: (
       projectId: ProjectId,

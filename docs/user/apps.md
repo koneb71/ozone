@@ -97,7 +97,8 @@ Open it from Home, or from the app's status bar above the message box.
 ## Your data is kept
 
 An app's database lives in a Docker volume that only **Delete app** removes, and only after a
-snapshot. Home can bring a deleted app back with that data.
+snapshot. Home can bring a deleted app back with that data. Production's database is apart from
+it, and only **Delete deployment** removes it, also after a snapshot.
 
 A migration that could lose data does not run by itself. Ozone shows you its statements and waits
 until you apply it, after taking a snapshot.

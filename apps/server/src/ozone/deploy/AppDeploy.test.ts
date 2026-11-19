@@ -1,7 +1,13 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import { ProjectId, type OzoneSnapshot } from "@t3tools/contracts";
+import {
+  OzoneAppError,
+  ProjectId,
+  type OzoneDeployPlace,
+  type OzoneSavedServer,
+  type OzoneSnapshot,
+} from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -23,6 +29,7 @@ import * as AppServers from "./AppServers.ts";
 import * as DokployDeploy from "./DokployDeploy.ts";
 import * as HostedDeploy from "./HostedDeploy.ts";
 import * as Notifier from "./Notifier.ts";
+import * as SavedServers from "./SavedServers.ts";
 
 const projectId = ProjectId.make("project-notes");
 const here = { host: null, dokploy: null, hosted: null, publicUrl: null, domain: null };
@@ -53,7 +60,18 @@ const step = (args: ReadonlyArray<string>) => {
   return afterFiles.filter((arg) => !arg.startsWith("-") && !/^[A-Z_]+=/.test(arg)).join(" ");
 };
 
-const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: boolean } = {}) =>
+/** What a machine holds of production, as `docker ps` and `docker volume ls` print it. */
+type ProdOnMachine =
+  | { readonly containers: string; readonly volumes: string }
+  | { readonly unreachable: string };
+
+const makeHarness = (
+  options: {
+    readonly failAt?: string;
+    readonly hostCa?: boolean;
+    readonly servers?: ReadonlyArray<OzoneSavedServer>;
+  } = {},
+) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -70,12 +88,34 @@ const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: bool
     const builtFrom = yield* Ref.make<ReadonlyArray<ReadonlyArray<string>>>([]);
     // Set, the migrate step holds back a migration that can lose data unless it is accepted.
     const holdMigration = yield* Ref.make(false);
+    // What each machine ("here", or "ssh://<host>") holds of production, for the probes.
+    const prodAt = yield* Ref.make<ReadonlyMap<string, ProdOnMachine>>(new Map());
     const docker = Layer.succeed(
       DockerCli.DockerCli,
       DockerCli.DockerCli.of({
         run: (input) =>
           Effect.gen(function* () {
             yield* Ref.update(calls, (all) => [...all, input]);
+            const machine = input.args[0] === "-H" ? (input.args[1] ?? "") : "here";
+            const format = input.args[input.args.indexOf("--format") + 1] ?? "";
+            if (format.includes("com.docker.compose.project")) {
+              const volumes = input.args.includes("volume");
+              yield* Ref.update(journal, (all) => [
+                ...all,
+                volumes ? "probe volumes" : "probe containers",
+              ]);
+              const held = (yield* Ref.get(prodAt)).get(machine);
+              if (held !== undefined && "unreachable" in held) {
+                return { code: 255, stdout: "", stderr: held.unreachable, timedOut: false };
+              }
+              const stdout = held === undefined ? "" : volumes ? held.volumes : held.containers;
+              return { code: 0, stdout, stderr: "", timedOut: false };
+            }
+            if (input.args.includes("volume") && input.args.includes("rm")) {
+              const names = input.args.slice(input.args.indexOf("rm") + 1);
+              yield* Ref.update(journal, (all) => [...all, `volume rm ${names.join(" ")}`]);
+              return { code: 0, stdout: "", stderr: "", timedOut: false };
+            }
             const what = step(input.args);
             yield* Ref.update(journal, (all) => [...all, what]);
             if (what === options.failAt) {
@@ -134,24 +174,26 @@ const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: bool
             Layer.mock(AppData.AppData)({
               listOf: () => Ref.get(taken),
               snapshotOf: (target, input) =>
-                target
-                  .compose(["exec", "pg_dump"])
-                  .pipe(
-                    Effect.andThen(
-                      Ref.update(journal, (all) => [
-                        ...all,
-                        `snapshot ${input.reason}${input.label === undefined ? "" : ` (${input.label})`}`,
-                      ]),
-                    ),
-                    Effect.andThen(
-                      Ref.update(taken, (all) =>
-                        all.some((entry) => entry.reason === input.reason)
-                          ? all
-                          : [...all, snapshotOf(input.reason)],
+                options.failAt === `snapshot ${input.reason}`
+                  ? Effect.fail(new OzoneAppError({ reason: "failed", message: "pg_dump failed." }))
+                  : target
+                      .compose(["exec", "pg_dump"])
+                      .pipe(
+                        Effect.andThen(
+                          Ref.update(journal, (all) => [
+                            ...all,
+                            `snapshot ${input.reason}${input.label === undefined ? "" : ` (${input.label})`}`,
+                          ]),
+                        ),
+                        Effect.andThen(
+                          Ref.update(taken, (all) =>
+                            all.some((entry) => entry.reason === input.reason)
+                              ? all
+                              : [...all, snapshotOf(input.reason)],
+                          ),
+                        ),
+                        Effect.as(snapshotOf(input.reason)),
                       ),
-                    ),
-                    Effect.as(snapshotOf(input.reason)),
-                  ),
               restoreOf: (target, input) =>
                 target
                   .compose(["exec", "pg_restore"])
@@ -174,6 +216,9 @@ const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: bool
             // Only a target that names a Dokploy server reaches Dokploy.
             Layer.mock(DokployDeploy.DokployDeploy)({}),
             Layer.mock(HostedDeploy.HostedDeploy)({}),
+            Layer.mock(SavedServers.SavedServers)({
+              list: Effect.succeed({ servers: options.servers ?? [] }),
+            }),
             Layer.mock(Notifier.Notifier)({
               notify: (notice) => Ref.update(notices, (all) => [...all, notice]),
             }),
@@ -225,6 +270,8 @@ const makeHarness = (options: { readonly failAt?: string; readonly hostCa?: bool
       path,
       directory,
       workspaceRoot,
+      prodAt,
+      stateDir: config.stateDir,
     };
   });
 
@@ -585,5 +632,233 @@ it.effect("reports a failed deploy, and a webhook URL redeploys where the app ru
     assert.notStrictEqual(rotated.path, shown.path);
     assert.deepStrictEqual(yield* other.webhook({ projectId, action: "disable" }), { path: null });
     assert.strictEqual(yield* other.redeployByToken(token), "unknown");
+  }).pipe(Effect.provide(layerTest)),
+);
+
+const server = {
+  host: "deploy@example.com",
+  dokploy: null,
+  hosted: null,
+  publicUrl: null,
+  domain: null,
+};
+const onServer = "ssh://deploy@example.com";
+const notesHeld = {
+  containers: "notes-a1b2c3-prod\trunning\nnotes-a1b2c3-prod\trunning\n",
+  volumes:
+    "notes-a1b2c3-prod_pgdata\tnotes-a1b2c3-prod\nnotes-a1b2c3-prod_cache\tnotes-a1b2c3-prod\n",
+};
+const place = (target: OzoneDeployPlace) => ({
+  host: target.host,
+  dokploy: target.dokploy,
+  hosted: target.hosted,
+});
+
+it.effect("lists every deployment on record, and asks each machine once", () =>
+  Effect.gen(function* () {
+    const { deploy, prodAt, calls, fs, path, stateDir } = yield* makeHarness({
+      servers: [
+        { id: "box", name: "Box", kind: "ssh", host: "deploy@example.com", access: "own-keys" },
+        { id: "rail", name: "Railway", kind: "host", provider: "railway", keyHint: "…a1" },
+      ],
+    });
+    yield* deploy.deploy({ projectId, target: here });
+    // Moved without its data, the copy here keeps running and is only on record.
+    yield* deploy.deploy({ projectId, target: server });
+    // A deleted app whose deployment a hosting platform runs.
+    const shop = path.join(stateDir, "ozone", "apps", "shop-d4e5f6");
+    yield* fs.makeDirectory(shop, { recursive: true });
+    yield* fs.writeFileString(
+      path.join(shop, "deploy.json"),
+      JSON.stringify({
+        secrets: { authSecret: "a", dbPassword: "b" },
+        last: {
+          target: { host: null, dokploy: null, hosted: "rail", publicUrl: null, domain: null },
+          url: "https://shop.up.railway.app",
+          commitSha: null,
+          deployedAt: "2026-01-02T00:00:00.000Z",
+        },
+      }),
+    );
+    const shopBackups = AppData.backupFolder(path, stateDir, "shop-d4e5f6");
+    yield* fs.makeDirectory(shopBackups, { recursive: true });
+    yield* fs.writeFileString(
+      path.join(shopBackups, "app.json"),
+      JSON.stringify({
+        app: testApp({ projectId: ProjectId.make("project-shop"), port: 41_006 }),
+        workspaceRoot: path.join(stateDir, "gone"),
+        deletedAt: null,
+      }),
+    );
+    yield* Ref.set(
+      prodAt,
+      new Map<string, ProdOnMachine>([
+        ["here", notesHeld],
+        [onServer, { unreachable: "ssh: connect to host example.com port 22: Connection refused" }],
+      ]),
+    );
+    yield* Ref.set(calls, []);
+
+    const { deployments } = yield* deploy.deployments({});
+    const row = (current: boolean, slug = "notes-a1b2c3") =>
+      deployments.find((entry) => entry.slug === slug && entry.current === current);
+    assert.strictEqual(deployments.length, 3);
+    // Where it runs now: the saved server's name, which did not answer.
+    assert.include(row(true), {
+      placeLabel: "Box",
+      serverId: "box",
+      state: "unreachable",
+      removable: false,
+    });
+    assert.include(row(true)?.detail ?? "", "Connection refused");
+    // Where it ran before still runs, and can be deleted.
+    assert.include(row(false), {
+      placeLabel: "This computer",
+      state: "running",
+      removable: true,
+      whyNot: null,
+    });
+    // Ozone does not look at, or delete, what a host runs; the app itself was deleted.
+    assert.include(row(true, "shop-d4e5f6"), {
+      projectId: null,
+      placeLabel: "Railway",
+      state: "elsewhere",
+      manageUrl: "https://railway.com/dashboard",
+      removable: false,
+    });
+    // One `ps` and one `volume ls` per machine Ozone runs it on, none for the host, and no
+    // second question to a machine that did not answer the first.
+    const probes = (yield* Ref.get(calls)).map((call) => call.args[0] === "-H");
+    assert.deepStrictEqual(probes.toSorted(), [false, false, true]);
+    assert.deepStrictEqual(
+      (yield* deploy.deployments({ projectId })).deployments.map((entry) => entry.slug),
+      ["notes-a1b2c3", "notes-a1b2c3"],
+    );
+  }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect("deletes a place it ran before after saving its data, and leaves where it runs", () =>
+  Effect.gen(function* () {
+    const { deploy, prodAt, calls, steps, forget } = yield* makeHarness();
+    yield* deploy.deploy({ projectId, target: here });
+    yield* deploy.deploy({ projectId, target: server });
+    yield* Ref.set(prodAt, new Map([["here", notesHeld]]));
+    yield* forget;
+    yield* Ref.set(calls, []);
+
+    const result = yield* deploy.removeDeployment({ slug: "notes-a1b2c3", place: place(here) });
+    assert.deepStrictEqual(yield* steps, [
+      "probe containers",
+      "probe volumes",
+      "exec pg_dump",
+      "snapshot before-delete (Before deleting the deployment on this machine)",
+      "down local",
+      "volume rm notes-a1b2c3-prod_pgdata",
+    ]);
+    assert.strictEqual(result.snapshot?.reason, "before-delete");
+    // A volume no snapshot holds stays, and is named.
+    assert.deepStrictEqual(result.keptVolumes, ["notes-a1b2c3-prod_cache"]);
+    // The one volume the guard let go is the one the snapshot holds, on this machine.
+    const removals = (yield* Ref.get(calls)).filter((call) => call.allowDataRemoval === true);
+    assert.deepStrictEqual(
+      removals.map((call) => call.args),
+      [["volume", "rm", "notes-a1b2c3-prod_pgdata"]],
+    );
+    assert.isTrue(
+      (yield* Ref.get(calls))
+        .filter((call) => call.allowDataRemoval !== true)
+        .every((call) => !DockerCli.removesData(call.args) && call.args[0] !== "-H"),
+    );
+    const history = yield* deploy.history(projectId);
+    assert.deepStrictEqual(
+      history.removed.map((entry) => [entry.target.host, entry.snapshotId]),
+      [[null, "snapshot-before-delete"]],
+    );
+    assert.strictEqual((yield* deploy.status(projectId)).target?.host, "deploy@example.com");
+    assert.isFalse(
+      (yield* deploy.deployments({ projectId })).deployments.some((entry) => !entry.current),
+    );
+  }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect("deletes where it runs on a server, and the app is no longer deployed", () =>
+  Effect.gen(function* () {
+    const { deploy, prodAt, calls, fs, path, directory } = yield* makeHarness();
+    yield* deploy.deploy({ projectId, target: server });
+    yield* deploy.webhook({ projectId, action: "show" });
+    yield* Ref.set(prodAt, new Map([[onServer, notesHeld]]));
+    yield* Ref.set(calls, []);
+
+    yield* deploy.removeDeployment({ slug: "notes-a1b2c3", place: place(server) });
+    // Everything ran on the server.
+    assert.isTrue((yield* Ref.get(calls)).every((call) => call.args[1] === onServer));
+    assert.strictEqual((yield* deploy.status(projectId)).state, "none");
+    const record = JSON.parse(yield* fs.readFileString(path.join(directory, "deploy.json")));
+    assert.isNull(record.last);
+    assert.isNull(record.webhookToken);
+    // Its copy of production's secrets goes with the last place Ozone ran it.
+    assert.isFalse(yield* fs.exists(path.join(directory, "compose.prod.override.yaml")));
+  }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect("removes nothing when the data cannot be saved or the machine cannot be reached", () =>
+  Effect.gen(function* () {
+    const { deploy, prodAt, steps, forget, fs, path, directory } = yield* makeHarness({
+      failAt: "snapshot before-delete",
+    });
+    yield* deploy.deploy({ projectId, target: here });
+    const before = yield* fs.readFileString(path.join(directory, "deploy.json"));
+    yield* Ref.set(prodAt, new Map([["here", notesHeld]]));
+    yield* forget;
+
+    const notSaved = yield* Effect.flip(
+      deploy.removeDeployment({ slug: "notes-a1b2c3", place: place(here) }),
+    );
+    assert.strictEqual(notSaved.message, "pg_dump failed.");
+    assert.deepStrictEqual(yield* steps, ["probe containers", "probe volumes"]);
+    assert.strictEqual(yield* fs.readFileString(path.join(directory, "deploy.json")), before);
+
+    yield* Ref.set(prodAt, new Map([["here", { unreachable: "Cannot connect to Docker." }]]));
+    yield* forget;
+    const notReached = yield* Effect.flip(
+      deploy.removeDeployment({ slug: "notes-a1b2c3", place: place(here) }),
+    );
+    assert.include(notReached.message, "nothing was removed");
+    assert.deepStrictEqual(yield* steps, ["probe containers"]);
+    assert.strictEqual(yield* fs.readFileString(path.join(directory, "deploy.json")), before);
+  }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect("clears a deployment with nothing left of it, and never deletes on a host", () =>
+  Effect.gen(function* () {
+    const { deploy, steps, forget, fs, path, directory } = yield* makeHarness();
+    yield* deploy.deploy({ projectId, target: here });
+    const recordPath = path.join(directory, "deploy.json");
+    const record = JSON.parse(yield* fs.readFileString(recordPath));
+    const onDokploy = { ...here, dokploy: "dok" };
+    yield* fs.writeFileString(
+      recordPath,
+      JSON.stringify({
+        ...record,
+        previous: [{ ...record.last, target: onDokploy }],
+      }),
+    );
+    yield* forget;
+
+    const refused = yield* Effect.flip(
+      deploy.removeDeployment({ slug: "notes-a1b2c3", place: place(onDokploy) }),
+    );
+    assert.include(refused.message, "does not delete what Dokploy runs");
+    assert.deepStrictEqual(yield* steps, []);
+
+    // Nothing of it is left here: no snapshot, no volume to remove, and the record is cleared.
+    const { snapshot } = yield* deploy.removeDeployment({
+      slug: "notes-a1b2c3",
+      place: place(here),
+    });
+    assert.isNull(snapshot);
+    assert.deepStrictEqual(yield* steps, ["probe containers", "probe volumes", "down local"]);
+    assert.strictEqual((yield* deploy.status(projectId)).state, "none");
+    assert.strictEqual((yield* deploy.history(projectId)).removed[0]?.snapshotId, null);
   }).pipe(Effect.provide(layerTest)),
 );

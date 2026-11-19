@@ -6,7 +6,7 @@ import type {
   OzoneSavedServer,
 } from "@t3tools/contracts";
 import { Link } from "@tanstack/react-router";
-import { CopyIcon, ExternalLinkIcon, RocketIcon, SquareIcon } from "lucide-react";
+import { CopyIcon, EllipsisIcon, ExternalLinkIcon, RocketIcon, SquareIcon } from "lucide-react";
 import { useState } from "react";
 
 import {
@@ -17,6 +17,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import {
   Select,
   SelectItem,
@@ -51,6 +52,7 @@ import { OutputView } from "../ui/OutputView";
 import { StatusDot } from "../ui/StatusDot";
 import { useOzoneCommand } from "../ui/useOzoneCommand";
 import { VariablesSection } from "../ui/VariablesSection";
+import { DeploymentRow, useDeleteDeployment } from "./DeployedApps";
 import { RemoteRow, useAppRemote } from "./RemoteRow";
 import { ServerSection } from "./ServerRows";
 import type { AppDeploy } from "./useAppDeploy";
@@ -135,6 +137,20 @@ function DeployForm(props: {
   const [publicUrl, setPublicUrl] = useState(last?.publicUrl ?? "");
   const [bringData, setBringData] = useState(true);
   const [confirm, setConfirm] = useState<"stop" | "migrate" | null>(null);
+  // Where this app is deployed, now and before, as the list in Settings shows it.
+  const places = useEnvironmentQuery(
+    ozoneEnvironment.deployments({
+      environmentId: props.environmentId,
+      input: { projectId: props.app.projectId },
+    }),
+  );
+  const deleting = useDeleteDeployment({
+    environmentId: props.environmentId,
+    run,
+    onDeleted: places.refresh,
+  });
+  const currentPlace = places.data?.deployments.find((row) => row.current) ?? null;
+  const otherPlaces = places.data?.deployments.filter((row) => !row.current) ?? [];
 
   const trimmedHost =
     serverId === TYPED ? (typedHost ?? "") : chosen?.kind === "ssh" ? chosen.host : "";
@@ -274,6 +290,26 @@ function DeployForm(props: {
                   <span className="max-sm:sr-only">Stop production</span>
                 </Button>
               ) : null}
+              {currentPlace === null || currentPlace.state === "elsewhere" ? null : (
+                <Menu>
+                  <MenuTrigger
+                    aria-label="More for production"
+                    disabled={busy}
+                    render={<Button size="icon-sm" variant="ghost" />}
+                  >
+                    <EllipsisIcon />
+                  </MenuTrigger>
+                  <MenuPopup align="end">
+                    <MenuItem
+                      variant="destructive"
+                      disabled={!currentPlace.removable}
+                      onClick={() => deleting.ask(currentPlace)}
+                    >
+                      Delete deployment
+                    </MenuItem>
+                  </MenuPopup>
+                </Menu>
+              )}
               <Button
                 disabled={busy || invalid}
                 size="sm"
@@ -302,6 +338,20 @@ function DeployForm(props: {
           />
         ) : null}
       </SettingsSection>
+
+      {otherPlaces.length === 0 ? null : (
+        <SettingsSection title="Where it ran before">
+          {otherPlaces.map((row) => (
+            <DeploymentRow
+              key={`${row.place.host ?? ""}:${row.place.dokploy ?? ""}:${row.place.hosted ?? ""}`}
+              row={row}
+              showApp={false}
+              working={working}
+              onDelete={deleting.ask}
+            />
+          ))}
+        </SettingsSection>
+      )}
 
       <SettingsSection title="Where it runs">
         <SettingsRow
@@ -497,6 +547,7 @@ function DeployForm(props: {
         destructive
         onConfirm={() => void deployNow(true)}
       />
+      {deleting.dialog}
     </>
   );
 }

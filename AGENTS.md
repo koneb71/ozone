@@ -10,7 +10,7 @@ Ozone runs on the user's machine with the user's own provider accounts. Nothing 
 
 ### 2. App data is never lost
 
-No code path may remove a Docker volume except the user-confirmed **Delete app** flow, which snapshots first. Read [data safety](docs/ozone/data-safety.md) before touching `apps/server/src/ozone/runtime` or `apps/server/src/ozone/data`.
+No code path may remove a Docker volume except a person-confirmed **Delete app** or **Delete deployment**, each after a snapshot. Read [data safety](docs/ozone/data-safety.md) before touching `apps/server/src/ozone/runtime`, `apps/server/src/ozone/data` or `apps/server/src/ozone/deploy`.
 
 ### 3. Performance
 

@@ -127,11 +127,89 @@ export const OzoneDeploymentEntry = Schema.Struct({
 });
 export type OzoneDeploymentEntry = typeof OzoneDeploymentEntry.Type;
 
+/** A deployment a person deleted, and the snapshot of its data Ozone kept first. */
+export const OzoneRemovedDeployment = Schema.Struct({
+  target: OzoneDeployTarget,
+  removedAt: IsoDateTime,
+  /** Null when the place held no data to save. */
+  snapshotId: Schema.NullOr(Schema.String),
+});
+export type OzoneRemovedDeployment = typeof OzoneRemovedDeployment.Type;
+
 export const OzoneDeployHistoryResult = Schema.Struct({
   /** Newest first. */
   deployments: Schema.Array(OzoneDeploymentEntry),
+  /** Newest first. Defaulted so a client can read a server from before deployments were deleted. */
+  removed: Schema.Array(OzoneRemovedDeployment).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed([])),
+  ),
 });
 export type OzoneDeployHistoryResult = typeof OzoneDeployHistoryResult.Type;
+
+/**
+ * What runs at a place Ozone deployed an app to. `data-only`: the containers are gone but the
+ * database volume is not. `gone`: nothing of it is left there. `elsewhere`: Dokploy or a hosting
+ * platform runs it, and Ozone does not look.
+ */
+export const OzoneDeploymentState = Schema.Literals([
+  "running",
+  "stopped",
+  "data-only",
+  "gone",
+  "unreachable",
+  "busy",
+  "elsewhere",
+]);
+export type OzoneDeploymentState = typeof OzoneDeploymentState.Type;
+
+/** An app Ozone deployed, at one place: where it runs now, or a place it ran before. */
+export const OzoneDeploymentRow = Schema.Struct({
+  slug: Schema.String,
+  appName: Schema.String,
+  /** Null for an app deleted from Ozone, whose deployment is still on record. */
+  projectId: Schema.NullOr(ProjectId),
+  place: OzoneDeployPlace,
+  /** "This computer", or the saved server's name, or its host. */
+  placeLabel: Schema.String,
+  /** The saved server this place is, when one matches. */
+  serverId: Schema.NullOr(OzoneServerId),
+  /** Where the app was last deployed. False for a place it ran at before. */
+  current: Schema.Boolean,
+  url: Schema.NullOr(Schema.String),
+  domain: Schema.NullOr(Schema.String),
+  commitSha: Schema.NullOr(Schema.String),
+  deployedAt: Schema.NullOr(IsoDateTime),
+  state: OzoneDeploymentState,
+  /** Why the state is what it is, such as the error from a server Ozone could not reach. */
+  detail: Schema.NullOr(Schema.String),
+  /** The host's own page for a deployment Dokploy or a hosting platform runs. */
+  manageUrl: Schema.NullOr(Schema.String),
+  removable: Schema.Boolean,
+  /** Why it cannot be deleted from Ozone, when it cannot. */
+  whyNot: Schema.NullOr(Schema.String),
+});
+export type OzoneDeploymentRow = typeof OzoneDeploymentRow.Type;
+
+export const OzoneDeploymentsListInput = Schema.Struct({
+  /** One app's places only. */
+  projectId: Schema.optionalKey(ProjectId),
+});
+export type OzoneDeploymentsListInput = typeof OzoneDeploymentsListInput.Type;
+export const OzoneDeploymentsListResult = Schema.Struct({
+  deployments: Schema.Array(OzoneDeploymentRow),
+});
+export type OzoneDeploymentsListResult = typeof OzoneDeploymentsListResult.Type;
+
+const AppSlug = TrimmedNonEmptyString.check(
+  Schema.isMaxLength(128),
+  Schema.isPattern(/^[a-z0-9][a-z0-9-]*$/),
+);
+
+export const OzoneDeploymentRemoveInput = Schema.Struct({
+  slug: AppSlug,
+  place: OzoneDeployPlace,
+});
+export type OzoneDeploymentRemoveInput = typeof OzoneDeploymentRemoveInput.Type;
 
 export const OzoneDeployOutputInput = Schema.Struct({ projectId: ProjectId, deploymentId: Id });
 export type OzoneDeployOutputInput = typeof OzoneDeployOutputInput.Type;

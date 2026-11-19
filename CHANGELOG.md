@@ -7,6 +7,10 @@ What changed in each release of Ozone, newest first. Downloads are on the
 
 ### Added
 
+- Settings, Servers lists every app Ozone deployed, including deleted apps and places an app ran
+  before, with whether it still runs there. **Delete deployment** removes one from this computer or
+  a server after saving a snapshot of its data here. Dokploy and hosting-platform deployments are
+  listed with a link to the host.
 - New web apps and landing pages get four more design skills, so Pick the design can offer looks
   from editorial calm to hard brutalist.
 

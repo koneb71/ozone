@@ -1,7 +1,14 @@
 import type { OzoneDeployment } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { HISTORY_LIMIT, historyEntries, withDeployment } from "./deployments.ts";
+import {
+  coveredVolumes,
+  HISTORY_LIMIT,
+  historyEntries,
+  parseProbe,
+  stateOf,
+  withDeployment,
+} from "./deployments.ts";
 
 const here = { host: null, dokploy: null, hosted: null, publicUrl: null, domain: null };
 const server = {
@@ -87,4 +94,29 @@ describe("historyEntries", () => {
       "failed",
     );
   });
+});
+
+it("reads only an app's own production project from what a machine holds", () => {
+  // Name filters match by substring: `my-notes-prod` comes back when asking for `notes-prod`.
+  const found = parseProbe(["notes", "shop"], {
+    containers: "notes-prod\texited\nmy-notes-prod\trunning\n\n",
+    volumes:
+      "notes-prod_pgdata\tnotes-prod\nmy-notes-prod_pgdata\tmy-notes-prod\nshop-prod_pgdata\tshop-prod\n",
+  });
+  const notes = found.get("notes") ?? { containerStates: [], volumes: [] };
+  expect(notes).toEqual({ containerStates: ["exited"], volumes: ["notes-prod_pgdata"] });
+  expect(stateOf(notes)).toBe("stopped");
+  expect(stateOf(found.get("shop") ?? notes)).toBe("data-only");
+  expect(stateOf({ containerStates: [], volumes: [] })).toBe("gone");
+  // A snapshot holds the postgres volumes, so only those are ever removed.
+  expect(
+    coveredVolumes(
+      "notes",
+      [
+        { kind: "postgres", volume: "pgdata" },
+        { kind: "volume", volume: "files" },
+      ],
+      ["notes-prod_pgdata", "notes-prod_files"],
+    ),
+  ).toEqual(["notes-prod_pgdata"]);
 });

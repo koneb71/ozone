@@ -165,6 +165,15 @@ export function createOzoneEnvironmentAtoms<R, E>(
       label: "environment-data:ozone:deploy-webhook",
       tag: OZONE_WS_METHODS.deployWebhook,
     }),
+    deployments: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:ozone:deployments",
+      tag: OZONE_WS_METHODS.deploymentsList,
+      staleTimeMs: 0,
+    }),
+    removeDeployment: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ozone:remove-deployment",
+      tag: OZONE_WS_METHODS.deploymentsRemove,
+    }),
     checkVersion: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:ozone:check-version",
       tag: OZONE_WS_METHODS.versionCheck,

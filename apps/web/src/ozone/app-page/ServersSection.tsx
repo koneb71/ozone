@@ -45,6 +45,7 @@ import { ozoneEnvironment } from "../state";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { EmptyRow, SectionRows } from "../ui/SectionRows";
 import { useOzoneCommand } from "../ui/useOzoneCommand";
+import { DeployedAppsSection } from "./DeployedApps";
 import { ServerSection } from "./ServerRows";
 
 const METHODS: ReadonlyArray<ServerMethod> = [
@@ -159,6 +160,7 @@ export function ServersSection(props: { readonly environmentId: EnvironmentId })
           }
         </SectionRows>
       </SettingsSection>
+      <DeployedAppsSection environmentId={props.environmentId} />
       {(servers.data?.servers ?? []).map((server) =>
         server.kind === "ssh" && open === server.id ? (
           <ServerSection key={server.id} environmentId={props.environmentId} host={server.host} />
@@ -186,7 +188,7 @@ export function ServersSection(props: { readonly environmentId: EnvironmentId })
             : removing?.kind === "host"
               ? "Apps deployed there keep running on the host, but Ozone can no longer deploy or stop them. Its token is forgotten."
               : removing?.kind === "ssh" && removing.access === "ozone-key"
-                ? "Ozone takes its key off the server. Apps deployed there keep running."
+                ? "Ozone takes its key off the server. Apps deployed there keep running, and Ozone can no longer reach them: delete any you no longer want first."
                 : "Apps deployed there keep running."
         }
         confirmLabel="Remove server"
