@@ -44,8 +44,9 @@ jobs:
       - name: Unused code
         run: vp run knip:check
 
+      # Browser tests need Chromium, which only the web jobs install, and they run there.
       - name: Ozone tests
-        run: vp test run apps/server/src/ozone apps/web/src/ozone packages/client-runtime/src/state/ozone.test.ts
+        run: vp test run apps/server/src/ozone apps/web/src/ozone packages/client-runtime/src/state/ozone.test.ts --project '!*(browser)*'
 
   # The whole web suite runs in headless Chromium, split across jobs to fit a standard runner.
   web:

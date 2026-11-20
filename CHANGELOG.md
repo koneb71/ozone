@@ -5,6 +5,8 @@ What changed in each release of Ozone, newest first. Downloads are on the
 
 ## Unreleased
 
+## 1.10.0 - 2026-11-20
+
 ### Added
 
 - Settings, Servers lists every app Ozone deployed, including deleted apps and places an app ran
