@@ -176,8 +176,9 @@ runs the checks that read other files: the agent context budget when the server 
 React Compiler coverage for only the changed web files. It maps
 files to packages with [ci-changes.cjs](../../.github/scripts/ci-changes.cjs). It
 compares against the closest merge base with any remote's `main`, or with a ref you pass. CI runs the
-whole web suite and the app builder's tests, and no other tests: for the rest of the server, the
-desktop app, the packages and the scripts, run the test folders you touched.
+whole web suite on every change. For the server, the desktop app, the packages, the scripts and the
+Rust crates, a pull request runs the tests it can affect and a push to `main` runs all of them. The
+same file decides which.
 
 The steps run side by side, as many at once as the machine allows: one per two cores and per 6 GiB
 of available memory. On a large machine a run takes about as long as its slowest step, usually

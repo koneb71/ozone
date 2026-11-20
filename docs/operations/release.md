@@ -6,15 +6,27 @@ platform builds on its own runner, so the Windows installer is built on Windows.
 
 ## Cut a release
 
-1. In [CHANGELOG.md](../../CHANGELOG.md), rename `## Unreleased` to `## <version> - <date>`, add
-   a new, empty `## Unreleased` above it, and commit that.
-2. Push a tag named `v<version>` with all three numbers, such as `v0.2.0`. A suffix such as
+1. On an up-to-date `main` with nothing uncommitted, run `vp run release:cut <version>`, or
+   `patch`, `minor` or `major` to raise the last release. It files what is under `## Unreleased`
+   in [CHANGELOG.md](../../CHANGELOG.md) as `## <version> - <date>`, opens a new, empty
+   `## Unreleased` above it, stages the file, and prints the three commands below. It refuses when
+   nothing is unreleased, when the version already exists, or when CI failed on `main`'s last
+   commit. It never commits, pushes or tags.
+2. Commit that and push `main`.
+3. Push a tag named `v<version>` with all three numbers, such as `v0.2.0`. A suffix such as
    `v0.2.0-rc.1` is accepted.
-3. The workflow builds the three platforms and gathers their files into a draft GitHub Release
-   titled `Ozone <version>`. Its notes are that version's section of the changelog, which
-   `scripts/release-notes.ts` reads, followed by GitHub's generated notes and compare link. With no
-   section for the version, the run warns and the draft has only the generated notes.
-4. Read the draft and publish it. Publishing the draft is the release.
+4. The workflow first checks that the changelog has a section for the version, and stops in
+   seconds when it has none. It then builds the three platforms. Before it drafts the release it
+   waits for [Ozone CI](../../.github/workflows/ozone-ci.yml) on the tagged commit and stops if
+   that did not pass.
+5. The draft GitHub Release is titled `Ozone <version>`. Its notes are that version's section of
+   the changelog, which `scripts/release-notes.ts` reads, followed by GitHub's generated notes and
+   compare link.
+6. Read the draft and publish it. Publishing the draft is the release.
+
+When the workflow stops on the changelog or on CI, fix `main`, delete the tag
+(`git push origin :v<version>` and `git tag -d v<version>`) and push it again on the fixed commit.
+If CI had only been cancelled or had not started, run the failed job again instead.
 
 The workflow makes the draft only when the tag has no release yet. If one exists, for example one
 made on GitHub when the tag was pushed, it attaches the files to that one and leaves its title,

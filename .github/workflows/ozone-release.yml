@@ -23,8 +23,42 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # A tag with no changelog section would build for a quarter of an hour, then draft a release with
+  # no notes. This stops it in seconds. A manual run has no release, so it checks nothing.
+  preflight:
+    name: Check the changelog
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout the changelog
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            /CHANGELOG.md
+            /package.json
+            /pnpm-workspace.yaml
+            /.github/actions/
+            /scripts/package.json
+            /scripts/release-notes.ts
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Node.js
+        uses: ./.github/actions/setup-ci-deps
+        with:
+          install: "false"
+
+      - name: The version has a changelog section
+        if: github.ref_type == 'tag'
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if ! node scripts/release-notes.ts "$version" > /dev/null; then
+            echo "::error::CHANGELOG.md has no entries under '## $version'. Run 'vp run release:cut $version', commit and push it, then delete this tag and push it again on that commit."
+            exit 1
+          fi
+
   build:
     name: ${{ matrix.name }}
+    needs: preflight
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     # A build without this is a "dev" build, which reads a managed policy from a path the user sets.
@@ -250,10 +284,29 @@ jobs:
     if: github.ref_type == 'tag'
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # Long enough to wait out a CI run that started with the tag.
+    timeout-minutes: 45
     permissions:
       contents: write
+      actions: read
     steps:
+      # The builds ran beside CI, so it has usually finished by now. A release of a commit whose
+      # checks failed is what this is here to stop.
+      - name: CI passed on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          run=$(gh run list --workflow ozone-ci.yml --commit "$GITHUB_SHA" --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -z "$run" ]; then
+            echo "::error::Ozone CI has not run on $GITHUB_SHA. Push the commit to main, wait for CI, then run this job again."
+            exit 1
+          fi
+          if ! gh run watch "$run" --exit-status --interval 30 > /dev/null; then
+            echo "::error::Ozone CI did not pass on $GITHUB_SHA. Fix main, then delete this tag and push it again on the fixed commit."
+            exit 1
+          fi
+
       - name: Checkout the changelog
         uses: actions/checkout@v6
         with:
@@ -292,10 +345,8 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           notes="$RUNNER_TEMP/notes.md"
-          if ! node scripts/release-notes.ts "$version" > "$notes"; then
-            echo "::warning::CHANGELOG.md has no entries under '## $version', so the draft has only GitHub's generated notes."
-            : > "$notes"
-          fi
+          # The preflight job already refused a tag without this section.
+          node scripts/release-notes.ts "$version" > "$notes"
           # gh puts the changelog's section above the generated notes, which end with the compare link.
           if ! gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
             gh release create "$GITHUB_REF_NAME" --draft --verify-tag --generate-notes --notes-file "$notes" --title "Ozone $version"

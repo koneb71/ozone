@@ -49,6 +49,7 @@ import * as ProviderContinuationRequests from "@t3tools/provider-core/server/Pro
 import {
   OPENCODE_2_STILL_STOPPING,
   OPENCODE_PROVIDER,
+  OPENCODE_QUESTION_INSTRUCTIONS,
   t3McpServerName,
 } from "@t3tools/provider-opencode/testing";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
@@ -5154,7 +5155,11 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
           out("session.instructions.entry.put", {
             sessionID: SESSION,
             key: "t3-code",
-            value: buildRuntimeInstructions({ harness: "OpenCode", model: bigPickle.model }),
+            // Without the MCP server, what is left is the runtime notes and how to ask a question.
+            value: [
+              buildRuntimeInstructions({ harness: "OpenCode", model: bigPickle.model }),
+              OPENCODE_QUESTION_INSTRUCTIONS,
+            ].join("\n\n"),
           }),
           reply("session.instructions.entry.put", null),
           ...turn,

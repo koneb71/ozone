@@ -173,4 +173,24 @@ function decide(files, packages, full) {
   };
 }
 
+// For CI: `node .github/scripts/ci-changes.cjs --paths <file of changed paths> [--full]` prints
+// one `key=value` line per output, the shape $GITHUB_OUTPUT takes. No --paths means everything.
+function main() {
+  const args = process.argv.slice(2);
+  const pathsIndex = args.indexOf("--paths");
+  const files =
+    pathsIndex === -1
+      ? null
+      : fs
+          .readFileSync(args[pathsIndex + 1], "utf8")
+          .split("\n")
+          .filter(Boolean);
+  const { affected, outputs } = decide(files, readWorkspace(), args.includes("--full"));
+
+  console.error(`Affected packages: ${affected.join(", ") || "none"}`);
+  for (const [key, value] of Object.entries(outputs)) console.log(`${key}=${value}`);
+}
+
 module.exports = { readWorkspace, decide };
+
+if (require.main === module) main();

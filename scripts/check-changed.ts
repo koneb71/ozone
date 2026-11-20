@@ -5,7 +5,7 @@
 // the cross-file checks those miss (agent context budget, React Compiler
 // coverage of the changed client files).
 // A dependency change also gets the unused-patch install check below. CI runs
-// the whole web suite and the app builder's tests, and no other tests.
+// the whole web suite, and the other suites this change can affect.
 //
 //   vp run check:changed                  compare against the closest merge base with any remote main
 //   vp run check:changed <ref>            compare against the merge base with <ref>
@@ -562,8 +562,8 @@ const checkChanged = Effect.fn("checkChanged")(function* (input: {
   }
   if (outputs.test || outputs.test_web || outputs.test_server) {
     summary.push(
-      "  CI also runs the whole web suite and the app builder's tests, and no other tests: " +
-        "run the test folders you touched.",
+      "  CI also runs the whole web suite, and the server, package, desktop and script tests " +
+        "this change can affect.",
     );
   }
   if (!runPatchCheck) summary.push("  unused patch check skipped: no dependency files changed");
