@@ -6,7 +6,7 @@ import type {
   OzoneSavedServer,
 } from "@t3tools/contracts";
 import { Link } from "@tanstack/react-router";
-import { CopyIcon, EllipsisIcon, ExternalLinkIcon, RocketIcon, SquareIcon } from "lucide-react";
+import { CopyIcon, EllipsisIcon, RocketIcon, SquareIcon } from "lucide-react";
 import { useState } from "react";
 
 import {
@@ -47,13 +47,14 @@ import {
 } from "../deploy.logic";
 import { ozoneEnvironment } from "../state";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
-import { LoadingRow } from "../ui/SectionRows";
+import { PendingRow } from "../ui/SectionRows";
 import { OutputView } from "../ui/OutputView";
 import { StatusDot } from "../ui/StatusDot";
 import { useOzoneCommand } from "../ui/useOzoneCommand";
 import { VariablesSection } from "../ui/VariablesSection";
 import { DeploymentRow, useDeleteDeployment } from "./DeployedApps";
 import { RemoteRow, useAppRemote } from "./RemoteRow";
+import { SiteAddressRow } from "./SiteAddressRow";
 import { ServerSection } from "./ServerRows";
 import type { AppDeploy } from "./useAppDeploy";
 
@@ -83,7 +84,11 @@ export function DeploySection(props: {
     <SettingsPageContainer>
       {status === null || (saved.data === null && saved.error === null) ? (
         <SettingsSection title="Production">
-          <LoadingRow label="Loading the deploy" />
+          <PendingRow
+            error={status === null ? props.deploy.error : null}
+            onRetry={props.deploy.retry}
+            loadingLabel="Loading the deploy"
+          />
         </SettingsSection>
       ) : !props.deploy.deployable ? (
         <SettingsSection title="Production">
@@ -323,19 +328,7 @@ function DeployForm(props: {
           }
         />
         {status.url !== null && status.state === "running" ? (
-          <SettingsRow
-            title="Address"
-            control={
-              <Button
-                render={<a href={status.url} rel="noreferrer" target="_blank" />}
-                size="xs"
-                variant="ghost"
-              >
-                <span className="font-mono">{status.url.replace(/^https?:\/\//, "")}</span>
-                <ExternalLinkIcon />
-              </Button>
-            }
-          />
+          <SiteAddressRow url={status.url} environmentId={props.environmentId} />
         ) : null}
       </SettingsSection>
 

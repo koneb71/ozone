@@ -6,7 +6,7 @@ import { BoxIcon, DatabaseIcon, HammerIcon, MonitorIcon, PlayIcon } from "lucide
 import { useEffect, useEffectEvent, useState } from "react";
 
 import { resolveDiscoveredServerUrl } from "~/browser/browserTargetResolver";
-import { previewRuntimeFor } from "~/browser/previewRuntime";
+import { previewRuntimeFor, usePreviewAvailable } from "~/browser/previewRuntime";
 import type { ComposerBannerStackItem } from "~/components/chat/ComposerBannerStack";
 import { openPreviewSession } from "~/components/preview/openPreviewSession";
 import { dispatchPreviewAction } from "~/components/preview/previewActionBus";
@@ -16,7 +16,7 @@ import { Switch } from "~/components/ui/switch";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { readThreadPreviewState } from "~/previewStateStore";
 import { useRightPanelStore } from "~/rightPanelStore";
-import { useQuietThreadShell } from "~/state/entities";
+import { useEnvironmentSupportsServerBrowser, useQuietThreadShell } from "~/state/entities";
 import { previewEnvironment } from "~/state/preview";
 import { useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -28,9 +28,10 @@ import { AppMenu } from "./AppMenu";
 import { buildBannerItem } from "./BuildCard";
 import { designBannerItem } from "./DesignPicker";
 import { useBuildStagedIn } from "./homeFiles";
-import { visiblePreviewShows } from "./preview.logic";
+import { appPreviewReach, visiblePreviewShows } from "./preview.logic";
 import { ozoneEnvironment, refreshApps } from "./state";
 import { useOzoneCommand } from "./ui/useOzoneCommand";
+import { useAppReach } from "./useAppReach";
 import { useConfigureApp } from "./useConfigureApp";
 
 /** Threads whose preview Ozone has opened by itself, so closing it stays the user's decision. */
@@ -39,8 +40,8 @@ const openedPreviews = new Set<string>();
 const buildProgressSeen = new Map<string, string>();
 
 /** Where the preview shows the app: the server's own browser sees it as the server does. */
-const previewUrlOf = (target: ScopedThreadRef, appUrl: string) =>
-  previewRuntimeFor(target.environmentId) === "server"
+const previewUrlOf = (target: ScopedThreadRef, appUrl: string, inServerBrowser: boolean) =>
+  inServerBrowser || previewRuntimeFor(target.environmentId) === "server"
     ? appUrl
     : resolveDiscoveredServerUrl(target.environmentId, appUrl);
 
@@ -95,6 +96,15 @@ export function useAppBanners(
           input: { threadId: threadRef.threadId },
         }),
   );
+  const environmentId = threadRef?.environmentId ?? null;
+  const reach = useAppReach(environmentId);
+  // The app answers only on its own machine, so a client elsewhere needs the server's browser.
+  const previewReach = appPreviewReach({
+    available: usePreviewAvailable(environmentId),
+    sharesMachine: reach.sharesMachine,
+    serverBrowser: useEnvironmentSupportsServerBrowser(environmentId),
+  });
+  const inServerBrowser = previewReach === "server";
   const status = statusQuery.data;
   const url = status?.url ?? null;
   // Null until the server has answered: a thread that already has a preview tab keeps it.
@@ -104,7 +114,8 @@ export function useAppBanners(
     const result = await openPreviewSession({
       openPreview,
       threadRef: target,
-      url: previewUrlOf(target, appUrl),
+      url: previewUrlOf(target, appUrl, inServerBrowser),
+      ...(inServerBrowser ? { runtime: "server" as const } : {}),
     });
     if (result._tag === "Success") {
       useRightPanelStore.getState().openBrowser(target, result.value.tabId);
@@ -120,14 +131,21 @@ export function useAppBanners(
   });
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- opens the preview pane once, when the app's containers first report healthy
   useEffect(() => {
-    if (threadRef !== null && url !== null && hasPreview === false) openPreviewOnce(threadRef, url);
-  }, [threadRef, url, hasPreview]);
+    if (threadRef !== null && url !== null && hasPreview === false && previewReach !== null) {
+      openPreviewOnce(threadRef, url);
+    }
+  }, [threadRef, url, hasPreview, previewReach]);
 
   // A page that failed while a worker was mid-edit has no live reload in it and would stay on
   // screen after the fix. The server reloads the tabs it runs; this reloads the one this window
   // renders.
   const reloadPreview = useEffectEvent((target: ScopedThreadRef, appUrl: string) => {
-    if (visiblePreviewShows(readThreadPreviewState(target), previewUrlOf(target, appUrl))) {
+    if (
+      visiblePreviewShows(
+        readThreadPreviewState(target),
+        previewUrlOf(target, appUrl, inServerBrowser),
+      )
+    ) {
       dispatchPreviewAction("refresh");
     }
   });
@@ -195,7 +213,7 @@ export function useAppBanners(
     if (pick === null) refreshApps(threadRef.environmentId);
   };
 
-  const copy = appNotice(app, status);
+  const copy = appNotice(app, status, reach.machine);
   const phase = status?.phase;
   const busy = phase === "starting";
   const buildItem = buildBannerItem(build.data, () => void approve());
@@ -263,7 +281,7 @@ export function useAppBanners(
             />
             Plan first
           </label>
-          {phase === "running" ? (
+          {phase === "running" && previewReach !== null ? (
             <Button size="xs" variant="ghost" onClick={() => void preview()}>
               <MonitorIcon />
               Preview

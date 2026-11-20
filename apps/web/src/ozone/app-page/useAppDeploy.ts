@@ -65,7 +65,18 @@ export function useAppDeploy(app: OzoneApp | null, environmentId: EnvironmentId)
     );
   };
 
-  return { status, action, deployable, working, busy, run, act };
+  return {
+    status,
+    /** Why production's status could not be read, while there is none to show instead. */
+    error: status === null ? query.error : null,
+    retry: refresh,
+    action,
+    deployable,
+    working,
+    busy,
+    run,
+    act,
+  };
 }
 
 export type AppDeploy = ReturnType<typeof useAppDeploy>;

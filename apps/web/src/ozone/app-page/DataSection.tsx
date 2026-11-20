@@ -14,7 +14,7 @@ import { useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
 
-import { metaLine } from "../appPage.logic";
+import { metaLine, productionSnapshots } from "../appPage.logic";
 import { ozoneEnvironment } from "../state";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { EmptyRow, SectionRows } from "../ui/SectionRows";
@@ -39,7 +39,7 @@ export function DataSection(props: {
   return (
     <SettingsPageContainer>
       <Snapshots {...props} production={false} />
-      {props.deployed ? <Snapshots {...props} production /> : null}
+      <Snapshots {...props} production />
     </SettingsPageContainer>
   );
 }
@@ -47,6 +47,7 @@ export function DataSection(props: {
 function Snapshots(props: {
   readonly app: OzoneApp;
   readonly environmentId: EnvironmentId;
+  readonly deployed: boolean;
   readonly production: boolean;
 }) {
   const target = {
@@ -63,6 +64,12 @@ function Snapshots(props: {
   });
   const { working, run } = useOzoneCommand();
   const [restoring, setRestoring] = useState<OzoneSnapshot | null>(null);
+  const kept = productionSnapshots({
+    deployed: props.deployed,
+    count: snapshots.data?.snapshots.length ?? null,
+  });
+  // While building, there is always a database to back up and to restore into.
+  const canChange = !props.production || kept.canChange;
 
   const backUp = async () => {
     await run("backup", "Could not back up the data", () => takeSnapshot(target));
@@ -78,24 +85,34 @@ function Snapshots(props: {
     snapshots.refresh();
   };
 
+  if (props.production && !kept.show) return null;
   return (
     <SettingsSection
       title={props.production ? "Production" : "While building"}
       headerAction={
-        <Button
-          disabled={working !== null}
-          size="xs"
-          variant="outline"
-          onClick={() => void backUp()}
-        >
-          {working === "backup" ? <Spinner /> : <PlusIcon />}
-          Back up now
-        </Button>
+        canChange ? (
+          <Button
+            disabled={working !== null}
+            size="xs"
+            variant="outline"
+            onClick={() => void backUp()}
+          >
+            {working === "backup" ? <Spinner /> : <PlusIcon />}
+            Back up now
+          </Button>
+        ) : undefined
       }
     >
+      {canChange ? null : (
+        <SettingsRow
+          title="Not deployed now"
+          description="These are kept. Deploy the app again to restore one of them."
+        />
+      )}
       <SectionRows
         items={snapshots.data?.snapshots ?? null}
         error={snapshots.error}
+        onRetry={snapshots.refresh}
         loadingLabel="Loading snapshots"
         empty={
           <EmptyRow
@@ -120,7 +137,7 @@ function Snapshots(props: {
               ])}
               control={
                 <Button
-                  disabled={working !== null}
+                  disabled={working !== null || !canChange}
                   size="xs"
                   variant="ghost"
                   onClick={() => setRestoring(snapshot)}

@@ -64,6 +64,44 @@ describe("browser target resolver", () => {
     }
   });
 
+  it("says whether this client's localhost is the environment's own", async () => {
+    const { sharesEnvironmentLoopback } = await import("./browserTargetResolver");
+    const bearer = { _tag: "BearerConnectionTarget", connectionId: "saved:remote" } as const;
+    const connection = (target: object, httpBaseUrl: string) =>
+      ({ target, httpBaseUrl }) as Parameters<typeof sharesEnvironmentLoopback>[0];
+    expect(sharesEnvironmentLoopback(null)).toBe(false);
+    // A browser opened on the server's own machine, by name or by either loopback address.
+    expect(sharesEnvironmentLoopback(connection(bearer, "http://localhost:3773"))).toBe(true);
+    expect(sharesEnvironmentLoopback(connection(bearer, "http://[::1]:3773"))).toBe(true);
+    expect(sharesEnvironmentLoopback(connection(bearer, "http://192.168.1.25:3773"))).toBe(false);
+    expect(sharesEnvironmentLoopback(connection(bearer, "https://box.tail1234.ts.net"))).toBe(
+      false,
+    );
+    // SSH forwards the server's port alone to a local one: the apps stay on the far machine.
+    expect(
+      sharesEnvironmentLoopback(
+        connection(
+          { _tag: "SshConnectionTarget", connectionId: "ssh:box" },
+          "http://127.0.0.1:4100",
+        ),
+      ),
+    ).toBe(false);
+    env.isElectron = true;
+    try {
+      // WSL advertises a distro address, and the desktop still shares its loopback.
+      expect(
+        sharesEnvironmentLoopback(
+          connection(
+            { _tag: "BearerConnectionTarget", connectionId: "local:wsl:Ubuntu" },
+            "http://172.24.66.27:3773",
+          ),
+        ),
+      ).toBe(true);
+    } finally {
+      env.isElectron = false;
+    }
+  });
+
   it("classifies exact private IPv4 and IPv6 boundaries", async () => {
     const privateHosts = [
       "0.0.0.0",

@@ -9,6 +9,7 @@ import {
   sameTarget,
   remoteNeedOf,
   serverFromDraft,
+  siteAddress,
   type ChannelDraft,
   type ServerDraft,
 } from "./deploy.logic";
@@ -21,6 +22,22 @@ const draft = (extra: Partial<ChannelDraft>): ChannelDraft => ({
   chatId: "",
   events: ["deploy.failed"],
   ...extra,
+});
+
+describe("siteAddress", () => {
+  it("links a site only where this client can open it", () => {
+    expect(siteAddress("https://notes.example.com", false)).toEqual({
+      text: "notes.example.com",
+      href: "https://notes.example.com",
+    });
+    expect(siteAddress("http://localhost:41005", true).href).toBe("http://localhost:41005");
+    // Deployed to the server's own machine: another machine's localhost is not it.
+    expect(siteAddress("http://localhost:41005", false)).toEqual({
+      text: "localhost:41005",
+      href: null,
+    });
+    expect(siteAddress("http://127.0.0.1:41005", false).href).toBeNull();
+  });
 });
 
 describe("channelFromDraft", () => {

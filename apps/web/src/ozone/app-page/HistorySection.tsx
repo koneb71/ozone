@@ -48,6 +48,7 @@ export function HistorySection(props: {
         <SectionRows
           items={history.data?.entries ?? null}
           error={history.error}
+          onRetry={history.refresh}
           loadingLabel="Loading history"
           empty={
             <EmptyRow

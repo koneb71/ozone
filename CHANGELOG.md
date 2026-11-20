@@ -5,6 +5,16 @@ What changed in each release of Ozone, newest first. Downloads are on the
 
 ## Unreleased
 
+### Fixed
+
+- After you delete a deployment, the snapshot of its data stays listed under Data and the
+  Deployments page stays open. **Deploy when a build completes** turns off instead of staying on
+  where it could not be changed.
+- A page that could not load its data says why and offers **Try again**, instead of staying on
+  "Loading".
+- From another device, a site deployed to the server's own computer shows as an address, not as a
+  link that cannot open. **Preview** is offered only where it can show the app.
+
 ## 1.10.0 - 2026-11-20
 
 ### Added

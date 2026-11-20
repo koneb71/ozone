@@ -107,6 +107,7 @@ export function VariablesSection(props: {
         <SectionRows
           items={env.data?.variables ?? null}
           error={env.error}
+          onRetry={env.refresh}
           loadingLabel="Loading variables"
           empty={<EmptyRow title="No variables yet" description={copy.empty} />}
         >

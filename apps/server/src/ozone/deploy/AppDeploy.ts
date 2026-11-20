@@ -1465,6 +1465,12 @@ const make = Effect.gen(function* () {
       if (clearsLast) {
         failures.delete(app.app.projectId);
         heldBack.delete(app.app.projectId);
+        // A completed build has nowhere left to deploy to.
+        if (isRegistered) {
+          yield* registry
+            .configure(app.app.projectId, { deployOnBuild: false })
+            .pipe(Effect.ignore);
+        }
       }
       // It holds a copy of production's secrets, and nothing Ozone runs reads it any more.
       const after = yield* readRecordOf(slug);

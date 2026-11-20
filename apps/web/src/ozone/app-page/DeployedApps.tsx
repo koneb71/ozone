@@ -14,7 +14,7 @@ import { useAtomCommand } from "~/state/use-atom-command";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
 
 import { type DotTone, metaLine } from "../appPage.logic";
-import { ozoneEnvironment } from "../state";
+import { ozoneEnvironment, refreshApps } from "../state";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { EmptyRow, SectionRows } from "../ui/SectionRows";
 import { StatusDot } from "../ui/StatusDot";
@@ -112,6 +112,8 @@ export function useDeleteDeployment(props: {
       }
     }
     props.onDeleted();
+    // Deleting where the app runs turns off deploying each build, which the app's page shows.
+    refreshApps(props.environmentId);
   };
 
   const nothingLeft = asking?.state === "gone";
@@ -227,6 +229,7 @@ export function DeployedAppsSection(props: { readonly environmentId: Environment
       <SectionRows
         items={deployments.data?.deployments ?? null}
         error={deployments.error}
+        onRetry={deployments.refresh}
         loadingLabel="Checking each deployment"
         empty={
           <EmptyRow

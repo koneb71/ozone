@@ -9,11 +9,30 @@ import type {
   OzoneSavedServer,
   OzoneServerAddInput,
 } from "@t3tools/contracts";
+import { isLoopbackHost } from "@t3tools/shared/preview";
 
 import { phaseTone } from "./appPage.logic";
 
 export const HOST = /^(?:[A-Za-z0-9._-]+@)?[A-Za-z0-9][A-Za-z0-9.-]*(?::\d{1,5})?$/;
 export const DOMAIN = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/;
+
+/**
+ * A deployment's address as this client can use it. One on the server's own `localhost` opens only
+ * on that machine, so a client elsewhere gets the text without a link.
+ */
+export function siteAddress(
+  url: string,
+  sharesMachine: boolean,
+): { readonly text: string; readonly href: string | null } {
+  const text = url.replace(/^https?:\/\//, "");
+  let local = false;
+  try {
+    local = isLoopbackHost(new URL(url).hostname);
+  } catch {
+    local = false;
+  }
+  return { text, href: local && !sharesMachine ? null : url };
+}
 
 export const TRIGGER_LABEL: Record<OzoneDeployTrigger, string> = {
   person: "by you",

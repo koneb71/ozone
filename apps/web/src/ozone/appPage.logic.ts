@@ -43,9 +43,26 @@ export function appSectionOf(value: string | undefined): AppSection {
   return APP_SECTIONS.find((section) => section === value) ?? "overview";
 }
 
-/** Sections that only mean something once the app has been deployed. */
+/** Sections that only mean something while the app is deployed. Deployments keeps its history. */
 export function needsDeploy(section: AppSection): boolean {
-  return section === "deployments" || section === "monitoring";
+  return section === "monitoring";
+}
+
+/**
+ * Production's snapshots outlive the deployment they came from: the one taken before a deployment
+ * was deleted is the only copy of its data. Only a deployment can take one or load one.
+ */
+export function productionSnapshots(input: {
+  readonly deployed: boolean;
+  /** How many there are, or null while that is not known. */
+  readonly count: number | null;
+}) {
+  return { show: input.deployed || (input.count ?? 0) > 0, canChange: input.deployed };
+}
+
+/** Deploying each build can be turned on only once the app is deployed, and always turned off. */
+export function autoDeployLocked(input: { readonly deployed: boolean; readonly on: boolean }) {
+  return !input.deployed && !input.on;
 }
 
 /** Which of an app's actions can be offered now. Every menu asks here, so they agree. */

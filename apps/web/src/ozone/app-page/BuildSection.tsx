@@ -15,6 +15,7 @@ import { getCustomModelOptionsByInstance } from "~/modelSelection";
 import { isProviderInstancePickerReady, providerInstanceEntriesFor } from "~/providerInstances";
 import { EMPTY_SERVER_PROVIDERS, serverEnvironment } from "~/state/server";
 
+import { autoDeployLocked } from "../appPage.logic";
 import { useConfigureApp } from "../useConfigureApp";
 
 /** How the app's builds run, from now on. */
@@ -84,13 +85,18 @@ export function BuildSection(props: {
           description={
             props.deployed
               ? "The new version goes where the app was last deployed."
-              : "Deploy the app once to turn this on."
+              : app.settings.deployOnBuild
+                ? "Nothing is deployed now, so builds are not deployed. Turn this off, or deploy again."
+                : "Deploy the app once to turn this on."
           }
           control={
             <Switch
               aria-label="Deploy when a build completes"
               checked={app.settings.deployOnBuild}
-              disabled={saving || !props.deployed}
+              disabled={
+                saving ||
+                autoDeployLocked({ deployed: props.deployed, on: app.settings.deployOnBuild })
+              }
               onCheckedChange={(checked) => void save({ deployOnBuild: checked })}
             />
           }

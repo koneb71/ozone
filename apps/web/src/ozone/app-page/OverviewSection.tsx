@@ -1,6 +1,5 @@
-import { buildHeadline } from "@t3tools/client-runtime/state/ozone";
+import { appAddress, buildHeadline } from "@t3tools/client-runtime/state/ozone";
 import type { EnvironmentId, OzoneApp } from "@t3tools/contracts";
-import { ExternalLinkIcon } from "lucide-react";
 import { useState } from "react";
 
 import {
@@ -19,10 +18,12 @@ import { deployStateLine, deployTone, isBehind } from "../deploy.logic";
 import { ozoneEnvironment } from "../state";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { OutputView } from "../ui/OutputView";
-import { LoadingRow } from "../ui/SectionRows";
+import { PendingRow } from "../ui/SectionRows";
 import { StatusDot } from "../ui/StatusDot";
+import { useAppReach } from "../useAppReach";
 import { useOpenAppThread } from "../useOpenAppThread";
 import { DeployButton } from "./DeployButton";
+import { SiteAddressRow } from "./SiteAddressRow";
 import { useOpenAppPage } from "./navigation";
 import type { AppDeploy } from "./useAppDeploy";
 import { useAppRuntime } from "./useAppRuntime";
@@ -41,6 +42,7 @@ export function OverviewSection(props: {
 }) {
   const { app, environmentId } = props;
   const runtime = useAppRuntime(app, environmentId);
+  const reach = useAppReach(environmentId);
   const thread = useOpenAppThread(environmentId);
   const openPage = useOpenAppPage();
   const latest = thread.latestOf(app);
@@ -78,18 +80,23 @@ export function OverviewSection(props: {
       <SettingsSection title="App">
         <SettingsRow
           title="Status"
-          description={runtime.status?.message ?? undefined}
+          description={runtime.error ?? runtime.status?.message ?? undefined}
           control={
             <span className="flex items-center gap-2 text-sm">
               <StatusDot {...runtime.dot} />
               {runtime.label}
+              {runtime.error === null ? null : (
+                <Button size="xs" variant="outline" onClick={runtime.retry}>
+                  Try again
+                </Button>
+              )}
             </span>
           }
         />
         <SettingsRow
           title="Address"
           description="Where the app answers on the computer that runs it."
-          control={<span className="font-mono text-sm">localhost:{app.port}</span>}
+          control={<span className="font-mono text-sm">{appAddress(app.port, reach.machine)}</span>}
         />
         <SettingsRow
           title="Template"
@@ -122,7 +129,11 @@ export function OverviewSection(props: {
 
       <SettingsSection title="Production">
         {deploy === null ? (
-          <LoadingRow label="Loading production" />
+          <PendingRow
+            error={props.deploy.error}
+            onRetry={props.deploy.retry}
+            loadingLabel="Loading production"
+          />
         ) : deploy.target === null ? (
           <SettingsRow
             title={deployStateLine(deploy)}
@@ -152,19 +163,7 @@ export function OverviewSection(props: {
               control={<DeployButton deploy={props.deploy} />}
             />
             {deploy.url === null ? null : (
-              <SettingsRow
-                title="Address"
-                control={
-                  <Button
-                    render={<a href={deploy.url} rel="noreferrer" target="_blank" />}
-                    size="xs"
-                    variant="ghost"
-                  >
-                    <span className="font-mono">{deploy.url.replace(/^https?:\/\//, "")}</span>
-                    <ExternalLinkIcon />
-                  </Button>
-                }
-              />
+              <SiteAddressRow url={deploy.url} environmentId={environmentId} />
             )}
             <SettingsRow
               title="Deployed"

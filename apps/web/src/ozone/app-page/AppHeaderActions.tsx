@@ -14,8 +14,10 @@ import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/compone
 import { Spinner } from "~/components/ui/spinner";
 
 import { appActionsFor } from "../appPage.logic";
+import { siteAddress } from "../deploy.logic";
 import { useDeleteAppItem } from "../DeleteApp";
 import { StatusDot } from "../ui/StatusDot";
+import { useAppReach } from "../useAppReach";
 import { useOpenAppThread } from "../useOpenAppThread";
 import { DeployButton } from "./DeployButton";
 import type { AppDeploy } from "./useAppDeploy";
@@ -36,6 +38,12 @@ export function AppHeaderActions(props: {
   const phase = runtime.phase;
   const offered = appActionsFor({ phase, acting: runtime.working !== null });
   const deletion = useDeleteAppItem({ app, environmentId, disabled: !offered.delete });
+  const reach = useAppReach(environmentId);
+  // A site on the server's own localhost opens nothing from another machine.
+  const site =
+    production?.state === "running" && production.url !== null
+      ? siteAddress(production.url, reach.sharesMachine).href
+      : null;
   const stopped = phase === "stopped" || phase === "failed";
   const busy = runtime.working !== null || phase === "starting";
 
@@ -55,9 +63,9 @@ export function AppHeaderActions(props: {
         <MessageSquareIcon />
         <span className="max-sm:sr-only">Open thread</span>
       </Button>
-      {production?.state === "running" && production.url !== null ? (
+      {site !== null ? (
         <Button
-          render={<a href={production.url} rel="noreferrer" target="_blank" />}
+          render={<a href={site} rel="noreferrer" target="_blank" />}
           size="xs"
           variant="ghost"
         >

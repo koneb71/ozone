@@ -114,6 +114,7 @@ export function ServersSection(props: { readonly environmentId: EnvironmentId })
         <SectionRows
           items={servers.data?.servers ?? null}
           error={servers.error}
+          onRetry={servers.refresh}
           loadingLabel="Loading servers"
           empty={
             <EmptyRow

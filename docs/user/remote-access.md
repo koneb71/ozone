@@ -195,6 +195,9 @@ directly. Every other device, and the desktop app for other environments,
 streams them from the host. Agents keep using them while no device is
 connected, and `localhost` addresses reach servers on the host.
 
+An app Ozone runs answers only on its own machine. From another device its preview loads in the
+host's browser, and **Preview** is not offered when the host has none.
+
 The first tab downloads a headless Chrome, about 120 MB, into the Ozone data folder. It
 is the same browser [HTML renders](html-renders.md) use, so a host downloads it
 only once. Some Linux hosts need [setup](#browser-host-setup) before it can

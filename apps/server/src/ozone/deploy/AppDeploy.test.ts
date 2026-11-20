@@ -90,6 +90,8 @@ const makeHarness = (
     const holdMigration = yield* Ref.make(false);
     // What each machine ("here", or "ssh://<host>") holds of production, for the probes.
     const prodAt = yield* Ref.make<ReadonlyMap<string, ProdOnMachine>>(new Map());
+    // Every change made to the app's settings.
+    const configured = yield* Ref.make<ReadonlyArray<object>>([]);
     const docker = Layer.succeed(
       DockerCli.DockerCli,
       DockerCli.DockerCli.of({
@@ -169,6 +171,8 @@ const makeHarness = (
             Layer.mock(AppRegistry.AppRegistry)({
               list: Effect.succeed([app]),
               resolve: () => Effect.succeed({ app, workspaceRoot, manifest }),
+              configure: (_projectId, change) =>
+                Ref.update(configured, (all) => [...all, change]).pipe(Effect.as(app)),
             }),
             // Each asks the target's own Docker, which shows where it was aimed.
             Layer.mock(AppData.AppData)({
@@ -258,6 +262,7 @@ const makeHarness = (
     return {
       deploy,
       calls,
+      configured,
       notices,
       commit,
       running,
@@ -739,7 +744,7 @@ it.effect("lists every deployment on record, and asks each machine once", () =>
 
 it.effect("deletes a place it ran before after saving its data, and leaves where it runs", () =>
   Effect.gen(function* () {
-    const { deploy, prodAt, calls, steps, forget } = yield* makeHarness();
+    const { deploy, prodAt, calls, configured, steps, forget } = yield* makeHarness();
     yield* deploy.deploy({ projectId, target: here });
     yield* deploy.deploy({ projectId, target: server });
     yield* Ref.set(prodAt, new Map([["here", notesHeld]]));
@@ -778,12 +783,14 @@ it.effect("deletes a place it ran before after saving its data, and leaves where
     assert.isFalse(
       (yield* deploy.deployments({ projectId })).deployments.some((entry) => !entry.current),
     );
+    // It still runs somewhere, so builds keep deploying.
+    assert.deepStrictEqual(yield* Ref.get(configured), []);
   }).pipe(Effect.provide(layerTest)),
 );
 
 it.effect("deletes where it runs on a server, and the app is no longer deployed", () =>
   Effect.gen(function* () {
-    const { deploy, prodAt, calls, fs, path, directory } = yield* makeHarness();
+    const { deploy, prodAt, calls, configured, fs, path, directory } = yield* makeHarness();
     yield* deploy.deploy({ projectId, target: server });
     yield* deploy.webhook({ projectId, action: "show" });
     yield* Ref.set(prodAt, new Map([[onServer, notesHeld]]));
@@ -796,6 +803,8 @@ it.effect("deletes where it runs on a server, and the app is no longer deployed"
     const record = JSON.parse(yield* fs.readFileString(path.join(directory, "deploy.json")));
     assert.isNull(record.last);
     assert.isNull(record.webhookToken);
+    // A completed build has nowhere to deploy to, so it stops trying.
+    assert.deepStrictEqual(yield* Ref.get(configured), [{ deployOnBuild: false }]);
     // Its copy of production's secrets goes with the last place Ozone ran it.
     assert.isFalse(yield* fs.exists(path.join(directory, "compose.prod.override.yaml")));
   }).pipe(Effect.provide(layerTest)),

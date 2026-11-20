@@ -1,7 +1,7 @@
 import type { PreviewSessionSnapshot } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { visiblePreviewShows } from "./preview.logic";
+import { appPreviewReach, visiblePreviewShows } from "./preview.logic";
 
 const tab = (
   tabId: string,
@@ -39,5 +39,20 @@ describe("visiblePreviewShows", () => {
     [null, false],
   ])("the tab on screen is %s: %s", (activeTabId, expected) => {
     expect(visiblePreviewShows({ sessions, activeTabId }, "http://localhost:41000")).toBe(expected);
+  });
+});
+
+describe("appPreviewReach", () => {
+  it.each([
+    // A browser on the server's machine with no server browser has nothing to show a preview in.
+    [{ available: false, sharesMachine: true, serverBrowser: false }, null],
+    [{ available: true, sharesMachine: true, serverBrowser: false }, "usual"],
+    [{ available: true, sharesMachine: true, serverBrowser: true }, "usual"],
+    // The app answers only on its own machine, so another one sees it through the server's browser.
+    [{ available: true, sharesMachine: false, serverBrowser: true }, "server"],
+    // The desktop app on another machine, with no browser on the server to borrow.
+    [{ available: true, sharesMachine: false, serverBrowser: false }, null],
+  ] as const)("%o", (input, reach) => {
+    expect(appPreviewReach(input)).toBe(reach);
   });
 });

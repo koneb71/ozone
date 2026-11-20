@@ -364,9 +364,21 @@ export interface AppNotice {
   readonly description: string | undefined;
 }
 
+/**
+ * Where a running app answers. `machine` names the server's computer for a client on another
+ * one, so its own `localhost` is not taken for the app's.
+ */
+export function appAddress(port: number, machine: string | null): string {
+  return machine === null ? `localhost:${port}` : `localhost:${port} on ${machine}`;
+}
+
 /** What a thread says about the app it belongs to, above the composer. */
-export function appNotice(app: OzoneApp, status: OzoneRuntimeStatus | null): AppNotice {
-  const where = `localhost:${app.port}`;
+export function appNotice(
+  app: OzoneApp,
+  status: OzoneRuntimeStatus | null,
+  machine: string | null = null,
+): AppNotice {
+  const where = appAddress(app.port, machine);
   switch (status?.phase) {
     case undefined:
       return { tone: "default", title: app.name, description: where };

@@ -21,5 +21,11 @@ export function useApp(environmentId: EnvironmentId | null, projectId: ProjectId
     projectId === null
       ? null
       : (apps.data?.apps.find((entry) => entry.projectId === projectId) ?? null);
-  return { app, loaded: apps.data !== null };
+  return {
+    app,
+    loaded: apps.data !== null,
+    /** Why the apps could not be read, while there is nothing to show instead. */
+    error: apps.data === null ? apps.error : null,
+    retry: apps.refresh,
+  };
 }

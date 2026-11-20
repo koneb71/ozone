@@ -5,9 +5,12 @@ import {
   APP_SECTION_GROUPS,
   APP_SECTIONS,
   appSectionOf,
+  autoDeployLocked,
   deploymentTone,
   metaLine,
+  needsDeploy,
   phaseTone,
+  productionSnapshots,
 } from "./appPage.logic";
 
 describe("app page sections", () => {
@@ -31,6 +34,27 @@ describe("app page sections", () => {
 
   it("joins only the parts of a line that are known", () => {
     expect(metaLine(["2m ago", null, "", false, "abc1234"])).toBe("2m ago · abc1234");
+  });
+
+  it("keeps what a deleted deployment left behind within reach", () => {
+    // Its history and its deleted places stay readable. Only live metrics need a deployment.
+    expect(needsDeploy("deployments")).toBe(false);
+    expect(needsDeploy("monitoring")).toBe(true);
+    // The snapshot taken before the delete is the only copy of that data.
+    expect(productionSnapshots({ deployed: false, count: 1 })).toEqual({
+      show: true,
+      canChange: false,
+    });
+    expect(productionSnapshots({ deployed: false, count: 0 }).show).toBe(false);
+    expect(productionSnapshots({ deployed: false, count: null }).show).toBe(false);
+    expect(productionSnapshots({ deployed: true, count: 0 })).toEqual({
+      show: true,
+      canChange: true,
+    });
+    // A switch left on can always be turned off.
+    expect(autoDeployLocked({ deployed: false, on: true })).toBe(false);
+    expect(autoDeployLocked({ deployed: false, on: false })).toBe(true);
+    expect(autoDeployLocked({ deployed: true, on: false })).toBe(false);
   });
 });
 

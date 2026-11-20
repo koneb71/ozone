@@ -78,6 +78,7 @@ export function MonitoringSection(props: {
         <SectionRows
           items={metrics.data === null ? null : containers}
           error={metrics.error}
+          onRetry={metrics.refresh}
           loadingLabel="Loading containers"
           empty={
             <EmptyRow title="Nothing runs" description="Deploy the app to start its containers." />

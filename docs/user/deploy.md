@@ -21,6 +21,10 @@ earlier deploy, a domain with HTTPS, monitoring, and moving the data when you ch
 When Dokploy or a hosting platform runs the app, it owns the containers and the data. Snapshots,
 rollback and monitoring stay with that host, and Ozone never deletes anything there.
 
+A deployment to this computer answers only on this computer, at `localhost`. Opened from another
+device, Ozone shows that address as text, not as a link that cannot open. Give it a domain, or
+deploy to a server, to reach it from elsewhere.
+
 ## Add a server
 
 Servers are added once and offered to every app. Open **Settings**, then **Servers**, or
@@ -115,8 +119,12 @@ running, stopped, or only has its data left. **Check again** asks each machine o
 To take one down for good, open its menu and choose **Delete deployment**. Ozone first saves a
 snapshot of its production data to this computer, then removes its containers, its images and its
 database there. The snapshot is kept: deploy to that place again and restore it under **Data** to
-bring the app back as it was. An app's Deploy page offers the same for where it runs and where it
-ran before.
+bring the app back as it was. Until then the app's **Data** page still lists the snapshot, and its
+**Deployments** page still shows what was deleted. An app's Deploy page offers the same for where
+it runs and where it ran before.
+
+Deleting where an app runs also turns off **Deploy when a build completes**, since a build has
+nowhere left to go. Turn it on again after the next deploy.
 
 - Ozone deletes only what it runs itself, on this computer or a server. A deployment on Dokploy or
   a hosting platform is listed with a link to the host, where you delete it.

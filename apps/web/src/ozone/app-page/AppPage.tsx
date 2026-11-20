@@ -40,7 +40,7 @@ import {
   type AppSection,
 } from "../appPage.logic";
 import { useApp } from "../state";
-import { LoadingRow } from "../ui/SectionRows";
+import { PendingRow } from "../ui/SectionRows";
 import { AppHeaderActions } from "./AppHeaderActions";
 import { BuildSection } from "./BuildSection";
 import { DataSection } from "./DataSection";
@@ -87,7 +87,7 @@ function AppPage(props: {
   readonly projectId: ProjectId;
   readonly section: AppSection;
 }) {
-  const { app, loaded } = useApp(props.environmentId, props.projectId);
+  const { app, loaded, error, retry } = useApp(props.environmentId, props.projectId);
   const deploy = useAppDeploy(app, props.environmentId);
   const deployed = deploy.status?.target != null;
 
@@ -122,7 +122,7 @@ function AppPage(props: {
             {app === null ? (
               !loaded ? (
                 <SettingsPageContainer>
-                  <LoadingRow label="Loading the app" />
+                  <PendingRow error={error} onRetry={retry} loadingLabel="Loading the app" />
                 </SettingsPageContainer>
               ) : (
                 <Empty className="flex-1">
@@ -173,7 +173,7 @@ function Section(props: {
     case "deploy":
       return <DeploySection {...shared} deploy={props.deploy} />;
     case "deployments":
-      return <DeploymentsSection {...shared} />;
+      return <DeploymentsSection {...shared} deployed={deployed} />;
     case "monitoring":
       return <MonitoringSection {...shared} deploy={props.deploy} />;
     case "servers":

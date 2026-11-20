@@ -21,10 +21,12 @@ export const runtimeFailureTitle = (action: OzoneRuntimeAction, appName: string)
 
 /** An app's containers as they are now, and what a person can do to them. */
 export function useAppRuntime(app: OzoneApp, environmentId: EnvironmentId) {
-  const status =
-    useEnvironmentQuery(
-      ozoneEnvironment.runtimeStatus({ environmentId, input: { projectId: app.projectId } }),
-    ).data ?? null;
+  const query = useEnvironmentQuery(
+    ozoneEnvironment.runtimeStatus({ environmentId, input: { projectId: app.projectId } }),
+  );
+  const status = query.data ?? null;
+  // A status it already has outranks a later failure to refresh it.
+  const error = status === null ? query.error : null;
   const runAction = useAtomCommand(ozoneEnvironment.runtimeAct, { reportFailure: false });
   const { working, run } = useOzoneCommand();
   const act = (action: OzoneRuntimeAction) =>
@@ -35,8 +37,10 @@ export function useAppRuntime(app: OzoneApp, environmentId: EnvironmentId) {
   return {
     status,
     phase,
-    label: runtimePhaseLabel(phase),
-    dot: phaseTone(phase),
+    label: error === null ? runtimePhaseLabel(phase) : "Could not check",
+    dot: error === null ? phaseTone(phase) : ({ tone: "warning", busy: false } as const),
+    error,
+    retry: query.refresh,
     working,
     act,
   };

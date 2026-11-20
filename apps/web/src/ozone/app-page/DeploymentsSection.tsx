@@ -41,6 +41,8 @@ interface Rollback {
 export function DeploymentsSection(props: {
   readonly app: OzoneApp;
   readonly environmentId: EnvironmentId;
+  /** Nothing is deployed now, so there is nothing to roll back. */
+  readonly deployed: boolean;
 }) {
   const target = { environmentId: props.environmentId, input: { projectId: props.app.projectId } };
   const history = useEnvironmentQuery(ozoneEnvironment.deployHistory(target));
@@ -49,6 +51,7 @@ export function DeploymentsSection(props: {
   const [output, setOutput] = useState<OzoneDeploymentEntry | null>(null);
   const [chosen, setChosen] = useState<Rollback | null>(null);
   const running = history.data?.deployments.some((entry) => entry.outcome === "running") ?? false;
+  const locked = running || working !== null || !props.deployed;
 
   const goBack = async ({ entry, restoreData }: Rollback) => {
     await run(entry.id, "Could not roll back", () =>
@@ -66,6 +69,7 @@ export function DeploymentsSection(props: {
         <SectionRows
           items={history.data?.deployments ?? null}
           error={history.error}
+          onRetry={history.refresh}
           loadingLabel="Loading deployments"
           empty={
             <EmptyRow
@@ -125,12 +129,7 @@ export function DeploymentsSection(props: {
                       </MenuTrigger>
                       <MenuPopup align="end">
                         <MenuItem
-                          disabled={
-                            entry.current ||
-                            entry.outcome !== "succeeded" ||
-                            running ||
-                            working !== null
-                          }
+                          disabled={entry.current || entry.outcome !== "succeeded" || locked}
                           onClick={() => setChosen({ entry, restoreData: false })}
                         >
                           Roll back to this version
@@ -138,12 +137,7 @@ export function DeploymentsSection(props: {
                         <MenuSeparator />
                         <MenuItem
                           variant="destructive"
-                          disabled={
-                            entry.current ||
-                            entry.dataSnapshotId === null ||
-                            running ||
-                            working !== null
-                          }
+                          disabled={entry.current || entry.dataSnapshotId === null || locked}
                           onClick={() => setChosen({ entry, restoreData: true })}
                         >
                           Roll back with its data

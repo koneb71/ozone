@@ -410,7 +410,12 @@ export function OzoneHome() {
 
           {environmentId === null ? null : (
             <div className="flex flex-col gap-8">
-              <HomeApps apps={apps.data?.apps ?? null} environmentId={environmentId} />
+              <HomeApps
+                apps={apps.data?.apps ?? null}
+                error={apps.data === null ? apps.error : null}
+                onRetry={apps.refresh}
+                environmentId={environmentId}
+              />
               <DeletedApps apps={apps.data?.deleted ?? []} environmentId={environmentId} />
             </div>
           )}

@@ -1,4 +1,5 @@
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import { appAddress } from "@t3tools/client-runtime/state/ozone";
 import type { EnvironmentId, OzoneApp, OzoneDeletedApp } from "@t3tools/contracts";
 import { EllipsisIcon } from "lucide-react";
 import { useState } from "react";
@@ -9,18 +10,19 @@ import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/compone
 import { Skeleton } from "~/components/ui/skeleton";
 import { Spinner } from "~/components/ui/spinner";
 import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
-import { useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
 
 import { AppDeployButton } from "./app-page/DeployButton";
 import { useOpenAppPage } from "./app-page/navigation";
 import { APP_MENU_PAGES } from "./app-page/menuPages";
-import { appActionsFor, metaLine, phaseTone } from "./appPage.logic";
+import { useAppRuntime } from "./app-page/useAppRuntime";
+import { appActionsFor, metaLine } from "./appPage.logic";
 import { useDeleteAppItem } from "./DeleteApp";
-import { runtimePhaseLabel } from "@t3tools/client-runtime/state/ozone";
 import { ozoneEnvironment, refreshApps } from "./state";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
+import { ErrorRow } from "./ui/SectionRows";
+import { useAppReach } from "./useAppReach";
 import { StatusDot } from "./ui/StatusDot";
 import { useOzoneCommand } from "./ui/useOzoneCommand";
 import { useOpenAppThread } from "./useOpenAppThread";
@@ -28,6 +30,9 @@ import { useOpenAppThread } from "./useOpenAppThread";
 /** Home's list of apps: each with its state, a way into its thread, and its page. */
 export function HomeApps(props: {
   readonly apps: ReadonlyArray<OzoneApp> | null;
+  /** Why the apps could not be read, while there are none to show. */
+  readonly error: string | null;
+  readonly onRetry: () => void;
   readonly environmentId: EnvironmentId;
 }) {
   const thread = useOpenAppThread(props.environmentId);
@@ -35,9 +40,11 @@ export function HomeApps(props: {
   return (
     <SettingsSection title="Your apps">
       {props.apps === null
-        ? [0, 1].map((index) => (
-            <SettingsRow key={index} title={<Skeleton className="h-4 w-40" />} />
-          ))
+        ? props.error === null
+          ? [0, 1].map((index) => (
+              <SettingsRow key={index} title={<Skeleton className="h-4 w-40" />} />
+            ))
+          : [<ErrorRow key="error" message={props.error} onRetry={props.onRetry} />]
         : props.apps.map((app) => (
             <AppRow
               key={app.projectId}
@@ -59,10 +66,8 @@ function AppRow(props: {
 }) {
   const { app, environmentId } = props;
   const openPage = useOpenAppPage();
-  const phase = useEnvironmentQuery(
-    ozoneEnvironment.runtimeStatus({ environmentId, input: { projectId: app.projectId } }),
-  ).data?.phase;
-  const label = runtimePhaseLabel(phase);
+  const { phase, label, dot } = useAppRuntime(app, environmentId);
+  const reach = useAppReach(environmentId);
   const deletion = useDeleteAppItem({
     app,
     environmentId,
@@ -73,13 +78,13 @@ function AppRow(props: {
     <SettingsRow
       title={
         <span className="flex min-w-0 items-center gap-2">
-          <StatusDot {...phaseTone(phase)} label={label} />
+          <StatusDot {...dot} label={label} />
           <span className="truncate">{app.name}</span>
         </span>
       }
       description={metaLine([
         label,
-        `localhost:${app.port}`,
+        appAddress(app.port, reach.machine),
         props.updatedAt === null ? null : `active ${formatRelativeTimeLabel(props.updatedAt)}`,
       ])}
       control={

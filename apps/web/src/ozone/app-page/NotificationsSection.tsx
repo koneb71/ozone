@@ -105,6 +105,7 @@ export function NotificationsSection(props: { readonly environmentId: Environmen
         <SectionRows
           items={channels.data?.channels ?? null}
           error={channels.error}
+          onRetry={channels.refresh}
           loadingLabel="Loading channels"
           empty={
             <EmptyRow

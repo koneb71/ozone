@@ -63,6 +63,24 @@ const reachesEnvironmentLoopback = (target: ConnectionTarget): boolean =>
   isElectron &&
   (target._tag === "PrimaryConnectionTarget" || isDesktopLocalConnectionTarget(target));
 
+/**
+ * Whether `localhost` in this client is the environment's own `localhost`: the desktop app on its
+ * own backends, or a client that reached the server at a loopback address. An SSH connection also
+ * arrives at loopback, but only through a forward of the server's own port.
+ */
+export function sharesEnvironmentLoopback(
+  connection: { readonly target: ConnectionTarget; readonly httpBaseUrl: string } | null,
+): boolean {
+  if (connection === null) return false;
+  if (reachesEnvironmentLoopback(connection.target)) return true;
+  if (connection.target._tag === "SshConnectionTarget") return false;
+  try {
+    return isLocalLoopbackHost(new URL(connection.httpBaseUrl).hostname.replace(/^\[|\]$/g, ""));
+  } catch {
+    return false;
+  }
+}
+
 export function resolveDiscoveredServerUrl(environmentId: EnvironmentId, rawUrl: string): string {
   try {
     const normalizedUrl = normalizePreviewUrl(rawUrl);
