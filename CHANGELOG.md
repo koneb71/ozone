@@ -14,6 +14,8 @@ What changed in each release of Ozone, newest first. Downloads are on the
   "Loading".
 - From another device, a site deployed to the server's own computer shows as an address, not as a
   link that cannot open. **Preview** is offered only where it can show the app.
+- Renaming an SSH connection keeps the Ozone server on the remote machine running. It used to
+  restart it, which stopped the agents working there.
 
 ## 1.10.0 - 2026-11-20
 

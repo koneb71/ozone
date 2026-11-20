@@ -859,7 +859,7 @@ if adopt_default_server && [ -n "$ADOPTED_PID" ] && [ -n "$LAUNCHER_ID" ]; then
     printf 'external\\n' >"$SIBLING_DIR/managed"
     rm -f "$SIBLING_DIR/pid"
     RUNNER_CHANGED=1
-    if cmp -s "$RUNNER_FILE" "$SIBLING_DIR/run-t3.sh"; then
+    if cmp -s "$RUNNER_FILE" "$SIBLING_DIR/run-ozone.sh"; then
       RUNNER_CHANGED=0
     fi
     break
